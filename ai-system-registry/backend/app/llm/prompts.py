@@ -554,38 +554,3 @@ def build_classify_questionnaire_messages(
         + json.dumps(technical_answers, indent=2, ensure_ascii=False)
     )
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
-
-
-def build_assessment_prefill_messages(
-    question_catalogue: list[tuple[str, str, list[str]]],
-    retrieved_context: str = "",
-) -> list[dict]:
-    """Messages for the single-page assessment prefill pass.
-
-    ``question_catalogue`` is an ordered list of ``(question_key, label, options)``
-    triples; the model proposes an answer + confidence band ("high"/"medium"/"low")
-    per key from ``retrieved_context`` (document passages). For a question with a
-    non-empty ``options`` list (select / boolean), the model is told to answer with
-    exactly one of those option strings so the frontend's exact-match radios select.
-    One batched call — no per-question fan-out. Returns a JSON object
-    ``{"answers": [...]}``.
-    """
-
-    def _line(key: str, label: str, options: list[str]) -> str:
-        # The key MUST stay at the start of its own line — the stub parses the
-        # catalogue back out with a `^<key> — ` regex.
-        if options:
-            return (
-                f"{key} — {label}\n"
-                f"    Answer with EXACTLY one of: {' | '.join(options)}"
-            )
-        return f"{key} — {label}"
-
-    catalogue = "\n".join(_line(k, lbl, opts) for k, lbl, opts in question_catalogue)
-    context_block = retrieved_context or "(no document context available)"
-    system = render_template(
-        "assessment_prefill",
-        question_catalogue=catalogue,
-        retrieved_context=context_block,
-    )
-    return [{"role": "system", "content": system}]

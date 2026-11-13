@@ -1,8 +1,13 @@
-"""Risk & role classification pipeline (Step 2).
+"""Pipeline 2 — risk & role classification.
 
-Reads completed questionnaire answers from MinIO (Step 1 output), runs one LLM
-call per active label in the classification config in parallel, and persists the
-aggregated result as a versioned JSON file in MinIO.
+Reads completed questionnaire answers from MinIO (pipeline 1's output), runs one
+LLM call per active label in the classification config in parallel, and persists
+the aggregated result as a versioned JSON file in MinIO.
+
+This is the **only** implementation of the classification run. It is called by
+``POST /classification-llm-run`` and by the AI-assessment prefill pipeline
+(``app/assessment_prefill_pipeline.py``) — both pass the ``run_key`` of a saved
+questionnaire result.
 
 Storage key layout:
     classification-results/{system_id}/{config_id}/{iso_timestamp}.json
@@ -16,9 +21,10 @@ label from the set of true results; that step is out of scope here.
 from __future__ import annotations
 
 import asyncio
-import io
 import json
+import os
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -26,22 +32,22 @@ from ai_trust_logging import get_logger
 
 from app.llm.client import chat
 from app.llm.parsing import LLMParseError, parse_with_retry
-from app.llm.templates import PromptTemplateError, load_template, load_questionnaire
-from app.llm.validators import validate_classification_label
+from app.llm.templates import load_template, load_questionnaire
+from app.llm.validators import validate_answer_entries, validate_classification_label
 from app import minio_client
 
 logger = get_logger(__name__)
 
-_CLASSIFICATION_BUCKET = "registration-docs"
+# Template IDs use the subfolder prefix supported by the loader. Shared by every
+# caller so an empty-body request runs exactly what the assessment runs.
+DEFAULT_CLASSIFICATION_PROMPT_ID = "risk_classification/risk_role_classification"
+DEFAULT_CLASSIFICATION_CONFIG_ID = "risk_classification/risk_role_classification_config"
 
-# Template IDs use the subfolder prefix supported by the updated loader.
-_DEFAULT_PROMPT_ID = "risk_classification/risk_role_classification"
-_DEFAULT_CONFIG_ID = "risk_classification/risk_role_classification_config"
+_CLASSIFICATION_MAX_TOKENS = int(os.environ.get("CLASSIFICATION_MAX_TOKENS", "2048"))
 
-_VALID_ANSWER_STRENGTHS = frozenset({"HIGH", "MEDIUM", "LOW"})
-_SPECIAL_ANSWER_VALUES = frozenset(
-    {"NOT_ENOUGH_INFORMATION", "CONFLICT", "NOT_APPLICABLE"}
-)
+
+class InvalidRunKeyError(ValueError):
+    """The questionnaire run key does not belong to the system being classified."""
 
 
 # ---------------------------------------------------------------------------
@@ -86,52 +92,18 @@ def _scope_questionnaire_data(
     return [r for r in results if r.get("questionId") in question_ids]
 
 
-# ---------------------------------------------------------------------------
-# Validator
-# ---------------------------------------------------------------------------
+def _check_run_key(system_id: str, run_key: str) -> None:
+    """The key must be one of *this* system's questionnaire results.
 
-
-def _validate_questionnaire_data(data: list[dict]) -> None:
-    """Simple structural pre-flight check before sending data to LLM 2.
-
-    Raises ``LLMParseError`` on:
-    - missing questionId
-    - empty answer[] array
-    - invalid answerStrength value (not HIGH/MEDIUM/LOW/null)
-    - NOT_APPLICABLE coexisting with regular values in a MULTISELECT result
+    Without this, a caller with ``systems:write`` on system A could classify the
+    stored answers of system B by passing B's key.
     """
-    for item in data:
-        q_id = item.get("questionId")
-        if not q_id:
-            raise LLMParseError("Questionnaire result missing 'questionId'")
-
-        answers = item.get("answer")
-        if not isinstance(answers, list) or len(answers) == 0:
-            raise LLMParseError(
-                f"Question '{q_id}' has an empty or missing 'answer' array"
-            )
-
-        values = [a.get("value") for a in answers if isinstance(a, dict)]
-        for answer in answers:
-            if not isinstance(answer, dict):
-                continue
-            strength = answer.get("answerStrength")
-            if strength is not None and strength not in _VALID_ANSWER_STRENGTHS:
-                raise LLMParseError(
-                    f"Question '{q_id}' has invalid answerStrength '{strength}'; "
-                    f"must be HIGH, MEDIUM, LOW, or null"
-                )
-
-        # NOT_APPLICABLE must not coexist with regular values
-        has_not_applicable = "NOT_APPLICABLE" in values
-        has_regular = any(
-            v not in _SPECIAL_ANSWER_VALUES for v in values if v is not None
+    prefix = f"questionnaire-results/{system_id}/"
+    if not run_key.startswith(prefix) or ".." in run_key.split("/"):
+        raise InvalidRunKeyError(
+            f"questionnaire_run_key must be a questionnaire result of system "
+            f"'{system_id}' (expected prefix '{prefix}')"
         )
-        if has_not_applicable and has_regular:
-            raise LLMParseError(
-                f"Question '{q_id}' has NOT_APPLICABLE combined with regular answer "
-                f"values — these are mutually exclusive"
-            )
 
 
 # ---------------------------------------------------------------------------
@@ -141,27 +113,24 @@ def _validate_questionnaire_data(data: list[dict]) -> None:
 
 async def _classify_label(
     label: dict,
-    questionnaire_results: list[dict],
+    scoped_data: list[dict],
     system_prompt: str,
 ) -> dict:
     """Run one LLM call for one active label.
 
-    Scopes questionnaire data to questions this label's rules reference,
-    validates it, then calls the LLM 2 prompt and returns the parsed result.
+    ``scoped_data`` is the questionnaire data narrowed to the questions this
+    label's rules reference. It is validated before being sent, and the LLM
+    answer is validated (exactly one entry, ``labelId`` equal to this label).
 
     Returns a dict with keys: labelId, result, confidence, explanation.
-    Raises ``LLMParseError`` on unparseable LLM output.
+    Raises ``LLMParseError`` on invalid input data or unparseable/invalid LLM output.
     """
     label_id = label["id"]
     task = f"risk_role_classification_{label_id}"
 
-    # Scope questionnaire data to this label's referenced questions only.
-    question_ids = _label_question_ids(label)
-    scoped_data = _scope_questionnaire_data(questionnaire_results, question_ids)
-
-    # Validate before sending to LLM.
+    # Validate before sending to the LLM.
     try:
-        _validate_questionnaire_data(scoped_data)
+        validate_answer_entries(scoped_data)
     except LLMParseError as exc:
         raise LLMParseError(
             f"Questionnaire data validation failed for label '{label_id}': {exc}"
@@ -178,7 +147,9 @@ async def _classify_label(
         {"role": "user", "content": user_message},
     ]
 
-    llm_response = await chat(messages, task=task, json_mode=True)
+    llm_response = await chat(
+        messages, task=task, json_mode=True, max_tokens=_CLASSIFICATION_MAX_TOKENS
+    )
 
     if llm_response.get("finish_reason") == "length":
         raise LLMParseError(
@@ -190,73 +161,14 @@ async def _classify_label(
     parsed = await parse_with_retry(
         llm_response["text"],
         task=task,
-        validator=validate_classification_label,
+        validator=partial(validate_classification_label, expected_label_id=label_id),
         chat_fn=chat,
         messages=messages,
         max_attempts=3,
+        max_tokens=_CLASSIFICATION_MAX_TOKENS,
     )
 
     return parsed["classifications"][0]
-
-
-# ---------------------------------------------------------------------------
-# MinIO persistence
-# ---------------------------------------------------------------------------
-
-
-async def _upload_classification_result(
-    system_id: str,
-    config_id: str,
-    result: dict,
-    timestamp: datetime,
-) -> str:
-    """Upload the classification result JSON to MinIO. Returns the object key."""
-    # Flatten the config_id for use as a path component (strip any subfolder prefix).
-    safe_config_id = Path(config_id).name
-    iso = timestamp.strftime("%Y-%m-%dT%H-%M-%S-%fZ")
-    key = f"classification-results/{system_id}/{safe_config_id}/{iso}.json"
-    data = json.dumps(result, ensure_ascii=False, indent=2).encode("utf-8")
-
-    await minio_client.ensure_bucket()
-
-    from app.minio_client import _get_client
-
-    def _put() -> None:
-        _get_client().put_object(
-            _CLASSIFICATION_BUCKET,
-            key,
-            io.BytesIO(data),
-            length=len(data),
-            content_type="application/json",
-        )
-
-    await asyncio.to_thread(_put)
-    logger.info(
-        "classification_pipeline.result_stored",
-        extra={"system_id": system_id, "key": key, "size": len(data)},
-    )
-    return key
-
-
-# ---------------------------------------------------------------------------
-# MinIO read
-# ---------------------------------------------------------------------------
-
-
-async def _read_questionnaire_result(run_key: str) -> dict:
-    """Read a questionnaire pipeline result JSON from MinIO. Returns the parsed dict."""
-    from app.minio_client import _get_client
-
-    def _get() -> bytes:
-        response = _get_client().get_object(_CLASSIFICATION_BUCKET, run_key)
-        try:
-            return response.read()
-        finally:
-            response.close()
-            response.release_conn()
-
-    raw = await asyncio.to_thread(_get)
-    return json.loads(raw)
 
 
 # ---------------------------------------------------------------------------
@@ -267,25 +179,34 @@ async def _read_questionnaire_result(run_key: str) -> dict:
 async def run_classification(
     system_id: str,
     questionnaire_run_key: str,
-    classification_config_id: str = _DEFAULT_CONFIG_ID,
-    prompt_id: str = _DEFAULT_PROMPT_ID,
+    classification_config_id: str = DEFAULT_CLASSIFICATION_CONFIG_ID,
+    prompt_id: str = DEFAULT_CLASSIFICATION_PROMPT_ID,
 ) -> dict[str, Any]:
     """Run risk & role label classification against completed questionnaire answers.
 
-    Reads the Step 1 questionnaire result from MinIO, runs one LLM 2 call per
-    active label in parallel, merges the results, and persists the output to
-    MinIO.
+    Reads the questionnaire result from MinIO by ``questionnaire_run_key``, runs
+    one LLM call per active label in parallel, merges the results, and persists
+    the output to MinIO.
+
+    A label is **skipped** (not sent to the LLM, listed under ``skipped_labels``)
+    when any question its rules reference has no answer in the questionnaire
+    result — typically because that questionnaire batch failed. Classifying on
+    partial evidence would persist a likely-``false`` as if it were established.
+    A label whose LLM call fails is logged and omitted; neither aborts the run.
 
     Returns ``{run_key, presigned_url, result}`` where ``result`` is:
-    ``{questionnaire_run_key, config_id, config_version, prompt_id, classifications}``.
+    ``{questionnaire_run_key, config_id, config_version, prompt_id,
+    classifications, skipped_labels}``.
 
     Raises:
+        InvalidRunKeyError: the key is not a questionnaire result of ``system_id``.
         KeyError: MinIO object not found.
         PromptTemplateError: config or prompt file not found.
-        LLMParseError: LLM returned unparseable JSON after repair retry.
     """
-    # 1. Read Step 1 output from MinIO.
-    questionnaire_output = await _read_questionnaire_result(questionnaire_run_key)
+    _check_run_key(system_id, questionnaire_run_key)
+
+    # 1. Read the questionnaire result from MinIO.
+    questionnaire_output = await minio_client.get_json(questionnaire_run_key)
     questionnaire_results: list[dict] = questionnaire_output.get("results", [])
 
     # 2. Load config + prompt.
@@ -302,27 +223,51 @@ async def run_classification(
         if label.get("activate", False)
     ]
 
+    # 4. Scope the answers per label; skip labels whose evidence is incomplete.
+    runnable: list[tuple[dict, list[dict]]] = []
+    skipped: list[dict] = []
+    for label in active_labels:
+        question_ids = _label_question_ids(label)
+        scoped = _scope_questionnaire_data(questionnaire_results, question_ids)
+        missing = sorted(question_ids - {r.get("questionId") for r in scoped})
+        if missing:
+            logger.warning(
+                "classification_pipeline.label_skipped_insufficient_data",
+                extra={
+                    "system_id": system_id,
+                    "label_id": label["id"],
+                    "missing_questions": missing,
+                },
+            )
+            skipped.append(
+                {
+                    "labelId": label["id"],
+                    "reason": "insufficient_data",
+                    "missingQuestionIds": missing,
+                }
+            )
+        else:
+            runnable.append((label, scoped))
+
     logger.info(
         "classification_pipeline.started",
         extra={
             "system_id": system_id,
             "questionnaire_run_key": questionnaire_run_key,
             "active_labels": len(active_labels),
+            "skipped_labels": len(skipped),
         },
     )
 
-    # 4. Fan out — one LLM call per active label, all in parallel.
+    # 5. Fan out — one LLM call per runnable label, all in parallel.
     label_results = await asyncio.gather(
-        *[
-            _classify_label(label, questionnaire_results, system_prompt)
-            for label in active_labels
-        ],
+        *[_classify_label(label, scoped, system_prompt) for label, scoped in runnable],
         return_exceptions=True,
     )
 
     # Collect successful results; log failures per label.
     classifications: list[dict] = []
-    for label, outcome in zip(active_labels, label_results):
+    for (label, _), outcome in zip(runnable, label_results):
         if isinstance(outcome, Exception):
             logger.warning(
                 "classification_pipeline.label_failed",
@@ -341,13 +286,14 @@ async def run_classification(
         "config_version": config_version,
         "prompt_id": Path(prompt_id).name,
         "classifications": classifications,
+        "skipped_labels": skipped,
     }
 
-    # 5. Persist to MinIO.
+    # 6. Persist to MinIO.
     timestamp = datetime.now(timezone.utc)
-    run_key = await _upload_classification_result(
-        system_id, classification_config_id, result, timestamp
-    )
+    iso = timestamp.strftime("%Y-%m-%dT%H-%M-%S-%fZ")
+    run_key = f"classification-results/{system_id}/{config_id_short}/{iso}.json"
+    await minio_client.put_json(run_key, result)
     presigned_url = await minio_client.get_presigned_url(run_key, expires_hours=24)
 
     logger.info(
@@ -357,7 +303,8 @@ async def run_classification(
             "config_id": config_id_short,
             "config_version": config_version,
             "labels_classified": len(classifications),
-            "labels_failed": len(active_labels) - len(classifications),
+            "labels_failed": len(runnable) - len(classifications),
+            "labels_skipped": len(skipped),
             "run_key": run_key,
         },
     )

@@ -1,19 +1,25 @@
-"""Unit tests for classification_pipeline.py.
+"""Unit tests for classification_pipeline.py (pipeline 2).
 
-No DB, no MinIO, no LLM — pure Python logic.
+No DB. The LLM is the offline stub (or a mock) and MinIO is mocked.
 """
 
 from __future__ import annotations
 
+import json
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
 from app.classification_pipeline import (
+    DEFAULT_CLASSIFICATION_CONFIG_ID,
+    InvalidRunKeyError,
+    _check_run_key,
     _collect_question_ids,
     _label_question_ids,
     _scope_questionnaire_data,
-    _validate_questionnaire_data,
+    run_classification,
 )
-from app.llm.parsing import LLMParseError
+from app.llm.templates import load_questionnaire
 
 
 # ---------------------------------------------------------------------------
@@ -100,76 +106,216 @@ def test_scope_questionnaire_data_empty_input():
 
 
 # ---------------------------------------------------------------------------
-# _validate_questionnaire_data
+# config integrity
 # ---------------------------------------------------------------------------
 
 
-def _make_result(q_id: str, answers: list[dict]) -> dict:
-    return {"questionId": q_id, "answer": answers}
+def _active_labels() -> list[dict]:
+    config = load_questionnaire(DEFAULT_CLASSIFICATION_CONFIG_ID)
+    return [
+        label
+        for label in config["riskLabels"] + config["roleLabels"]
+        if label.get("activate", False)
+    ]
 
 
-def test_validate_valid_data_passes():
-    data = [
-        _make_result("Q1", [{"value": "YES", "answerStrength": "HIGH"}]),
-        _make_result(
-            "Q2", [{"value": "NOT_ENOUGH_INFORMATION", "answerStrength": None}]
+def test_every_rule_question_id_exists_in_the_questionnaire():
+    """A rule that references a question the questionnaire doesn't have could never
+    be evaluated — and would make its label skip forever."""
+    known = {q["id"] for q in load_questionnaire("ai-questionnaire")["questions"]}
+    for label in _active_labels():
+        unknown = _label_question_ids(label) - known
+        assert not unknown, f"{label['id']} references unknown questions {unknown}"
+
+
+def test_active_labels_have_rules():
+    for label in _active_labels():
+        assert _label_question_ids(label), f"{label['id']} has no rule questions"
+
+
+# ---------------------------------------------------------------------------
+# _check_run_key
+# ---------------------------------------------------------------------------
+
+
+def test_run_key_of_the_same_system_is_accepted():
+    _check_run_key(
+        "SYS-1",
+        "questionnaire-results/SYS-1/ai-questionnaire/2026-01-01T00-00-00Z.json",
+    )
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "questionnaire-results/SYS-2/ai-questionnaire/x.json",  # another system
+        "classification-results/SYS-1/cfg/x.json",  # wrong result type
+        "questionnaire-results/SYS-1/../SYS-2/ai-questionnaire/x.json",  # traversal
+        "SYS-1/other.json",
+    ],
+)
+def test_run_key_of_another_system_or_shape_is_rejected(key):
+    with pytest.raises(InvalidRunKeyError):
+        _check_run_key("SYS-1", key)
+
+
+# ---------------------------------------------------------------------------
+# run_classification (stub LLM / mocked chat, mocked MinIO)
+# ---------------------------------------------------------------------------
+
+_SYSTEM = "SYS-UNIT0001"
+_RUN_KEY = f"questionnaire-results/{_SYSTEM}/ai-questionnaire/2026-01-01T00-00-00Z.json"
+
+
+def _nei_result(question: dict) -> dict:
+    return {
+        "questionId": question["id"],
+        "question": question["question"],
+        "questionType": question["type"],
+        "answer": [
+            {"value": "NOT_ENOUGH_INFORMATION", "answerStrength": None, "reason": None}
+        ],
+        "explanation": "No evidence.",
+        "references": [],
+    }
+
+
+def _full_questionnaire_result(skip: frozenset = frozenset()) -> dict:
+    questions = load_questionnaire("ai-questionnaire")["questions"]
+    return {"results": [_nei_result(q) for q in questions if q["id"] not in skip]}
+
+
+def _minio(stored: dict):
+    """Patch the three MinIO calls run_classification makes."""
+    get_json = AsyncMock(return_value=stored)
+    put_json = AsyncMock()
+    presign = AsyncMock(return_value="http://minio/presigned")
+    return (
+        get_json,
+        put_json,
+        patch("app.classification_pipeline.minio_client.get_json", get_json),
+        patch("app.classification_pipeline.minio_client.put_json", put_json),
+        patch("app.classification_pipeline.minio_client.get_presigned_url", presign),
+    )
+
+
+async def test_run_classification_classifies_every_active_label():
+    get_json, put_json, p1, p2, p3 = _minio(_full_questionnaire_result())
+    with p1, p2, p3:
+        out = await run_classification(_SYSTEM, _RUN_KEY)
+
+    get_json.assert_awaited_once_with(_RUN_KEY)
+    labels = {c["labelId"] for c in out["result"]["classifications"]}
+    assert labels == {label["id"] for label in _active_labels()}
+    assert out["result"]["skipped_labels"] == []
+    assert out["result"]["questionnaire_run_key"] == _RUN_KEY
+
+    key, stored = put_json.await_args.args
+    assert key == out["run_key"]
+    assert key.startswith(
+        f"classification-results/{_SYSTEM}/risk_role_classification_config/"
+    )
+    assert stored == out["result"]
+
+
+async def test_label_with_missing_question_is_skipped_not_classified():
+    """If a label's source answers are absent (their batch failed) it must not be sent
+    to the LLM — a likely-false result would be persisted as if it were established."""
+    victim = _active_labels()[0]
+    missing = sorted(_label_question_ids(victim))[:1]
+    _, put_json, p1, p2, p3 = _minio(
+        _full_questionnaire_result(skip=frozenset(missing))
+    )
+    with p1, p2, p3:
+        out = await run_classification(_SYSTEM, _RUN_KEY)
+
+    result = out["result"]
+    skipped = {s["labelId"]: s for s in result["skipped_labels"]}
+    assert victim["id"] in skipped
+    assert skipped[victim["id"]]["reason"] == "insufficient_data"
+    assert skipped[victim["id"]]["missingQuestionIds"] == missing
+    assert victim["id"] not in {c["labelId"] for c in result["classifications"]}
+    # Labels that do not depend on the missing question are still classified.
+    assert result["classifications"]
+
+
+async def test_foreign_run_key_is_rejected_before_any_minio_read():
+    foreign = "questionnaire-results/SYS-OTHER/ai-questionnaire/x.json"
+    get_json, put_json, p1, p2, p3 = _minio(_full_questionnaire_result())
+    with p1, p2, p3:
+        with pytest.raises(InvalidRunKeyError):
+            await run_classification(_SYSTEM, foreign)
+    get_json.assert_not_awaited()
+    put_json.assert_not_awaited()
+
+
+def _llm_reply(label_id: str) -> dict:
+    return {
+        "text": json.dumps(
+            {
+                "classifications": [
+                    {
+                        "labelId": label_id,
+                        "result": False,
+                        "confidence": 70,
+                        "explanation": "ok",
+                    }
+                ]
+            }
         ),
-    ]
-    _validate_questionnaire_data(data)  # must not raise
+        "finish_reason": "stop",
+        "input_tokens": 1,
+        "output_tokens": 1,
+    }
 
 
-def test_validate_missing_question_id_raises():
-    data = [{"answer": [{"value": "YES", "answerStrength": "HIGH"}]}]
-    with pytest.raises(LLMParseError, match="missing 'questionId'"):
-        _validate_questionnaire_data(data)
+def _single_label_config(*label_ids: str) -> dict:
+    labels = [label for label in _active_labels() if label["id"] in label_ids]
+    assert {label["id"] for label in labels} == set(label_ids)
+    return {"version": "t", "riskLabels": labels, "roleLabels": []}
 
 
-def test_validate_empty_answer_array_raises():
-    data = [_make_result("Q1", [])]
-    with pytest.raises(LLMParseError, match="empty or missing 'answer' array"):
-        _validate_questionnaire_data(data)
+async def test_wrong_label_id_from_the_llm_is_retried():
+    """A reply whose labelId is not the requested label is a contract violation: it is
+    re-asked (validation retry) instead of being persisted under the wrong label."""
+    config = _single_label_config("PROHIBITED")
 
-
-def test_validate_invalid_answer_strength_raises():
-    data = [_make_result("Q1", [{"value": "YES", "answerStrength": "VERY_HIGH"}])]
-    with pytest.raises(LLMParseError, match="invalid answerStrength"):
-        _validate_questionnaire_data(data)
-
-
-def test_validate_not_applicable_with_regular_value_raises():
-    data = [
-        _make_result(
-            "Q1",
-            [
-                {"value": "NOT_APPLICABLE", "answerStrength": "HIGH"},
-                {"value": "OPTION_A", "answerStrength": "HIGH"},
-            ],
-        )
-    ]
-    with pytest.raises(
-        LLMParseError, match="NOT_APPLICABLE combined with regular answer"
+    chat = AsyncMock(side_effect=[_llm_reply("HIGH_RISK"), _llm_reply("PROHIBITED")])
+    _, _, p1, p2, p3 = _minio(_full_questionnaire_result())
+    with (
+        p1,
+        p2,
+        p3,
+        patch("app.classification_pipeline.load_questionnaire", return_value=config),
+        patch("app.classification_pipeline.chat", chat),
     ):
-        _validate_questionnaire_data(data)
+        out = await run_classification(_SYSTEM, _RUN_KEY)
+
+    assert [c["labelId"] for c in out["result"]["classifications"]] == ["PROHIBITED"]
+    assert chat.await_count == 2
+    # The retry re-sent the original conversation plus the violation.
+    retry_messages = chat.await_args_list[1].args[0]
+    assert retry_messages[0]["role"] == "system"
+    assert "labelId" in retry_messages[-1]["content"]
+    assert chat.await_args_list[1].kwargs["max_tokens"] > 0
 
 
-def test_validate_not_applicable_alone_passes():
-    data = [_make_result("Q1", [{"value": "NOT_APPLICABLE", "answerStrength": "HIGH"}])]
-    _validate_questionnaire_data(data)  # must not raise
+async def test_label_failure_is_omitted_and_does_not_abort_the_run():
+    config = _single_label_config("PROHIBITED", "HIGH_RISK")
 
+    async def _chat(messages, task="chat", **kwargs):
+        if task.endswith("PROHIBITED"):
+            return _llm_reply("PROHIBITED")
+        return {"text": "no json", "finish_reason": "stop"}  # HIGH_RISK never valid
 
-def test_validate_conflict_with_null_strength_passes():
-    data = [_make_result("Q1", [{"value": "CONFLICT", "answerStrength": None}])]
-    _validate_questionnaire_data(data)  # must not raise
+    _, _, p1, p2, p3 = _minio(_full_questionnaire_result())
+    with (
+        p1,
+        p2,
+        p3,
+        patch("app.classification_pipeline.load_questionnaire", return_value=config),
+        patch("app.classification_pipeline.chat", _chat),
+    ):
+        out = await run_classification(_SYSTEM, _RUN_KEY)
 
-
-def test_validate_multiple_regular_values_passes():
-    data = [
-        _make_result(
-            "Q1",
-            [
-                {"value": "OPTION_A", "answerStrength": "HIGH"},
-                {"value": "OPTION_B", "answerStrength": "MEDIUM"},
-            ],
-        )
-    ]
-    _validate_questionnaire_data(data)  # must not raise
+    assert [c["labelId"] for c in out["result"]["classifications"]] == ["PROHIBITED"]

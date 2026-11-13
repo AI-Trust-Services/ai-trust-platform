@@ -210,3 +210,150 @@ async def test_parse_with_retry_validator_error_triggers_retry():
     )
     assert result == _VALID_PARSED
     assert call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# parse_with_retry — non-object JSON, max_tokens, truncation, retry prompts
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("text", ["[1, 2]", '"just a string"', "42", "[]"])
+async def test_non_object_json_is_retried_not_attribute_error(text):
+    """A top-level array/string/number must be treated as a parse failure and retried;
+    the validator (which calls ``raw.get``) must never see it."""
+    seen: list = []
+
+    def _validator(raw: dict) -> dict:
+        seen.append(raw)
+        return raw
+
+    chat_fn = AsyncMock(return_value=_REPAIR_RESPONSE)
+    result = await parse_with_retry(
+        text, task="test", validator=_validator, chat_fn=chat_fn, messages=[]
+    )
+    assert result == _VALID_PARSED
+    assert seen == [_VALID_PARSED]
+    assert chat_fn.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_non_object_json_in_parse_json_response_is_repaired():
+    with patch(
+        "app.llm.parsing.chat", new=AsyncMock(return_value=_REPAIR_RESPONSE)
+    ) as mock_chat:
+        result = await parse_json_response("[1, 2, 3]", task="test")
+    assert result == _VALID_PARSED
+    mock_chat.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_retry_forwards_max_tokens():
+    """Retries reproduce the whole response, so they must use the caller's token cap."""
+    chat_fn = AsyncMock(return_value=_REPAIR_RESPONSE)
+    await parse_with_retry(
+        "not json",
+        task="test",
+        validator=_identity_validator,
+        chat_fn=chat_fn,
+        messages=[],
+        max_tokens=24000,
+    )
+    assert chat_fn.call_args.kwargs["max_tokens"] == 24000
+    assert chat_fn.call_args.kwargs["json_mode"] is True
+
+
+@pytest.mark.asyncio
+async def test_retry_omits_max_tokens_when_not_given():
+    chat_fn = AsyncMock(return_value=_REPAIR_RESPONSE)
+    await parse_with_retry(
+        "not json",
+        task="test",
+        validator=_identity_validator,
+        chat_fn=chat_fn,
+        messages=[],
+    )
+    assert "max_tokens" not in chat_fn.call_args.kwargs
+
+
+@pytest.mark.asyncio
+async def test_truncated_retry_counts_as_failed_attempt():
+    """A retry cut off by the token limit is not parsed; the next attempt is made."""
+    responses = [
+        {"text": '{"ok": tr', "finish_reason": "length"},
+        {"text": _VALID_RESPONSE, "finish_reason": "stop"},
+    ]
+    chat_fn = AsyncMock(side_effect=responses)
+    result = await parse_with_retry(
+        "not json",
+        task="test",
+        validator=_identity_validator,
+        chat_fn=chat_fn,
+        messages=[],
+    )
+    assert result == _VALID_PARSED
+    assert chat_fn.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_truncated_retries_exhaust_attempts():
+    chat_fn = AsyncMock(return_value={"text": '{"ok": tr', "finish_reason": "length"})
+    with pytest.raises(LLMParseError, match="truncated"):
+        await parse_with_retry(
+            "not json",
+            task="test",
+            validator=_identity_validator,
+            chat_fn=chat_fn,
+            messages=[],
+        )
+    assert chat_fn.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_contract_failure_retry_resends_original_conversation_and_violations():
+    """A valid-JSON-but-invalid answer is re-asked with the original messages, the
+    model's previous answer and the violation list — not a blind 'make this JSON'."""
+    original = [
+        {"role": "system", "content": "SYSTEM PROMPT"},
+        {"role": "user", "content": "EVIDENCE"},
+    ]
+    state = {"calls": 0}
+
+    def _validator(raw: dict) -> dict:
+        state["calls"] += 1
+        if state["calls"] == 1:
+            raise LLMParseError("results: missing an answer for question(s) ['Q2']")
+        return raw
+
+    chat_fn = AsyncMock(return_value=_REPAIR_RESPONSE)
+    result = await parse_with_retry(
+        '{"results": []}',
+        task="test",
+        validator=_validator,
+        chat_fn=chat_fn,
+        messages=original,
+    )
+    assert result == _VALID_PARSED
+
+    sent = chat_fn.call_args.args[0]
+    assert sent[:2] == original
+    assert sent[2] == {"role": "assistant", "content": '{"results": []}'}
+    assert sent[3]["role"] == "user"
+    assert "missing an answer for question(s) ['Q2']" in sent[3]["content"]
+
+
+@pytest.mark.asyncio
+async def test_syntax_failure_retry_uses_json_repair_prompt_not_original_messages():
+    original = [{"role": "system", "content": "SYSTEM PROMPT"}]
+    chat_fn = AsyncMock(return_value=_REPAIR_RESPONSE)
+    await parse_with_retry(
+        "this is not json",
+        task="test",
+        validator=_identity_validator,
+        chat_fn=chat_fn,
+        messages=original,
+    )
+    sent = chat_fn.call_args.args[0]
+    assert len(sent) == 2
+    assert sent[0]["role"] == "system" and "SYSTEM PROMPT" not in sent[0]["content"]
+    assert "this is not json" in sent[1]["content"]

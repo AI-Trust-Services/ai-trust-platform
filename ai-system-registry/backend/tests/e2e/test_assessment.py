@@ -6,10 +6,12 @@ contributors, the finalize/submit all-confirmed gates, comment soft-delete
 permissions, assignment, and per-cycle history. The acting user is read from
 ``x-forwarded-preferred-username``.
 
-Runs in stub LLM mode (THALAMUS_BASE_URL unset → stub), so the questionnaire
-pipeline that ``/open`` runs produces a deterministic minimal result (one
-Scope_1 answer, no answer strength → no confidence band). Its MinIO result upload is
-patched so a live MinIO is not required.
+Runs in stub LLM mode (THALAMUS_BASE_URL unset → stub), so the prefill pipeline
+that ``/open`` runs (questionnaire run → classification run) produces a
+deterministic result: every question answered NOT_ENOUGH_INFORMATION with no answer
+strength → no confidence band. MinIO is replaced by an in-memory store (the
+``minio_store`` fixture) so a live MinIO is not required and the results the
+pipelines save can be inspected.
 """
 
 from __future__ import annotations
@@ -48,33 +50,39 @@ async def _create_system(client: httpx.AsyncClient, owner: str = _OWNER) -> str:
 
 
 @pytest.fixture(autouse=True)
-def _stub_pipeline_minio():
-    """The questionnaire pipeline that /open runs uploads each run's result to
-    MinIO. Patch it for every test in this module — /open is reached directly and
-    indirectly (e.g. POST /assessment/start-new opens the fresh cycle) — so no
-    live MinIO is required."""
+def minio_store():
+    """In-memory stand-in for MinIO, active for every test in this module.
+
+    The questionnaire pipeline saves its result, and the classification pipeline
+    reads it back and saves its own — /open runs both, directly and indirectly
+    (e.g. POST /assessment/start-new opens the fresh cycle). Patching the
+    ``minio_client`` JSON helpers keeps those flows hermetic while letting tests
+    inspect what was stored. Yields ``{object_key: stored_json}``."""
+    store: dict[str, object] = {}
+
+    async def _put(key: str, obj: object) -> None:
+        store[key] = obj
+
+    async def _get(key: str) -> object:
+        if key not in store:
+            raise KeyError(f"Object '{key}' not found")
+        return store[key]
+
     with ExitStack() as stack:
         stack.enter_context(
-            patch(
-                "app.questionnaire_pipeline.minio_client.ensure_bucket",
-                new_callable=AsyncMock,
-            )
+            patch("app.minio_client.put_json", new=AsyncMock(side_effect=_put))
+        )
+        stack.enter_context(
+            patch("app.minio_client.get_json", new=AsyncMock(side_effect=_get))
         )
         stack.enter_context(
             patch(
-                "app.questionnaire_pipeline.asyncio.to_thread",
-                new_callable=AsyncMock,
-                return_value=None,
-            )
-        )
-        stack.enter_context(
-            patch(
-                "app.questionnaire_pipeline.minio_client.get_presigned_url",
+                "app.minio_client.get_presigned_url",
                 new_callable=AsyncMock,
                 return_value=_STUB_PRESIGNED,
             )
         )
-        yield
+        yield store
 
 
 async def _open(client: httpx.AsyncClient, system_id: str, user: str = _OWNER):
@@ -99,10 +107,10 @@ async def _open(client: httpx.AsyncClient, system_id: str, user: str = _OWNER):
 
 @pytest.mark.asyncio
 async def test_open_prefills_from_questionnaire_pipeline(client: httpx.AsyncClient):
-    """POST /open runs the questionnaire pipeline: every catalogue question gets a
-    state, the stub's Scope_1 answer is written (null confidence because the stub
-    returns NOT_ENOUGH_INFORMATION with no answerStrength), nothing is pre-confirmed,
-    and the classifier derives a tier."""
+    """POST /open runs the prefill pipeline: every catalogue question gets a state,
+    the stub answers every question NOT_ENOUGH_INFORMATION (null confidence because
+    the stub returns no answerStrength), nothing is pre-confirmed, and the
+    classifier derives a tier."""
     system_id = await _create_system(client)
     state = await _open(client, system_id)
 
@@ -114,17 +122,17 @@ async def test_open_prefills_from_questionnaire_pipeline(client: httpx.AsyncClie
     assert scope["answer_source"] == "ai_prefilled"
     assert scope["confidence"] is None
     assert scope["ai_explanation"]
-    # Questions the pipeline did not answer are blank, null confidence.
-    others = [q for k, q in by_key.items() if k != "Scope_1"]
-    assert all(not q["answer"] for q in others)
-    assert all(q["confidence"] is None for q in others)
+    # The stub follows the answer contract: every question of every batch is
+    # answered NOT_ENOUGH_INFORMATION, with no confidence band.
+    assert all(q["answer"] == "NOT_ENOUGH_INFORMATION" for q in state["questions"])
+    assert all(q["confidence"] is None for q in state["questions"])
     # Null confidence → not auto-confirmed.
     # High/medium confidence answers from a real LLM would be auto-confirmed.
     assert all(not q["confirmed"] for q in state["questions"])
     assert all(not q["owner_confirmed"] for q in state["questions"])
-    # Nothing was established, so every question is flagged for review — including
-    # Scope_1, whose NOT_ENOUGH_INFORMATION answer is a non-blank string with no
-    # confidence band (issue #383: that case used to report needs_attention=False).
+    # Nothing was established, so every question is flagged for review — a
+    # NOT_ENOUGH_INFORMATION answer is a non-blank string with no confidence band
+    # (issue #383: that case used to report needs_attention=False).
     assert all(q["needs_attention"] for q in state["questions"])
     assert state["attention_count"] == len(state["questions"])
     assert state["confidence_counts"] == {"high": 0, "medium": 0, "low": 0}
@@ -138,7 +146,7 @@ async def test_open_sets_prefill_failed_when_pipeline_fails(client: httpx.AsyncC
     A second call to /open retries the pipeline (re-schedules the background task)."""
     system_id = await _create_system(client)
     with patch(
-        "app.routers.assessment.run_pipeline_streaming",
+        "app.assessment_prefill_pipeline.run_questionnaire_pipeline",
         new_callable=AsyncMock,
         side_effect=RuntimeError("llm down"),
     ):
@@ -1285,3 +1293,132 @@ async def test_list_comments_unopened_system_does_not_create_assessment(
             )
         ).scalar_one()
     assert n == 0, "read-only comment GET must not create an Assessment"
+
+
+# ── prefill pipeline: what /open stores, failure policy, endpoint parity ──────
+
+
+def _stored(store: dict, prefix: str) -> list[str]:
+    return sorted(k for k in store if k.startswith(prefix))
+
+
+@pytest.mark.asyncio
+async def test_open_runs_the_prefill_pipeline_with_the_assessment_hooks(
+    client: httpx.AsyncClient,
+):
+    """/open's background process IS the shared prefill pipeline, called with the
+    assessment's two persistence hooks."""
+    from app.assessment_prefill_pipeline import run_assessment_prefill_pipeline as real
+
+    system_id = await _create_system(client)
+    spy = AsyncMock(wraps=real)
+    with patch("app.routers.assessment.run_assessment_prefill_pipeline", spy):
+        await _open(client, system_id)
+
+    spy.assert_awaited_once()
+    assert spy.await_args.args[0] == system_id
+    assert callable(spy.await_args.kwargs["batch_callback"])
+    assert callable(spy.await_args.kwargs["on_questionnaire_done"])
+
+
+@pytest.mark.asyncio
+async def test_open_stores_questionnaire_then_classification_results(
+    client: httpx.AsyncClient, minio_store: dict
+):
+    """After /open both pipelines have saved their result, and the classification
+    was run on exactly the questionnaire result that was just saved."""
+    system_id = await _create_system(client)
+    await _open(client, system_id)
+
+    q_keys = _stored(minio_store, f"questionnaire-results/{system_id}/")
+    c_keys = _stored(minio_store, f"classification-results/{system_id}/")
+    assert len(q_keys) == 1 and len(c_keys) == 1
+
+    classification = minio_store[c_keys[0]]
+    assert classification["questionnaire_run_key"] == q_keys[0]
+    assert classification["classifications"], "stub classifies the active labels"
+    assert classification["skipped_labels"] == []
+
+
+@pytest.mark.asyncio
+async def test_label_classification_failure_does_not_fail_the_prefill(
+    client: httpx.AsyncClient,
+):
+    """Step 2 failing as a whole is only logged: the owner still gets the answers and
+    tier, and no 'AI pre-fill failed' banner (its output isn't shown yet)."""
+    system_id = await _create_system(client)
+    with patch(
+        "app.assessment_prefill_pipeline.run_classification",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("classification down"),
+    ):
+        state = await _open(client, system_id)
+
+    assert state["prefill_failed"] is False
+    assert state["prefill_pending"] is False
+    by_key = {q["question_key"]: q for q in state["questions"]}
+    assert by_key["Scope_1"]["answer"] == "NOT_ENOUGH_INFORMATION"
+    assert state["tier"] != "pending"
+
+
+@pytest.mark.asyncio
+async def test_all_questionnaire_batches_failing_marks_the_prefill_failed(
+    client: httpx.AsyncClient, minio_store: dict
+):
+    """No usable questionnaire result is a failure the owner can retry — not a
+    silently empty prefill — and the classification step is not run."""
+    from app.llm.parsing import LLMParseError
+
+    system_id = await _create_system(client)
+    with patch(
+        "app.questionnaire_pipeline.parse_with_retry",
+        new_callable=AsyncMock,
+        side_effect=LLMParseError("simulated batch failure"),
+    ):
+        state = await _open(client, system_id)
+
+    assert state["prefill_failed"] is True
+    assert state["prefill_pending"] is False
+    assert all(not q["answer"] for q in state["questions"])
+    assert _stored(minio_store, f"questionnaire-results/{system_id}/") == []
+    assert _stored(minio_store, f"classification-results/{system_id}/") == []
+
+
+@pytest.mark.asyncio
+async def test_swagger_pipelines_match_what_the_assessment_start_ran(
+    client: httpx.AsyncClient, minio_store: dict
+):
+    """Parity: the two Swagger endpoints run the same pipelines as the assessment.
+
+    With the same (deterministic stub) input, /questionnaire-llm-run returns the
+    questionnaire result /open produced, and /classification-llm-run on the key /open
+    saved returns the classifications /open stored."""
+    system_id = await _create_system(client)
+    await _open(client, system_id)
+
+    (q_key,) = _stored(minio_store, f"questionnaire-results/{system_id}/")
+    (c_key,) = _stored(minio_store, f"classification-results/{system_id}/")
+    from_open_questionnaire = minio_store[q_key]
+    from_open_classification = minio_store[c_key]
+
+    q = await client.post(
+        f"/v1/systems/{system_id}/questionnaire-llm-run", json={}, headers=_hdr(_OWNER)
+    )
+    assert q.status_code == 200, q.text
+    assert q.json()["result"] == from_open_questionnaire
+
+    c = await client.post(
+        f"/v1/systems/{system_id}/classification-llm-run",
+        json={"questionnaire_run_key": q_key},
+        headers=_hdr(_OWNER),
+    )
+    assert c.status_code == 200, c.text
+
+    def _by_label(result: dict) -> list[dict]:
+        return sorted(result["classifications"], key=lambda x: x["labelId"])
+
+    assert _by_label(c.json()["result"]) == _by_label(from_open_classification)
+    assert (
+        c.json()["result"]["skipped_labels"]
+        == from_open_classification["skipped_labels"]
+    )

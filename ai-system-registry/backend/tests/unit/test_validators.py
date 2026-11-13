@@ -6,6 +6,7 @@ import pytest
 
 from app.llm.parsing import LLMParseError
 from app.llm.validators import (
+    validate_answer_entries,
     validate_classification_label,
     validate_questionnaire_batch,
 )
@@ -237,3 +238,325 @@ def test_missing_label_id_raises():
     bad = {"classifications": [{**_VALID_CLASSIFICATION_ENTRY, "labelId": ""}]}
     with pytest.raises(LLMParseError, match="labelId"):
         validate_classification_label(bad)
+
+
+def test_label_id_must_match_requested_label():
+    with pytest.raises(LLMParseError, match="labelId.*'DEPLOYER'.*'HIGH_RISK'"):
+        validate_classification_label(_VALID_CLASSIFICATION, "DEPLOYER")
+
+
+def test_label_id_matching_requested_label_passes():
+    validate_classification_label(_VALID_CLASSIFICATION, "HIGH_RISK")
+
+
+def test_exactly_one_classification_entry_required():
+    bad = {
+        "classifications": [
+            _VALID_CLASSIFICATION_ENTRY,
+            {**_VALID_CLASSIFICATION_ENTRY, "labelId": "PROHIBITED"},
+        ]
+    }
+    with pytest.raises(LLMParseError, match="exactly one entry"):
+        validate_classification_label(bad)
+
+
+def test_non_object_classification_entry_raises():
+    with pytest.raises(LLMParseError, match="must be an object"):
+        validate_classification_label({"classifications": ["HIGH_RISK"]})
+
+
+# ---------------------------------------------------------------------------
+# validate_questionnaire_batch — answer-semantics rules (no batch config)
+# ---------------------------------------------------------------------------
+
+
+def _result_with(answer: list[dict], **overrides) -> dict:
+    return {"results": [{**_VALID_RESULT, "answer": answer, **overrides}]}
+
+
+def test_predefined_with_two_answer_items_raises():
+    raw = _result_with(
+        [
+            {"value": "YES", "answerStrength": "HIGH", "reason": None},
+            {"value": "NO", "answerStrength": "HIGH", "reason": None},
+        ]
+    )
+    with pytest.raises(LLMParseError, match="exactly one answer item"):
+        validate_questionnaire_batch(raw)
+
+
+def test_duplicate_answer_values_raise():
+    raw = _result_with(
+        [
+            {"value": "A", "answerStrength": "HIGH", "reason": None},
+            {"value": "A", "answerStrength": "HIGH", "reason": None},
+        ],
+        questionType="MULTISELECT",
+    )
+    with pytest.raises(LLMParseError, match="duplicate answer values"):
+        validate_questionnaire_batch(raw)
+
+
+@pytest.mark.parametrize("outcome", ["NOT_ENOUGH_INFORMATION", "CONFLICT"])
+def test_outcome_with_strength_raises(outcome):
+    raw = _result_with([{"value": outcome, "answerStrength": "LOW", "reason": None}])
+    with pytest.raises(LLMParseError, match=f"{outcome} must have answerStrength null"):
+        validate_questionnaire_batch(raw)
+
+
+@pytest.mark.parametrize("outcome", ["NOT_ENOUGH_INFORMATION", "CONFLICT"])
+def test_outcome_must_be_only_item(outcome):
+    raw = _result_with(
+        [
+            {"value": outcome, "answerStrength": None, "reason": None},
+            {"value": "A", "answerStrength": "HIGH", "reason": None},
+        ],
+        questionType="MULTISELECT",
+    )
+    with pytest.raises(LLMParseError, match="must be the only answer item"):
+        validate_questionnaire_batch(raw)
+
+
+def test_substantive_answer_without_strength_raises():
+    raw = _result_with([{"value": "YES", "answerStrength": None, "reason": None}])
+    with pytest.raises(LLMParseError, match="needs answerStrength"):
+        validate_questionnaire_batch(raw)
+
+
+def test_not_applicable_with_low_strength_raises():
+    raw = _result_with(
+        [{"value": "NOT_APPLICABLE", "answerStrength": "LOW", "reason": "x"}]
+    )
+    with pytest.raises(LLMParseError, match="must not have answerStrength LOW"):
+        validate_questionnaire_batch(raw)
+
+
+def test_not_applicable_is_exclusive_in_multiselect():
+    raw = _result_with(
+        [
+            {"value": "NOT_APPLICABLE", "answerStrength": "HIGH", "reason": None},
+            {"value": "A", "answerStrength": "HIGH", "reason": None},
+        ],
+        questionType="MULTISELECT",
+    )
+    with pytest.raises(LLMParseError, match="mutually exclusive"):
+        validate_questionnaire_batch(raw)
+
+
+def test_duplicate_question_id_raises():
+    raw = {"results": [_VALID_RESULT, _VALID_RESULT]}
+    with pytest.raises(LLMParseError, match="duplicate answer for 'Scope_1'"):
+        validate_questionnaire_batch(raw)
+
+
+# ---------------------------------------------------------------------------
+# validate_questionnaire_batch — against the batch config
+# ---------------------------------------------------------------------------
+
+_BATCH = {
+    "questions": [
+        {
+            "id": "Scope_1",
+            "type": "PREDEFINED",
+            "allowedAnswers": ["YES", "NO", "NOT_APPLICABLE"],
+        },
+        {
+            "id": "Scope_2",
+            "type": "MULTISELECT",
+            "allowedAnswers": [
+                {"value": "Defense", "code": "a"},
+                {"value": "Research", "code": "b"},
+            ],
+        },
+        {"id": "Desc_1", "type": "DESCRIPTIVE"},
+    ]
+}
+
+
+def _batch_results(*items: dict) -> dict:
+    return {"results": list(items)}
+
+
+def _item(qid: str, qtype: str, answer: list[dict]) -> dict:
+    return {**_VALID_RESULT, "questionId": qid, "questionType": qtype, "answer": answer}
+
+
+_OK_SCOPE_1 = _item("Scope_1", "PREDEFINED", [_VALID_ANSWER])
+_OK_SCOPE_2 = _item(
+    "Scope_2",
+    "MULTISELECT",
+    [{"value": "Defense", "answerStrength": "MEDIUM", "reason": None}],
+)
+_OK_DESC_1 = _item(
+    "Desc_1",
+    "DESCRIPTIVE",
+    [{"value": "Free text.", "answerStrength": "HIGH", "reason": None}],
+)
+
+
+def test_full_batch_passes():
+    validate_questionnaire_batch(
+        _batch_results(_OK_SCOPE_1, _OK_SCOPE_2, _OK_DESC_1), _BATCH
+    )
+
+
+def test_missing_batch_question_raises():
+    with pytest.raises(LLMParseError, match=r"missing an answer.*Desc_1"):
+        validate_questionnaire_batch(_batch_results(_OK_SCOPE_1, _OK_SCOPE_2), _BATCH)
+
+
+def test_question_from_another_batch_raises():
+    stray = _item("Other_9", "PREDEFINED", [_VALID_ANSWER])
+    with pytest.raises(
+        LLMParseError, match="'Other_9' is not a question of this batch"
+    ):
+        validate_questionnaire_batch(
+            _batch_results(_OK_SCOPE_1, _OK_SCOPE_2, _OK_DESC_1, stray), _BATCH
+        )
+
+
+def test_question_type_must_match_config():
+    wrong = _item("Scope_1", "DESCRIPTIVE", [_VALID_ANSWER])
+    with pytest.raises(LLMParseError, match="'Scope_1' is PREDEFINED"):
+        validate_questionnaire_batch(
+            _batch_results(wrong, _OK_SCOPE_2, _OK_DESC_1), _BATCH
+        )
+
+
+def test_predefined_value_outside_options_raises():
+    bad = _item(
+        "Scope_1",
+        "PREDEFINED",
+        [{"value": "maybe", "answerStrength": "HIGH", "reason": None}],
+    )
+    with pytest.raises(LLMParseError, match=r"\['maybe'\] are not allowed"):
+        validate_questionnaire_batch(
+            _batch_results(bad, _OK_SCOPE_2, _OK_DESC_1), _BATCH
+        )
+
+
+def test_multiselect_value_outside_options_raises():
+    bad = _item(
+        "Scope_2",
+        "MULTISELECT",
+        [{"value": "Space", "answerStrength": "HIGH", "reason": None}],
+    )
+    with pytest.raises(LLMParseError, match=r"\['Space'\] are not allowed"):
+        validate_questionnaire_batch(
+            _batch_results(_OK_SCOPE_1, bad, _OK_DESC_1), _BATCH
+        )
+
+
+def test_system_outcomes_allowed_even_when_not_configured():
+    nei = _item(
+        "Scope_2",
+        "MULTISELECT",
+        [{"value": "NOT_ENOUGH_INFORMATION", "answerStrength": None, "reason": "x"}],
+    )
+    validate_questionnaire_batch(_batch_results(_OK_SCOPE_1, nei, _OK_DESC_1), _BATCH)
+
+
+def test_descriptive_value_is_free_text():
+    validate_questionnaire_batch(
+        _batch_results(_OK_SCOPE_1, _OK_SCOPE_2, _OK_DESC_1), _BATCH
+    )
+
+
+def test_all_violations_reported_in_one_error():
+    bad_1 = _item(
+        "Scope_1",
+        "PREDEFINED",
+        [{"value": "maybe", "answerStrength": None, "reason": None}],
+    )
+    with pytest.raises(LLMParseError) as exc:
+        validate_questionnaire_batch(_batch_results(bad_1), _BATCH)
+    msg = str(exc.value)
+    assert "needs answerStrength" in msg
+    assert "not allowed" in msg
+    assert "missing an answer" in msg
+
+
+def test_violation_report_is_capped():
+    items = [{**_VALID_RESULT, "questionId": f"Q{i}", "question": 1} for i in range(30)]
+    with pytest.raises(LLMParseError, match=r"and \d+ more violation"):
+        validate_questionnaire_batch({"results": items})
+
+
+# ---------------------------------------------------------------------------
+# validate_answer_entries (pre-flight for stored results used by classification)
+# ---------------------------------------------------------------------------
+
+
+def _make_entry(q_id: str, answers: list[dict]) -> dict:
+    return {"questionId": q_id, "answer": answers}
+
+
+def test_entries_valid_data_passes():
+    validate_answer_entries(
+        [
+            _make_entry("Q1", [{"value": "YES", "answerStrength": "HIGH"}]),
+            _make_entry(
+                "Q2", [{"value": "NOT_ENOUGH_INFORMATION", "answerStrength": None}]
+            ),
+        ]
+    )
+
+
+def test_entries_missing_question_id_raises():
+    with pytest.raises(LLMParseError, match="missing 'questionId'"):
+        validate_answer_entries(
+            [{"answer": [{"value": "YES", "answerStrength": "HIGH"}]}]
+        )
+
+
+def test_entries_empty_answer_array_raises():
+    with pytest.raises(LLMParseError, match="empty or missing 'answer' array"):
+        validate_answer_entries([_make_entry("Q1", [])])
+
+
+def test_entries_invalid_answer_strength_raises():
+    with pytest.raises(LLMParseError, match="answerStrength"):
+        validate_answer_entries(
+            [_make_entry("Q1", [{"value": "YES", "answerStrength": "VERY_HIGH"}])]
+        )
+
+
+def test_entries_not_applicable_with_regular_value_raises():
+    with pytest.raises(LLMParseError, match="NOT_APPLICABLE combined with regular"):
+        validate_answer_entries(
+            [
+                _make_entry(
+                    "Q1",
+                    [
+                        {"value": "NOT_APPLICABLE", "answerStrength": "HIGH"},
+                        {"value": "OPTION_A", "answerStrength": "HIGH"},
+                    ],
+                )
+            ]
+        )
+
+
+def test_entries_not_applicable_alone_passes():
+    validate_answer_entries(
+        [_make_entry("Q1", [{"value": "NOT_APPLICABLE", "answerStrength": "HIGH"}])]
+    )
+
+
+def test_entries_conflict_with_null_strength_passes():
+    validate_answer_entries(
+        [_make_entry("Q1", [{"value": "CONFLICT", "answerStrength": None}])]
+    )
+
+
+def test_entries_multiple_regular_values_passes():
+    validate_answer_entries(
+        [
+            _make_entry(
+                "Q1",
+                [
+                    {"value": "OPTION_A", "answerStrength": "HIGH"},
+                    {"value": "OPTION_B", "answerStrength": "MEDIUM"},
+                ],
+            )
+        ]
+    )

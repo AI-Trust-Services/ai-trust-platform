@@ -12,20 +12,27 @@ This folder contains the Step 2 classification artifacts: the LLM 2 system promp
 ## Architecture
 
 ```
-Step 1: questionnaire_pipeline.py
+Pipeline 3: assessment_prefill_pipeline.py  (started by POST /assessment/open; runs 1 then 2)
+
+Pipeline 1: questionnaire_pipeline.py          (also POST /questionnaire-llm-run)
   → LLM answers each questionnaire question
   → Persists to MinIO: questionnaire-results/{system_id}/ai-questionnaire/{timestamp}.json
 
-Step 2: classification_pipeline.py  ← this folder
-  → Reads Step 1 output from MinIO
+Pipeline 2: classification_pipeline.py  ← this folder   (also POST /classification-llm-run)
+  → Reads pipeline 1's output from MinIO (by run_key)
   → One LLM call per active label (parallel)
   → Each call receives: scoped QUESTIONNAIRE_DATA + single label CLASSIFICATION_CONFIG
+  → A label whose referenced questions have no answer is skipped (listed under skipped_labels)
   → Persists to MinIO: classification-results/{system_id}/risk_role_classification_config/{timestamp}.json
 
 Step 3 (issue #371): hierarchy resolver
-  → Reads Step 2 output from MinIO
+  → Reads pipeline 2 output from MinIO
   → Deterministic: selects final label from true results by configured priority
 ```
+
+The same two pipeline functions serve the Swagger endpoints and the assessment start; see the
+"LLM prefill pipelines" section of `ai-system-registry/CLAUDE.md` for the diagrams, the failure
+policy and the validation rules.
 
 ## Versioning
 

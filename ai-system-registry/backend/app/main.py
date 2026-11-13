@@ -15,13 +15,13 @@ from app import minio_client
 from app.routers import (
     advisor,
     assessment,
+    classification,
     classify,
     external,
     intake,
     intake_assist,
     me,
     model_cards,
-    pipeline,
     questionnaire,
     systems,
     workflow,
@@ -114,7 +114,7 @@ app.include_router(classify.router, prefix="/v1")
 app.include_router(me.router, prefix="/v1")
 app.include_router(external.router, prefix="/v1")
 app.include_router(questionnaire.router, prefix="/v1")
-app.include_router(pipeline.router, prefix="/v1")
+app.include_router(classification.router, prefix="/v1")
 app.include_router(advisor.router, prefix="/v1")
 
 
