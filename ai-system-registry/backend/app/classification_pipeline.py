@@ -268,6 +268,8 @@ async def run_classification(
     # Collect successful results; log failures per label.
     classifications: list[dict] = []
     for (label, _), outcome in zip(runnable, label_results):
+        if isinstance(outcome, BaseException) and not isinstance(outcome, Exception):
+            raise outcome
         if isinstance(outcome, Exception):
             logger.warning(
                 "classification_pipeline.label_failed",

@@ -285,6 +285,18 @@ def test_predefined_with_two_answer_items_raises():
         validate_questionnaire_batch(raw)
 
 
+def test_descriptive_with_two_answer_items_raises():
+    raw = _result_with(
+        [
+            {"value": "Some description", "answerStrength": "HIGH", "reason": None},
+            {"value": "Another description", "answerStrength": "MEDIUM", "reason": None},
+        ],
+        questionType="DESCRIPTIVE",
+    )
+    with pytest.raises(LLMParseError, match="exactly one answer item"):
+        validate_questionnaire_batch(raw)
+
+
 def test_duplicate_answer_values_raise():
     raw = _result_with(
         [

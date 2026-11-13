@@ -224,9 +224,9 @@ def _answer_errors(
     ]
     values = [a["value"] for a in items]
 
-    if question_type == "PREDEFINED" and len(answers) != 1:
+    if question_type in ("PREDEFINED", "DESCRIPTIVE") and len(answers) != 1:
         errors.append(
-            f"{path}: PREDEFINED questions need exactly one answer item, got {len(answers)}"
+            f"{path}: {question_type} questions need exactly one answer item, got {len(answers)}"
         )
 
     if len(set(values)) != len(values):

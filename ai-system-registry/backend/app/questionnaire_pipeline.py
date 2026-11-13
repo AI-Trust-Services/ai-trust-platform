@@ -364,6 +364,8 @@ async def run_questionnaire_pipeline(
     merged: list[dict] = []
     failures: list[Exception] = []
     for idx, outcome in enumerate(outcomes):
+        if isinstance(outcome, BaseException) and not isinstance(outcome, Exception):
+            raise outcome
         if isinstance(outcome, Exception):
             failures.append(outcome)
             logger.warning(
