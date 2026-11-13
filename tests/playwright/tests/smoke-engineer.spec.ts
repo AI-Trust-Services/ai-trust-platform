@@ -12,7 +12,7 @@ test.use({ storageState: ENGINEER.storageState });
 
 const MFES = [
   { name: "registry", url: "/registry/#/systems", heading: "AI System Registry" },
-  { name: "compliance", url: "/compliance/#/assessments", heading: "Assessments" },
+  { name: "compliance", url: "/compliance/#/obligations", heading: "Obligations" },
   { name: "audit", url: "/audit/", heading: "Audit Trail" },
   { name: "overview", url: "/overview/", heading: "Compliance Overview" },
 ] as const;
