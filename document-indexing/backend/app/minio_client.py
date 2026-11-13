@@ -138,13 +138,35 @@ async def download_file(key: str) -> bytes:
     return await asyncio.to_thread(_download_sync, bucket_name(), key)
 
 
-def _presigned_sync(bucket: str, key: str, expires: timedelta) -> str:
-    return _get_presign_client().presigned_get_object(bucket, key, expires=expires)
+def _presigned_sync(
+    bucket: str, key: str, expires: timedelta, response_headers: dict | None
+) -> str:
+    return _get_presign_client().presigned_get_object(
+        bucket, key, expires=expires, response_headers=response_headers
+    )
 
 
-async def get_presigned_url(key: str, expires_hours: int = 1) -> str:
+async def get_presigned_url(
+    key: str,
+    expires_hours: int = 1,
+    *,
+    response_headers: dict[str, str] | None = None,
+) -> str:
+    """Presigned GET URL for an object.
+
+    ``response_headers`` are passed to MinIO as ``response-*`` query-string
+    overrides (e.g. ``response-content-disposition: inline``), which lets a
+    caller force the browser to render the original in-tab rather than download
+    it — required for the "open source at page N" deep-link to work, since a
+    downloaded file leaves the opened tab blank and ignores the ``#page=N``
+    fragment.
+    """
     return await asyncio.to_thread(
-        _presigned_sync, bucket_name(), key, timedelta(hours=expires_hours)
+        _presigned_sync,
+        bucket_name(),
+        key,
+        timedelta(hours=expires_hours),
+        response_headers,
     )
 
 

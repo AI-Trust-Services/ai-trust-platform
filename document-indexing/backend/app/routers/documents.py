@@ -356,25 +356,47 @@ async def document_download_url(
     back and opened at its source (acceptance criterion 6). Defaults to the current
     version; pass ``version_id`` to open the exact version a passage came from — a
     retrieval result references ``source.version_id``, which may no longer be current if
-    a new version was uploaded between search and click."""
+    a new version was uploaded between search and click.
+
+    The URL is presigned with ``response-content-disposition: inline`` (and the stored
+    ``response-content-type``) so the browser renders the original in-tab instead of
+    downloading it — a download would leave the opened tab blank and discard the
+    ``#page=N`` fragment the caller appends to deep-link a PDF to the cited page."""
     async with SessionLocal() as session:
         if version_id is None:
-            _, version = await _load_current(session, document_id)
+            doc, version = await _load_current(session, document_id)
         else:
-            version = (
+            row = (
                 await session.execute(
-                    select(DocumentVersion).where(
+                    select(Document, DocumentVersion)
+                    .join(
+                        DocumentVersion,
+                        DocumentVersion.document_id == Document.id,
+                    )
+                    .where(
+                        Document.id == document_id,
                         DocumentVersion.id == version_id,
                         DocumentVersion.document_id == document_id,
                     )
                 )
-            ).scalar_one_or_none()
-            if version is None:
+            ).first()
+            if row is None:
                 raise HTTPException(
                     404, f"Version {version_id} not found for document {document_id}"
                 )
+            doc, version = row[0], row[1]
         key = version.minio_key
-    url = await minio_client.get_presigned_url(key)
+        filename = doc.filename
+        mime_type = doc.mime_type
+    # Force inline rendering (+ sensible filename) so the original opens in the tab;
+    # a RFC 5987-safe fallback filename keeps the header valid for non-ASCII names.
+    safe_name = filename.encode("ascii", "replace").decode("ascii").replace('"', "")
+    response_headers = {
+        "response-content-disposition": f'inline; filename="{safe_name}"',
+    }
+    if mime_type:
+        response_headers["response-content-type"] = mime_type
+    url = await minio_client.get_presigned_url(key, response_headers=response_headers)
     return DownloadUrlResponse(url=url, expires_hours=1)
 
 
