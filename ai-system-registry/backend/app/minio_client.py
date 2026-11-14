@@ -33,6 +33,22 @@ _client: Minio | None = None
 _presign_client: Minio | None = None
 
 
+def _public_secure() -> bool:
+    """Scheme for presigned (browser-facing) URLs.
+
+    Separate from ``MINIO_SECURE`` (the in-cluster client scheme): on Gardener
+    the in-cluster endpoint stays plain HTTP (``minio:9000``) while the public
+    ``MINIO_PUBLIC_ENDPOINT`` is a TLS ingress, so presigning with ``MINIO_SECURE``
+    (``false``) emits an ``http://`` URL the browser can't reach — the download
+    tab stays blank. ``MINIO_PUBLIC_SECURE`` overrides it; defaults to
+    ``MINIO_SECURE`` so kind/local (plain-HTTP public endpoint) is unchanged.
+    """
+    return (
+        os.environ.get("MINIO_PUBLIC_SECURE", os.environ["MINIO_SECURE"]).lower()
+        == "true"
+    )
+
+
 def _get_client() -> Minio:
     global _client
     if _client is None:
@@ -55,7 +71,7 @@ def _get_presign_client() -> Minio:
             os.environ["MINIO_PUBLIC_ENDPOINT"],
             access_key=os.environ["MINIO_ROOT_USER"],
             secret_key=os.environ["MINIO_ROOT_PASSWORD"],
-            secure=os.environ["MINIO_SECURE"].lower() == "true",
+            secure=_public_secure(),
             region=os.environ["MINIO_REGION"],
         )
     return _presign_client

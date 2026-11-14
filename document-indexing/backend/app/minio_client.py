@@ -58,6 +58,24 @@ def bucket_name() -> str:
     return name
 
 
+def _public_secure() -> bool:
+    """Whether the *public* presign endpoint speaks HTTPS.
+
+    The in-cluster client talks plain HTTP to ``minio:9000`` (``MINIO_SECURE``
+    is ``false`` on every deploy), but the browser-facing ``MINIO_PUBLIC_ENDPOINT``
+    is served over **HTTPS** through the Gardener ingress. Presigning with
+    ``secure=false`` there emits an ``http://`` URL whose request the HTTPS-only
+    ingress can't serve (and a redirect would break the query-string signature),
+    so the browser tab that opens it stays blank. ``MINIO_PUBLIC_SECURE`` lets
+    the public scheme be set independently; it defaults to ``MINIO_SECURE`` so
+    kind/local (plain-HTTP ``localhost`` public endpoint) is unaffected.
+    """
+    return (
+        os.environ.get("MINIO_PUBLIC_SECURE", os.environ["MINIO_SECURE"]).lower()
+        == "true"
+    )
+
+
 def _get_client() -> Minio:
     global _client
     if _client is None:
@@ -77,7 +95,7 @@ def _get_presign_client() -> Minio:
             os.environ["MINIO_PUBLIC_ENDPOINT"],
             access_key=os.environ["MINIO_ROOT_USER"],
             secret_key=os.environ["MINIO_ROOT_PASSWORD"],
-            secure=os.environ["MINIO_SECURE"].lower() == "true",
+            secure=_public_secure(),
             region=os.environ["MINIO_REGION"],
         )
     return _presign_client
@@ -138,13 +156,35 @@ async def download_file(key: str) -> bytes:
     return await asyncio.to_thread(_download_sync, bucket_name(), key)
 
 
-def _presigned_sync(bucket: str, key: str, expires: timedelta) -> str:
-    return _get_presign_client().presigned_get_object(bucket, key, expires=expires)
+def _presigned_sync(
+    bucket: str, key: str, expires: timedelta, response_headers: dict | None
+) -> str:
+    return _get_presign_client().presigned_get_object(
+        bucket, key, expires=expires, response_headers=response_headers
+    )
 
 
-async def get_presigned_url(key: str, expires_hours: int = 1) -> str:
+async def get_presigned_url(
+    key: str,
+    expires_hours: int = 1,
+    *,
+    response_headers: dict[str, str] | None = None,
+) -> str:
+    """Presigned GET URL for an object.
+
+    ``response_headers`` are passed to MinIO as ``response-*`` query-string
+    overrides (e.g. ``response-content-disposition: inline``), which lets a
+    caller force the browser to render the original in-tab rather than download
+    it — required for the "open source at page N" deep-link to work, since a
+    downloaded file leaves the opened tab blank and ignores the ``#page=N``
+    fragment.
+    """
     return await asyncio.to_thread(
-        _presigned_sync, bucket_name(), key, timedelta(hours=expires_hours)
+        _presigned_sync,
+        bucket_name(),
+        key,
+        timedelta(hours=expires_hours),
+        response_headers,
     )
 
 

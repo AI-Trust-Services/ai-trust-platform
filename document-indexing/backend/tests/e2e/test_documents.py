@@ -9,6 +9,8 @@ All tests require Postgres (auto-skipped if not reachable).
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, patch
+
 import httpx
 
 _HDR = {"x-forwarded-preferred-username": "test-user"}
@@ -188,6 +190,31 @@ async def test_download_url_returns_presigned_url(
     body = r.json()
     assert "url" in body
     assert body["expires_hours"] == 1
+
+
+async def test_download_url_presigns_inline_disposition(
+    client: httpx.AsyncClient, system_id: str
+):
+    """The presigned URL must carry inline Content-Disposition + the stored
+    content-type so the browser renders the original in-tab (and honours a PDF
+    ``#page=N`` deep-link) instead of downloading it and leaving a blank tab."""
+    upload_resp = await client.post(
+        f"/v1/systems/{system_id}/documents",
+        files={"file": ("inline-view.pdf", _PDF_BYTES, "application/pdf")},
+        headers=_HDR,
+    )
+    document_id = upload_resp.json()["document_id"]
+
+    presign = AsyncMock(return_value="http://localhost:9000/indexing-docs/x.pdf")
+    with patch("app.routers.documents.minio_client.get_presigned_url", presign):
+        r = await client.get(f"/v1/documents/{document_id}/download-url", headers=_HDR)
+    assert r.status_code == 200
+    presign.assert_awaited_once()
+    assert presign.await_args is not None
+    headers = presign.await_args.kwargs["response_headers"]
+    assert headers["response-content-disposition"].startswith("inline")
+    assert "inline-view.pdf" in headers["response-content-disposition"]
+    assert headers["response-content-type"] == "application/pdf"
 
 
 # ── Delete ────────────────────────────────────────────────────────────────────

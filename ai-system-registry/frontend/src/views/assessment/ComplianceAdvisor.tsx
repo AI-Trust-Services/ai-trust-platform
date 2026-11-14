@@ -69,16 +69,26 @@ function SourceChip({ source }: { source: AdvisorSource }) {
     // Open the tab synchronously inside the click handler so the browser keeps
     // the user activation; a presign request first would lose it and the tab
     // gets blocked as a pop-up. Fill its location once the URL resolves.
-    const win = window.open("", "_blank", "noopener,noreferrer");
+    //
+    // NOTE: do NOT pass "noopener" here — with noopener, window.open() returns
+    // null, so there is no handle to navigate and the tab stays blank forever
+    // (the empty-window bug). The opened document is a MinIO file URL on a
+    // different origin, so a window reference is harmless; keep "noreferrer".
+    const win = window.open("", "_blank", "noreferrer");
     try {
       const { url } = await api.getDocumentDownloadUrlIndexed(
         source.document_id,
         source.version_id ?? undefined,
       );
+      // The backend presigns with "response-content-disposition: inline", so the
+      // browser renders the original in-tab (rather than downloading it) and a
+      // PDF honours the "#page=N" fragment, jumping to the cited page.
       const isPdf = source.ref.toLowerCase().endsWith(".pdf");
       const target = isPdf && source.page != null ? `${url}#page=${source.page}` : url;
       if (win) win.location.href = target;
-      else window.open(target, "_blank", "noopener,noreferrer");
+      // Pop-up was blocked despite the synchronous open — navigate in place as a
+      // last resort so the user still reaches the source.
+      else window.location.href = target;
     } catch {
       win?.close();
     }
