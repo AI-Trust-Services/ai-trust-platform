@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, Eye, Inbox } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowDown, ArrowUp, ArrowUpDown, Inbox } from "lucide-react";
 import {
   REGISTRY_URL,
   type OpenTaskRow,
@@ -138,7 +137,6 @@ export function ReviewQueueTable({ rows, userMap }: ReviewQueueTableProps) {
                     Preliminary risk classification
                   </SortButton>
                 </th>
-                <th className="w-16 px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -189,18 +187,6 @@ export function ReviewQueueTable({ rows, userMap }: ReviewQueueTableProps) {
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="size-8"
-                      onClick={() => openSystem(row)}
-                      aria-label={`Review assessment for ${row.system_name}`}
-                      title="Review assessment"
-                    >
-                      <Eye className="size-4" />
-                    </Button>
                   </td>
                 </tr>
               ))}
