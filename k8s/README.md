@@ -362,6 +362,14 @@ Then re-trigger the deployment workflow. Recovery takes ~2 minutes once all thre
 
 **Automated mitigation:** the `apply-to-cluster` composite action detects the x509 error on OCM Resources and OCIRepositories at deploy time and performs the rollout restarts automatically, so deployments self-heal after the first one that encounters the renewed cert.
 
+**Proactive alternatives (not implemented — documented for future reference):**
+
+- **Stakater Reloader** (`github.com/stakater/Reloader`, ~4k stars, CNCF Landscape) — a lightweight operator that watches Secrets for data changes (SHA256 content hash, not `resourceVersion`) and rolls annotated Deployments automatically. Install in `ocm-system` with `watchGlobally=false` + `namespaceSelector=ocm-system,flux-system` (safe — cannot touch `ai-trust` app pods), then annotate all three deployments with `secret.reloader.stakater.com/reload=ocm-registry-tls-certs`. All three pods restart within seconds of cert-manager writing the renewed secret — before the next deploy runs. Not implemented now because it adds a new operator to install and version-pin in `shoot-cluster-init.sh`; the reactive fix in `apply-to-cluster` already handles the failure case and the app is unaffected during the window.
+
+- **cert-manager Certificate duration extension** — patch `ocm-registry-certificate` `spec.duration: 8760h` (1 year) after `ocm controller install`. Reduces renewal frequency from ~4×/year to ~1×/year but does not eliminate the problem — Docker Distribution still won't hot-reload the cert on renewal.
+
+- **Flux Alert-based restart** — a Flux `Alert` + `Receiver` webhook triggered on Secret changes. Significantly more complex (requires a running webhook handler inside the cluster) for CI/CD infra; not worth the overhead.
+
 **Check certificate status / next renewal date:**
 
 ```bash
