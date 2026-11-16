@@ -282,6 +282,7 @@ export default function AssessmentApp() {
             key={id}
             systemId={id}
             section={sectionForQuestion(activeQuestionKey)}
+            questionKey={activeQuestionKey}
             expanded={advisorExpanded}
             onExpandedChange={setAdvisorExpanded}
           />
