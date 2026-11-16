@@ -11,7 +11,7 @@ Not a PR gate. Runs locally on demand, and in CI automatically after each succes
 
 | Kind | Scenario | Persona |
 |---|---|---|
-| Smoke | registry / compliance / audit / overview MFE mounts + backend healthy | `engineer` (`ai_engineer`) |
+| Smoke | registry / compliance / audit / overview (landing `#/overview` + dashboard `#/dashboard`) MFE mounts + backend healthy | `engineer` (`ai_engineer`) |
 | Smoke | admin / users (IAM) MFE mounts + backend healthy | `admin` (`platform_administrator`) |
 | Deep | register a new AI system end-to-end (name + description → toast → list row) | `engineer` |
 

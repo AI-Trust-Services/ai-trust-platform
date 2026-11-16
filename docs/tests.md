@@ -211,7 +211,7 @@ Legend: ✅ test covered · ⬜ test missing, functionality exists
 | Smoke | Registry MFE mounts (heading "AI System Registry") + backend healthy | ✅ `tests/playwright/tests/smoke-engineer.spec.ts` |
 | Smoke | Compliance MFE mounts (heading "Assessments") + backend healthy | ✅ `tests/playwright/tests/smoke-engineer.spec.ts` |
 | Smoke | Audit MFE mounts (heading "Audit Trail") + backend healthy | ✅ `tests/playwright/tests/smoke-engineer.spec.ts` |
-| Smoke | Overview MFE mounts (heading "Compliance Overview") + backend healthy | ✅ `tests/playwright/tests/smoke-engineer.spec.ts` |
+| Smoke | Overview MFE mounts — landing zone (`#/overview`, "Hi <name>,") and dashboard (`#/dashboard`, heading "Compliance Overview") — + backend healthy | ✅ `tests/playwright/tests/smoke-engineer.spec.ts` |
 | Smoke | Admin MFE mounts (heading "Platform Administration") + backend healthy | ✅ `tests/playwright/tests/smoke-admin.spec.ts` |
 | Smoke | Users/IAM MFE mounts (heading "Users & Roles") + backend healthy | ✅ `tests/playwright/tests/smoke-admin.spec.ts` |
 | Deep | AI Engineer registers a new system end-to-end (form → toast → list row) | ✅ `tests/playwright/tests/registry-register.spec.ts` |
