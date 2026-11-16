@@ -358,10 +358,6 @@ kubectl rollout status deployment/ocm-controller -n ocm-system --timeout=120s
 kubectl rollout status deployment/source-controller -n flux-system --timeout=120s
 ```
 
-Then re-trigger the deployment workflow. Recovery takes ~2 minutes once all three pods are running.
-
-**Automated mitigation:** the `apply-to-cluster` composite action detects the x509 error on OCM Resources and OCIRepositories at deploy time and performs the rollout restarts automatically, so deployments self-heal after the first one that encounters the renewed cert.
-
 **Proactive alternatives (not implemented — documented for future reference):**
 
 - **Stakater Reloader** (`github.com/stakater/Reloader`, ~4k stars, CNCF Landscape) — a lightweight operator that watches Secrets for data changes (SHA256 content hash, not `resourceVersion`) and rolls annotated Deployments automatically. Install in `ocm-system` with `watchGlobally=false` + `namespaceSelector=ocm-system,flux-system` (safe — cannot touch `ai-trust` app pods), then annotate all three deployments with `secret.reloader.stakater.com/reload=ocm-registry-tls-certs`. All three pods restart within seconds of cert-manager writing the renewed secret — before the next deploy runs. Not implemented now because it adds a new operator to install and version-pin in `shoot-cluster-init.sh`; the reactive fix in `apply-to-cluster` already handles the failure case and the app is unaffected during the window.
