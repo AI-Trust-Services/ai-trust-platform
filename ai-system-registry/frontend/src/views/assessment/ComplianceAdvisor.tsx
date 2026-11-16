@@ -133,15 +133,14 @@ function RailTab({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex items-center justify-center border-b border-border py-6 transition-colors",
-        active
-          ? "font-bold text-foreground"
-          : "font-normal text-muted-foreground hover:text-foreground",
+        "relative flex items-center justify-center border-b border-border py-6 font-medium transition-colors",
+        active ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground",
       )}
     >
       <span className="rotate-180 text-xs tracking-wide [writing-mode:vertical-rl]">
         {children}
       </span>
+      {active && <span className="absolute inset-y-0 right-0 w-0.5 bg-[var(--brand)]" />}
     </button>
   );
 }
@@ -150,6 +149,78 @@ function RailTab({
 // so the rendered context reads cleanly.
 function cleanContext(s: string): string {
   return s.replace(/[\u200B-\u200D\uFEFF\u00AD]/g, "");
+}
+
+// An ALL-CAPS line (no lowercase letters) in the owner context is a section
+// heading \u2014 e.g. "RULE", "WHEN THE EXCLUSION DOES NOT APPLY", "REFERENCES".
+function isHeadingLine(t: string): boolean {
+  return t.length >= 2 && t.length <= 70 && /[A-Z]/.test(t) && !/[a-z]/.test(t);
+}
+
+/** Render a block's body lines: consecutive "-"/"\u2022" lines become a bullet list,
+ *  everything else a paragraph. */
+function renderBodyLines(lines: string[]): ReactNode[] {
+  const out: ReactNode[] = [];
+  let bullets: string[] = [];
+  const flush = (key: string) => {
+    if (!bullets.length) return;
+    out.push(
+      <ul key={`ul-${key}`} className="ml-4 list-disc space-y-1">
+        {bullets.map((b, i) => (
+          <li key={i}>{b.replace(/^[-\u2022]\s*/, "")}</li>
+        ))}
+      </ul>,
+    );
+    bullets = [];
+  };
+  lines.forEach((l, i) => {
+    if (/^[-\u2022]/.test(l)) {
+      bullets.push(l);
+    } else {
+      flush(String(i));
+      out.push(<p key={`p-${i}`}>{l}</p>);
+    }
+  });
+  flush("end");
+  return out;
+}
+
+/** Owner context formatted for readability: ALL-CAPS lines become headings,
+ *  "-" lines become bullet lists, the rest paragraphs. Keeps a long block of
+ *  text from reading as one wall. */
+function OwnerContextBody({ text }: { text: string }) {
+  const lines = cleanContext(text)
+    .split("\n")
+    .map((l) => l.trim());
+  const blocks: { heading: string | null; body: string[] }[] = [];
+  let cur: { heading: string | null; body: string[] } | null = null;
+  for (const t of lines) {
+    if (!t) continue;
+    if (isHeadingLine(t)) {
+      cur = { heading: t, body: [] };
+      blocks.push(cur);
+    } else {
+      if (!cur) {
+        cur = { heading: null, body: [] };
+        blocks.push(cur);
+      }
+      cur.body.push(t);
+    }
+  }
+  return (
+    <div className="space-y-4 text-sm leading-relaxed text-[#18181d]">
+      {blocks.map((b, bi) => (
+        <div key={bi} className="space-y-1.5">
+          {b.heading && (
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">
+              {b.heading}
+            </h4>
+          )}
+          {renderBodyLines(b.body)}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /** The right-hand **Assessment Companion** panel. A vertical tab rail switches
@@ -282,7 +353,7 @@ export function ComplianceAdvisor({
         }}
       >
         {/* Header: AI Trust logo + title + panel controls. */}
-        <div className="flex items-center justify-between px-5 pb-4 pt-6">
+        <div className="flex items-start justify-between px-7 pb-5 pt-[34px]">
           <div className="flex items-center gap-2">
             <img src={aiTrustLogo} alt="" className="h-5 w-auto" />
             <span className="text-[18px] font-semibold leading-[26px] text-foreground">
@@ -319,15 +390,13 @@ export function ComplianceAdvisor({
         </div>
 
         {tab === "context" ? (
-          <div className="min-w-0 flex-1 overflow-y-auto px-7 pb-6">
+          <div className="min-w-0 flex-1 overflow-y-auto px-7 pb-6 pt-2">
             {ownerContext ? (
               <>
                 <h3 className="mb-4 text-[18px] font-semibold leading-[26px] text-foreground">
                   This section refers to the EU AI Act regarding…
                 </h3>
-                <p className="whitespace-pre-line text-sm leading-relaxed text-[#18181d]">
-                  {cleanContext(ownerContext)}
-                </p>
+                <OwnerContextBody text={ownerContext} />
               </>
             ) : (
               <p className="text-sm text-muted-foreground">
@@ -337,7 +406,7 @@ export function ComplianceAdvisor({
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col">
-            <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4 text-sm">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto px-7 py-4 text-sm">
               {turns.length === 0 && (
                 <p className="mb-4 text-muted-foreground">
                   Ask a compliance question about the EU AI Act or this system. Answers are grounded in
