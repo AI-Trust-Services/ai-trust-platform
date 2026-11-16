@@ -3,7 +3,7 @@ export type LifecycleKey = "development" | "testing" | "prod_ready" | "market" |
 export type OrgRole = "provider" | "deployer" | "both" | "importer" | "distributor" | "authorised_representative";
 export type SystemType = "application" | "model" | "component" | "service";
 export type AutonomyLevel = "decision_support" | "human_in_the_loop" | "human_on_the_loop" | "fully_automated";
-export type WorkflowStatus = "draft" | "business_pending" | "technical_pending" | "pending_review" | "info_requested" | "approved" | "rejected";
+export type WorkflowStatus = "draft" | "business_pending" | "technical_pending" | "pending_review" | "info_requested" | "approved" | "rejected" | "returned";
 export type RegistrationMode = "ai" | "manual_questionnaire" | "full_manual";
 
 // Minimal subset of the compliance AssessmentResponse consumed by the Systems
@@ -88,16 +88,6 @@ export interface WorkflowStep {
   assignee_username: string | null;
   note: string | null;
   created_at: string;
-}
-
-export interface QuestionAssignment {
-  id: string;
-  section: string;
-  question_key: string;
-  assignee_username: string;
-  assigned_by_username: string;
-  assigned_at: string;
-  answered_at: string | null;
 }
 
 // ── Single-page assessment (issues #346 / #314) ──────────────────────────────
@@ -378,6 +368,21 @@ export type ChatRole = "user" | "assistant" | "system";
 export interface ChatMessage {
   role: ChatRole;
   content: string;
+}
+
+// ── Compliance Advisor (grounded EU AI Act chatbot) ─────────────────────
+export interface AdvisorSource {
+  kind: "document" | "act";
+  ref: string;
+  detail: string | null;
+  page: number | null;
+  document_id: string | null;
+  version_id: string | null;
+}
+
+export interface AdvisorAnswer {
+  answer: string;
+  sources: AdvisorSource[];
 }
 
 export interface RationaleItem {

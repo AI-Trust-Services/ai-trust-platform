@@ -1,11 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+
 import { Outlet, useNavigate, useParams, useMatch } from "react-router";
 import { Loader2, Save } from "lucide-react";
 import type { AssessmentState } from "../../types";
 import { api } from "../../api/client";
 import { usePermissions } from "../../hooks/usePermissions";
 import { AssessmentSidebar, ORDERED_QUESTION_KEYS } from "./AssessmentSidebar";
-import { AssessmentCompanion } from "./AssessmentCompanion";
+import { ComplianceAdvisor } from "./ComplianceAdvisor";
 import { ASSESSMENT_SECTIONS } from "./AssessmentSidebar";
 
 interface AssessmentCtx {
@@ -13,6 +14,11 @@ interface AssessmentCtx {
   reload: () => Promise<void>;
   savedAt: number | null;
   markSaved: () => void;
+  // Username → display name. Populated lazily on first QuestionView mount so
+  // roles that never open a question (e.g. CO on CoIssueView) pay no cost.
+  userMap: Record<string, { firstName: string; lastName: string }>;
+  // Call once from QuestionView to trigger the fetch (idempotent — ref-guarded).
+  ensureUserMap: () => void;
   // Base path for all nested links — `/systems/:id/assessment` for the live cycle,
   // or `/systems/:id/assessment/view/:assessmentId` for a read-only historical one,
   // so in-app navigation stays pinned to the cycle being viewed.
@@ -33,7 +39,7 @@ function sectionForQuestion(questionKey?: string): string | undefined {
 
 /** Full-height single-page assessment app: loads/prefills state, renders the left
  * progress sidebar, the active screen (start page or question view via Outlet),
- * and the right companion. */
+ * and the right advisor. */
 export default function AssessmentApp() {
   const { id, assessmentId: viewAssessmentId } = useParams();
   const navigate = useNavigate();
@@ -43,6 +49,29 @@ export default function AssessmentApp() {
   const [state, setState] = useState<AssessmentState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [userMap, setUserMap] = useState<
+    Record<string, { firstName: string; lastName: string }>
+  >({});
+  const userMapLoaded = useRef(false);
+  const [advisorExpanded, setAdvisorExpanded] = useState(false);
+
+  // Lazily resolve usernames → display names. Called by QuestionView on first
+  // mount so roles that never open a question (e.g. CO on CoIssueView) pay zero
+  // Keycloak round-trips. The ref guard prevents a double-fetch when two question
+  // navigations happen in quick succession.
+  const ensureUserMap = useCallback(() => {
+    if (userMapLoaded.current) return;
+    userMapLoaded.current = true;
+    api
+      .getAllUsers()
+      .then((users) => {
+        const m: Record<string, { firstName: string; lastName: string }> = {};
+        for (const u of users)
+          m[u.username] = { firstName: u.firstName, lastName: u.lastName };
+        setUserMap(m);
+      })
+      .catch(() => setUserMap({}));
+  }, []);
 
   // A question can be active under either the editable base or the read-only
   // /view/:assessmentId base.
@@ -60,13 +89,18 @@ export default function AssessmentApp() {
     if (!id || permsLoading) return;
     try {
       // A specific-assessment view (View results) is always read-only via /state.
-      // Otherwise: writers (BO / engineer) prefill via POST /open (idempotent);
-      // read-only roles (e.g. a CO) call GET /state — /open is write-gated.
+      // Approvers (the compliance officer) are reviewers → always GET /state,
+      // never the write-gated POST /open prefill — even though the CO role now
+      // also holds systems:write (for system registration/editing), it must not
+      // trigger prefill/reclassification by opening an assessment. Writers who
+      // are NOT approvers (owner / engineer) prefill via POST /open (idempotent).
       const s = viewAssessmentId
         ? await api.getAssessmentState(id, viewAssessmentId)
-        : can("systems:write")
-          ? await api.openAssessment(id)
-          : await api.getAssessmentState(id);
+        : can("systems:approve")
+          ? await api.getAssessmentState(id)
+          : can("systems:write")
+            ? await api.openAssessment(id)
+            : await api.getAssessmentState(id);
       setState(s);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to open assessment");
@@ -89,9 +123,11 @@ export default function AssessmentApp() {
   // Poll GET /state every 3 s while the background prefill pipeline is running.
   // Stops automatically when prefill_pending flips to false (all batches done).
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prefillPending = state?.prefill_pending;
+  const hasState = state != null;
   useEffect(() => {
-    if (!state) return;
-    if (state.prefill_pending) {
+    if (!hasState) return;
+    if (prefillPending) {
       if (pollRef.current) return; // already polling
       pollRef.current = setInterval(async () => {
         try {
@@ -117,9 +153,7 @@ export default function AssessmentApp() {
         pollRef.current = null;
       }
     };
-  // Only react to the pending flag changing, not every state update.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state?.prefill_pending]);
+  }, [hasState, prefillPending, id, viewAssessmentId]);
 
   const markSaved = useCallback(() => setSavedAt(Date.now()), []);
 
@@ -163,7 +197,7 @@ export default function AssessmentApp() {
   }
 
   return (
-    <Ctx.Provider value={{ state, reload, savedAt, markSaved, basePath }}>
+    <Ctx.Provider value={{ state, reload, savedAt, markSaved, userMap, ensureUserMap, basePath }}>
       <div className="flex h-full flex-col">
         {state.prefill_failed && (
           <div className="flex shrink-0 items-center gap-2 border-b border-[#fca5a5]/40 bg-[#fef2f2] px-6 py-2 text-sm text-[#991b1b]">
@@ -188,12 +222,19 @@ export default function AssessmentApp() {
             locked={!state.editable}
             basePath={basePath}
           />
-          <main className="min-w-0 flex-1 overflow-y-auto bg-[var(--muted)]/30">
-            <Outlet />
-          </main>
-          <AssessmentCompanion
+          {/* When the advisor is expanded it covers the whole middle region
+              (everything right of the question-list sidebar), so hide main. */}
+          {!advisorExpanded && (
+            <main className="min-w-0 flex-1 overflow-y-auto bg-[var(--muted)]/30">
+              <Outlet />
+            </main>
+          )}
+          <ComplianceAdvisor
+            key={id}
+            systemId={id}
             section={sectionForQuestion(activeQuestionKey)}
-            sourceDocuments={state.source_documents}
+            expanded={advisorExpanded}
+            onExpandedChange={setAdvisorExpanded}
           />
         </div>
       </div>

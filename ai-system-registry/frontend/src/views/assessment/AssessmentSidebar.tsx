@@ -123,10 +123,13 @@ export function AssessmentSidebar({
                   const contributorOnly = q?.confirmed && !ownerConfirmed;
                   const needsAttention = q?.needs_attention && !ownerConfirmed;
                   const llmPending = q?.llm_pending;
-                  // Only show the attention indicator (orange) when there IS an
-                  // answer but confidence is low — blank/unanswered questions are
-                  // just grey "Incomplete", not flagged as needing attention.
-                  const showAttention = needsAttention && !!q?.answer && !llmPending;
+                  // Every incomplete question is flagged. The backend decides what
+                  // counts (low confidence, no confidence band, or no answer) and
+                  // already suppresses the flag while the AI batch is still running
+                  // — don't second-guess it here by requiring an answer to exist,
+                  // or the questions the AI never answered stay silently grey while
+                  // the header above still counts them (issue #383).
+                  const showAttention = needsAttention && !llmPending;
                   const statusText = ownerConfirmed
                     ? "Complete"
                     : contributorOnly

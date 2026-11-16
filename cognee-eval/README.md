@@ -1,10 +1,10 @@
 # cognee-eval — freeze & promote a knowledge graph to read-only prod
 
 Graph ingestion **always happens in ai-test-lab** (Docker Compose, separate repo).
-ai-trust-platform always runs with `cogneeEval.readOnly: true`, pulling a frozen snapshot from GHCR.
+ai-trust-platform always runs with a digest-pinned `cogneeEval.graphImage`, pulling a frozen snapshot from GHCR.
 
-- **ai-test-lab** (`readOnly: false` equivalent): Docker Compose, full ingest + feedback loop, owns the live graph.
-- **Read-only mode** (`readOnly: true`): Deployment + emptyDir hydrated from a digest-pinned GHCR image; ingest/feedback routes return 404.
+- **ai-test-lab** (`graphImage` unset equivalent): Docker Compose, full ingest + feedback loop, owns the live graph.
+- **Frozen-graph mode** (`graphImage` set): Deployment + emptyDir hydrated from a digest-pinned GHCR image; ingest/feedback routes return 404.
 
 ---
 
@@ -84,7 +84,6 @@ Update `graphImage` in `values-kind.yaml` (or the prod values override) with the
 
 ```yaml
 cogneeEval:
-  readOnly: true
   graphImage: ghcr.io/<owner>/ai-trust-platform/cognee-graph@sha256:<digest>
 ```
 
@@ -94,6 +93,6 @@ Then: `make upgrade && make rollout`.
 
 ## Notes
 
-- **GHCR auth**: on kind, set `GHCR_PULL_TOKEN=<PAT with read:packages>` in `.env` — `bootstrap.sh` creates the pull secret automatically. On Gardener the deploy workflow handles it.
+- **GHCR auth**: on kind, set `GHCR_PULL_TOKEN=<PAT with read:packages>` in `.env` — `bootstrap.sh` creates the pull secret and runs `docker login ghcr.io` automatically. On Gardener the deploy workflow handles it.
 - **Promotion is manual by design** — a human blesses the graph before it ships to prod.
 - **Feedback merges into the main graph** — the snapshot carries source doc + all approved feedback as one coherent graph.

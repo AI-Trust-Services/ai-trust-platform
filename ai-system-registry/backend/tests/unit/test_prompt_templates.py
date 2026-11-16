@@ -53,6 +53,41 @@ def test_render_preserves_json_shape_braces():
 # ---------------------------------------------------------------------------
 
 
+def test_json_validation_retry_template_renders_violations():
+    rendered = render_template(
+        "json_validation_retry",
+        violations="results[0].answer: must be a non-empty array",
+    )
+    assert "results[0].answer: must be a non-empty array" in rendered
+    assert "{violations}" not in rendered
+
+
+def test_subfolder_template_ids_still_load():
+    assert load_template("risk_classification/risk_role_classification")
+
+
+@pytest.mark.parametrize(
+    "bad_id",
+    [
+        "../README",
+        "../../CLAUDE",
+        "risk_classification/../../ai-questionnaire",
+        "/etc/passwd",
+    ],
+)
+def test_template_id_escaping_prompts_dir_is_rejected(bad_id):
+    with pytest.raises(PromptTemplateError, match="outside the prompts directory"):
+        load_template(bad_id)
+
+
+@pytest.mark.parametrize("bad_id", ["../ai-questionnaire", "/etc/passwd", "../../x"])
+def test_questionnaire_id_escaping_prompts_dir_is_rejected(bad_id):
+    from app.llm.templates import load_questionnaire
+
+    with pytest.raises(PromptTemplateError, match="outside the prompts directory"):
+        load_questionnaire(bad_id)
+
+
 def test_missing_template_raises_with_id_and_path():
     with pytest.raises(PromptTemplateError) as exc:
         load_template("does_not_exist")

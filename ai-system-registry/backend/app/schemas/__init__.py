@@ -47,6 +47,7 @@ from app.schemas.model_card import (
     FeatureStoreResponse,
     FeatureStoreGroupResponse,
 )
+from app.schemas.pipeline import PipelineStepOutput
 from app.schemas.workflow import (
     WorkflowStepResponse,
     WorkflowAssignRequest,
@@ -104,4 +105,5 @@ __all__ = [
     "SystemModelResponse",
     "ModelSystemResponse",
     "WorkflowAssignRequest",
+    "PipelineStepOutput",
 ]

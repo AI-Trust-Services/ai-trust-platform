@@ -60,15 +60,30 @@ def _resolve_prompts_dir() -> Path:
     return Path("/app/context/prompts")
 
 
+def _resolve_inside_prompts_dir(identifier: str, suffix: str) -> Path:
+    """``<prompts_dir>/<identifier><suffix>``, guaranteed to stay inside the prompts dir.
+
+    Ids may contain a ``/`` (subfolders, e.g. ``risk_classification/…``), so a
+    caller-supplied id like ``../../etc/x`` or an absolute path would otherwise
+    escape the directory. Such ids raise ``PromptTemplateError``.
+    """
+    prompts_dir = _resolve_prompts_dir().resolve()
+    path = (prompts_dir / Path(f"{identifier}{suffix}")).resolve()
+    if not path.is_relative_to(prompts_dir):
+        raise PromptTemplateError(
+            f"Prompt id '{identifier}' resolves outside the prompts directory."
+        )
+    return path
+
+
 @lru_cache(maxsize=None)
 def load_template(template_id: str) -> str:
     """Read ``<prompts_dir>/<template_id>.md``. Cached by id.
 
     Raises ``PromptTemplateError`` naming the id and the searched path when the
-    file does not exist.
+    file does not exist or the id points outside the prompts directory.
     """
-    prompts_dir = _resolve_prompts_dir()
-    path = prompts_dir / f"{template_id}.md"
+    path = _resolve_inside_prompts_dir(template_id, ".md")
     if not path.is_file():
         raise PromptTemplateError(
             f"Prompt template '{template_id}' not found at '{path}'. "
@@ -116,8 +131,7 @@ def load_questionnaire(questionnaire_id: str) -> dict:
     Cached by id. Raises ``PromptTemplateError`` when the file does not exist or
     contains invalid JSON.
     """
-    prompts_dir = _resolve_prompts_dir()
-    path = prompts_dir / f"{questionnaire_id}.json"
+    path = _resolve_inside_prompts_dir(questionnaire_id, ".json")
     if not path.is_file():
         raise PromptTemplateError(
             f"Questionnaire '{questionnaire_id}' not found at '{path}'. "

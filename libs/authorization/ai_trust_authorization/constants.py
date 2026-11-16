@@ -93,6 +93,7 @@ ROLE_PERMISSIONS = {
     ],
     "ai_compliance_officer": [
         SYSTEMS_READ,
+        SYSTEMS_WRITE,
         SYSTEMS_APPROVE,
         ASSESSMENTS_READ,
         ASSESSMENTS_WRITE,

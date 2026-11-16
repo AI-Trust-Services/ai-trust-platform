@@ -38,6 +38,11 @@ export const registryClient = {
       method: "POST",
     }),
 
+  startNewAssessment: (systemId: string) =>
+    request<unknown>(`/systems/${encodeURIComponent(systemId)}/assessment/start-new`, {
+      method: "POST",
+    }),
+
   getAllUsers: async (): Promise<Array<{ username: string; firstName: string; lastName: string; role: string }>> => {
     const ROLES = [
       "platform_administrator", "ai_engineer", "ai_compliance_officer",
