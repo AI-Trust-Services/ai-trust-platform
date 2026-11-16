@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import {
   PanelRightClose,
@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { ChatMessage, AdvisorSource } from "../../types";
 import { api } from "../../api/client";
+import { QUESTION_DEF_BY_ID } from "../../config/aiQuestionnaire";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -106,17 +107,51 @@ function SourceChip({ source }: { source: AdvisorSource }) {
   );
 }
 
+/** Vertical tab in the companion's left rail (rotated label). */
+function RailTab({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex flex-1 items-center justify-center py-5 text-xs tracking-wide transition-colors",
+        active
+          ? "bg-card font-semibold text-foreground"
+          : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      <span className="[writing-mode:vertical-rl]">{children}</span>
+    </button>
+  );
+}
+
+// Some source cells carry stray zero-width / soft-hyphen characters; strip them
+// so the rendered context reads cleanly.
+function cleanContext(s: string): string {
+  return s.replace(/[\u200B-\u200D\uFEFF\u00AD]/g, "");
+}
+
 /** Collapsible, resizable right-hand advisor: a grounded EU AI Act chat backed
  * by POST /systems/{id}/advisor/ask. Answers cite system documents (clickable,
  * deep-linked to the page) and EU AI Act references (hover for the snippet). */
 export function ComplianceAdvisor({
   systemId,
   section,
+  questionKey,
   expanded,
   onExpandedChange,
 }: {
   systemId?: string;
   section?: string;
+  questionKey?: string;
   expanded: boolean;
   onExpandedChange: (v: boolean) => void;
 }) {
@@ -128,6 +163,18 @@ export function ComplianceAdvisor({
   const [progressStep, setProgressStep] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const guidance = section ? SECTION_GUIDANCE[section] : undefined;
+
+  const ownerContext = questionKey
+    ? QUESTION_DEF_BY_ID[questionKey]?.ownerContext
+    : undefined;
+
+  // Context-first: entering a question surfaces its context help; a question
+  // with no mapped context opens straight into the chat. Re-evaluated whenever
+  // the active question (and thus its context) changes.
+  const [tab, setTab] = useState<"context" | "chat">("context");
+  useEffect(() => {
+    setTab(ownerContext ? "context" : "chat");
+  }, [questionKey, ownerContext]);
 
   // Cycle the human-readable progress lines while a turn is in flight. Advances
   // but holds on the last line (doesn't loop back) so it reads as forward motion.
@@ -180,12 +227,12 @@ export function ComplianceAdvisor({
             setCollapsed(false);
             onExpandedChange(false);
           }}
-          title="Expand advisor"
+          title="Expand companion"
         >
           <PanelRightOpen className="size-4 text-muted-foreground" />
         </button>
         <span className="[writing-mode:vertical-rl] text-xs text-muted-foreground">
-          Compliance Advisor
+          Assessment Companion
         </span>
       </div>
     );
@@ -202,16 +249,18 @@ export function ComplianceAdvisor({
       )}
     >
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <span className="text-sm font-semibold">Compliance Advisor</span>
+        <span className="text-sm font-semibold">Assessment Companion</span>
         <div className="flex items-center gap-2 text-muted-foreground">
-          <button
-            onClick={() => setTurns([])}
-            title="Clear conversation"
-            disabled={turns.length === 0 || loading}
-            className="disabled:opacity-40"
-          >
-            <Trash2 className="size-4" />
-          </button>
+          {tab === "chat" && (
+            <button
+              onClick={() => setTurns([])}
+              title="Clear conversation"
+              disabled={turns.length === 0 || loading}
+              className="disabled:opacity-40"
+            >
+              <Trash2 className="size-4" />
+            </button>
+          )}
           <button
             onClick={() => onExpandedChange(!expanded)}
             title={expanded ? "Shrink panel" : "Expand panel"}
@@ -223,99 +272,127 @@ export function ComplianceAdvisor({
               setCollapsed(true);
               onExpandedChange(false);
             }}
-            title="Collapse advisor"
+            title="Collapse companion"
           >
             <PanelRightClose className="size-4" />
           </button>
         </div>
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 text-sm">
-        {turns.length === 0 && guidance && (
-          <div className="mb-4">
-            <h3 className="mb-2 font-semibold">{guidance.title}</h3>
-            <p className="text-muted-foreground">{guidance.body}</p>
+      <div className="flex min-h-0 flex-1">
+        <nav className="flex w-11 shrink-0 flex-col border-r border-border bg-muted/20">
+          <RailTab active={tab === "context"} onClick={() => setTab("context")}>
+            Context
+          </RailTab>
+          <RailTab active={tab === "chat"} onClick={() => setTab("chat")}>
+            Chat
+          </RailTab>
+        </nav>
+
+        {tab === "context" ? (
+          <div className="min-w-0 flex-1 overflow-y-auto px-5 py-5">
+            {ownerContext ? (
+              <>
+                <h3 className="mb-3 text-base font-semibold leading-snug">
+                  This section refers to the EU AI Act regarding…
+                </h3>
+                <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">
+                  {cleanContext(ownerContext)}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No additional context is available for this question.
+              </p>
+            )}
           </div>
-        )}
-        {turns.length === 0 && !guidance && (
-          <p className="mb-4 text-muted-foreground">
-            Ask a compliance question about the EU AI Act or this system. Answers are grounded in
-            the system's documents and the Act, with sources you can open.
-          </p>
-        )}
-        <div className="space-y-3">
-          {turns.map((turn, i) => (
-            <div
-              key={i}
-              className={cn(
-                "flex flex-col gap-1",
-                turn.role === "user" ? "items-end" : "items-start",
+        ) : (
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 text-sm">
+              {turns.length === 0 && (
+                <p className="mb-4 text-muted-foreground">
+                  Ask a compliance question about the EU AI Act or this system. Answers are grounded in
+                  the system's documents and the Act, with sources you can open.
+                </p>
               )}
-            >
-              <div
-                className={cn(
-                  "max-w-[90%] rounded-lg px-3 py-2",
-                  turn.role === "user"
-                    ? "whitespace-pre-wrap bg-[color-mix(in_srgb,var(--brand)_12%,transparent)] text-foreground"
-                    : "bg-muted text-foreground",
-                )}
-              >
-                {turn.role === "assistant" ? (
-                  <div className="advisor-md space-y-2 leading-relaxed [&_a]:text-[var(--brand)] [&_a]:underline [&_code]:rounded [&_code]:bg-black/10 [&_code]:px-1 [&_code]:text-xs [&_h1]:font-semibold [&_h2]:font-semibold [&_h3]:font-semibold [&_li]:ml-4 [&_ol]:list-decimal [&_ul]:list-disc [&_strong]:font-semibold">
-                    <ReactMarkdown>{turn.content}</ReactMarkdown>
+              <div className="space-y-3">
+                {turns.map((turn, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      "flex flex-col gap-1",
+                      turn.role === "user" ? "items-end" : "items-start",
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "max-w-[90%] rounded-lg px-3 py-2",
+                        turn.role === "user"
+                          ? "whitespace-pre-wrap bg-[color-mix(in_srgb,var(--brand)_12%,transparent)] text-foreground"
+                          : "bg-muted text-foreground",
+                      )}
+                    >
+                      {turn.role === "assistant" ? (
+                        <div className="advisor-md space-y-2 leading-relaxed [&_a]:text-[var(--brand)] [&_a]:underline [&_code]:rounded [&_code]:bg-black/10 [&_code]:px-1 [&_code]:text-xs [&_h1]:font-semibold [&_h2]:font-semibold [&_h3]:font-semibold [&_li]:ml-4 [&_ol]:list-decimal [&_ul]:list-disc [&_strong]:font-semibold">
+                          <ReactMarkdown>{turn.content}</ReactMarkdown>
+                        </div>
+                      ) : (
+                        turn.content
+                      )}
+                    </div>
+                    {turn.sources && turn.sources.length > 0 && (
+                      <div className="flex flex-wrap gap-1 pt-0.5">
+                        {turn.sources.map((s, si) => (
+                          <SourceChip key={si} source={s} />
+                        ))}
+                      </div>
+                    )}
+                    {turn.role === "assistant" && turn.sources && turn.sources.length === 0 && (
+                      <p className="text-xs italic text-muted-foreground">
+                        No grounding sources found.
+                      </p>
+                    )}
                   </div>
-                ) : (
-                  turn.content
+                ))}
+                {loading && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin" />
+                    <span className="transition-opacity">{PROGRESS_STEPS[progressStep]}</span>
+                  </div>
                 )}
               </div>
-              {turn.sources && turn.sources.length > 0 && (
-                <div className="flex flex-wrap gap-1 pt-0.5">
-                  {turn.sources.map((s, si) => (
-                    <SourceChip key={si} source={s} />
-                  ))}
-                </div>
-              )}
-              {turn.role === "assistant" && turn.sources && turn.sources.length === 0 && (
-                <p className="text-xs italic text-muted-foreground">No grounding sources found.</p>
-              )}
             </div>
-          ))}
-          {loading && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
-              <span className="transition-opacity">{PROGRESS_STEPS[progressStep]}</span>
-            </div>
-          )}
-        </div>
-      </div>
 
-      <div className="border-t border-border px-4 py-3">
-        {error && <p className="mb-2 text-xs text-[var(--danger-fg,#d14343)]">{error}</p>}
-        <div className="flex items-end gap-2">
-          <Textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                send(input);
-              }
-            }}
-            placeholder="Ask about this section…"
-            rows={2}
-            disabled={loading || !systemId}
-            className="min-h-0 resize-none text-sm"
-          />
-          <Button
-            size="icon"
-            variant="default"
-            disabled={loading || !input.trim() || !systemId}
-            onClick={() => send(input)}
-            title="Send"
-          >
-            <Send className="size-4" />
-          </Button>
-        </div>
+            <div className="border-t border-border px-4 py-3">
+              {error && <p className="mb-2 text-xs text-[var(--danger-fg,#d14343)]">{error}</p>}
+              <div className="flex items-end gap-2">
+                <Textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      send(input);
+                    }
+                  }}
+                  placeholder="Ask about this section…"
+                  rows={2}
+                  disabled={loading || !systemId}
+                  className="min-h-0 resize-none text-sm"
+                />
+                <Button
+                  size="icon"
+                  variant="default"
+                  disabled={loading || !input.trim() || !systemId}
+                  onClick={() => send(input)}
+                  title="Send"
+                >
+                  <Send className="size-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </aside>
   );

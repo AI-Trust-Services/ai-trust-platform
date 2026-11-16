@@ -15,6 +15,10 @@ export interface AiQuestionDef {
   type: QuestionType;
   allowedAnswers: string[] | MultiselectOption[];
   appliesWhen?: unknown;
+  /** Owner-facing EU AI Act context shown display-only in the assessment
+   *  companion's Context tab (issue #410). Absent for questions with no
+   *  mapped context text. */
+  ownerContext?: string;
 }
 
 const rawQuestions = (questionnaireJson as { questions: AiQuestionDef[] }).questions;
