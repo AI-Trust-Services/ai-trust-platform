@@ -3,22 +3,25 @@ import ReactMarkdown from "react-markdown";
 import {
   PanelRightClose,
   PanelRightOpen,
-  Send,
+  ArrowUp,
+  ArrowUpRight,
   FileText,
   BookOpen,
   Loader2,
   Trash2,
   Maximize2,
   Minimize2,
+  Plus,
+  AtSign,
+  Lightbulb,
 } from "lucide-react";
 import type { ChatMessage, AdvisorSource } from "../../types";
 import { api } from "../../api/client";
 import { QUESTION_DEF_BY_ID } from "../../config/aiQuestionnaire";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import aiTrustLogo from "../../assets/ai-trust-logo.svg";
 import { cn } from "@/lib/utils";
 
-// Static per-section EU AI Act framing shown before the first question.
+// Static per-section EU AI Act framing used to prefix chat turns with context.
 const SECTION_GUIDANCE: Record<string, { title: string; body: string }> = {
   business: {
     title: "This section refers to the EU AI Act regarding scope and intended purpose",
@@ -31,6 +34,13 @@ const SECTION_GUIDANCE: Record<string, { title: string; body: string }> = {
       "The EU AI Act classifies systems by risk. Prohibited practices (Art. 5), high-risk Annex III domains, general-purpose AI models, and Art. 50 transparency obligations each carry different requirements. Answer from your system's technical documentation.",
   },
 };
+
+// Pre-filled prompts shown as clickable chips above the composer; clicking one
+// sends it as a chat turn.
+const SUGGESTIONS: { Icon: typeof Lightbulb; label: string }[] = [
+  { Icon: Lightbulb, label: "What are the implications of this question?" },
+  { Icon: ArrowUpRight, label: "What should I include in my documentation?" },
+];
 
 interface Turn {
   role: "user" | "assistant";
@@ -107,7 +117,8 @@ function SourceChip({ source }: { source: AdvisorSource }) {
   );
 }
 
-/** Vertical tab in the companion's left rail (rotated label). */
+/** Vertical tab in the companion's left rail (label rotated to read bottom-up,
+ *  matching the Figma design). */
 function RailTab({
   active,
   onClick,
@@ -122,13 +133,15 @@ function RailTab({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex flex-1 items-center justify-center py-5 text-xs tracking-wide transition-colors",
+        "flex items-center justify-center border-b border-border py-6 transition-colors",
         active
-          ? "bg-card font-semibold text-foreground"
-          : "text-muted-foreground hover:text-foreground",
+          ? "font-bold text-foreground"
+          : "font-normal text-muted-foreground hover:text-foreground",
       )}
     >
-      <span className="[writing-mode:vertical-rl]">{children}</span>
+      <span className="rotate-180 text-xs tracking-wide [writing-mode:vertical-rl]">
+        {children}
+      </span>
     </button>
   );
 }
@@ -139,9 +152,10 @@ function cleanContext(s: string): string {
   return s.replace(/[\u200B-\u200D\uFEFF\u00AD]/g, "");
 }
 
-/** Collapsible, resizable right-hand advisor: a grounded EU AI Act chat backed
- * by POST /systems/{id}/advisor/ask. Answers cite system documents (clickable,
- * deep-linked to the page) and EU AI Act references (hover for the snippet). */
+/** The right-hand **Assessment Companion** panel. A vertical tab rail switches
+ * between the **AI Act Companion** (grounded EU AI Act chat backed by
+ * POST /systems/{id}/advisor/ask) and the per-question **Context** tab (the
+ * owner-facing EU AI Act context from the questionnaire config). */
 export function ComplianceAdvisor({
   systemId,
   section,
@@ -193,6 +207,7 @@ export function ComplianceAdvisor({
   async function send(message: string) {
     const text = message.trim();
     if (!text || !systemId || loading) return;
+    setTab("chat");
     setError(null);
     setInput("");
     const scoped = guidance ? `[Section: ${guidance.title}]\n${text}` : text;
@@ -241,62 +256,76 @@ export function ComplianceAdvisor({
   return (
     <aside
       className={cn(
-        "flex h-full flex-col border-l border-border bg-card",
+        "flex h-full flex-row border-l border-border bg-card",
         // Expanded: fill the whole middle region (main is unmounted by the
         // parent), i.e. everything up to the question-list sidebar. Normal: a
         // fixed side panel beside main.
-        expanded ? "min-w-0 flex-1" : "w-[340px] shrink-0 transition-[width] duration-200",
+        expanded ? "min-w-0 flex-1" : "w-[408px] shrink-0 transition-[width] duration-200",
       )}
     >
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <span className="text-sm font-semibold">Assessment Companion</span>
-        <div className="flex items-center gap-2 text-muted-foreground">
-          {tab === "chat" && (
-            <button
-              onClick={() => setTurns([])}
-              title="Clear conversation"
-              disabled={turns.length === 0 || loading}
-              className="disabled:opacity-40"
-            >
-              <Trash2 className="size-4" />
-            </button>
-          )}
-          <button
-            onClick={() => onExpandedChange(!expanded)}
-            title={expanded ? "Shrink panel" : "Expand panel"}
-          >
-            {expanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
-          </button>
-          <button
-            onClick={() => {
-              setCollapsed(true);
-              onExpandedChange(false);
-            }}
-            title="Collapse companion"
-          >
-            <PanelRightClose className="size-4" />
-          </button>
-        </div>
-      </div>
+      {/* Vertical tab rail (full height). */}
+      <nav className="flex w-9 shrink-0 flex-col border-r border-border bg-[#f8fafe]">
+        <RailTab active={tab === "chat"} onClick={() => setTab("chat")}>
+          AI Act Companion
+        </RailTab>
+        <RailTab active={tab === "context"} onClick={() => setTab("context")}>
+          Context
+        </RailTab>
+      </nav>
 
-      <div className="flex min-h-0 flex-1">
-        <nav className="flex w-11 shrink-0 flex-col border-r border-border bg-muted/20">
-          <RailTab active={tab === "context"} onClick={() => setTab("context")}>
-            Context
-          </RailTab>
-          <RailTab active={tab === "chat"} onClick={() => setTab("chat")}>
-            Chat
-          </RailTab>
-        </nav>
+      {/* Content column. The faint diagonal brand wash matches the Figma. */}
+      <div
+        className="flex min-w-0 flex-1 flex-col bg-card"
+        style={{
+          backgroundImage:
+            "linear-gradient(36deg, color-mix(in srgb, var(--brand) 8%, transparent), transparent 45%)",
+        }}
+      >
+        {/* Header: AI Trust logo + title + panel controls. */}
+        <div className="flex items-center justify-between px-5 pb-4 pt-6">
+          <div className="flex items-center gap-2">
+            <img src={aiTrustLogo} alt="" className="h-5 w-auto" />
+            <span className="text-[18px] font-semibold leading-[26px] text-foreground">
+              Assessment Companion
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-muted-foreground">
+            {tab === "chat" && (
+              <button
+                onClick={() => setTurns([])}
+                title="Clear conversation"
+                disabled={turns.length === 0 || loading}
+                className="disabled:opacity-40"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            )}
+            <button
+              onClick={() => onExpandedChange(!expanded)}
+              title={expanded ? "Shrink panel" : "Expand panel"}
+            >
+              {expanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+            </button>
+            <button
+              onClick={() => {
+                setCollapsed(true);
+                onExpandedChange(false);
+              }}
+              title="Collapse companion"
+            >
+              <PanelRightClose className="size-4" />
+            </button>
+          </div>
+        </div>
 
         {tab === "context" ? (
-          <div className="min-w-0 flex-1 overflow-y-auto px-5 py-5">
+          <div className="min-w-0 flex-1 overflow-y-auto px-7 pb-6">
             {ownerContext ? (
               <>
-                <h3 className="mb-3 text-base font-semibold leading-snug">
+                <h3 className="mb-4 text-[18px] font-semibold leading-[26px] text-foreground">
                   This section refers to the EU AI Act regarding…
                 </h3>
-                <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">
+                <p className="whitespace-pre-line text-sm leading-relaxed text-[#18181d]">
                   {cleanContext(ownerContext)}
                 </p>
               </>
@@ -307,8 +336,8 @@ export function ComplianceAdvisor({
             )}
           </div>
         ) : (
-          <div className="flex min-w-0 flex-1 flex-col">
-            <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 text-sm">
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4 text-sm">
               {turns.length === 0 && (
                 <p className="mb-4 text-muted-foreground">
                   Ask a compliance question about the EU AI Act or this system. Answers are grounded in
@@ -363,10 +392,27 @@ export function ComplianceAdvisor({
               </div>
             </div>
 
-            <div className="border-t border-border px-4 py-3">
-              {error && <p className="mb-2 text-xs text-[var(--danger-fg,#d14343)]">{error}</p>}
-              <div className="flex items-end gap-2">
-                <Textarea
+            {/* Chat composer: suggestion chips + message box + disclaimer. */}
+            <div className="flex flex-col gap-1.5 p-4">
+              {error && <p className="text-xs text-[var(--danger-fg,#d14343)]">{error}</p>}
+              <div className="flex flex-col gap-2 py-2">
+                {SUGGESTIONS.map(({ Icon, label }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => send(label)}
+                    disabled={loading || !systemId}
+                    className="flex h-[35px] w-full items-center gap-2 rounded-lg border border-border bg-[#f8fafe] px-3 text-left transition-colors hover:bg-muted disabled:opacity-50"
+                  >
+                    <Icon className="size-4 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
+                      {label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-col gap-2 rounded-xl border border-[var(--brand)] bg-background px-3 py-2">
+                <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -378,18 +424,27 @@ export function ComplianceAdvisor({
                   placeholder="Ask about this section…"
                   rows={2}
                   disabled={loading || !systemId}
-                  className="min-h-0 resize-none text-sm"
+                  className="w-full resize-none border-0 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
                 />
-                <Button
-                  size="icon"
-                  variant="default"
-                  disabled={loading || !input.trim() || !systemId}
-                  onClick={() => send(input)}
-                  title="Send"
-                >
-                  <Send className="size-4" />
-                </Button>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Plus className="size-4" />
+                    <AtSign className="size-4" />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => send(input)}
+                    disabled={loading || !input.trim() || !systemId}
+                    title="Send"
+                    className="flex size-9 items-center justify-center rounded-lg border border-border bg-background text-foreground transition-colors hover:bg-muted disabled:opacity-40"
+                  >
+                    <ArrowUp className="size-4" />
+                  </button>
+                </div>
               </div>
+              <p className="text-center text-[10px] leading-[14px] text-muted-foreground">
+                AI can make mistakes. Please check answers.
+              </p>
             </div>
           </div>
         )}
