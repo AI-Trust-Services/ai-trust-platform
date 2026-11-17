@@ -191,6 +191,35 @@ function renderBodyLines(lines: string[]): ReactNode[] {
   return out;
 }
 
+/** The per-question "Examples" list, shared verbatim by the owner and CO
+ *  context views. Each bullet in the source `examples` text is one example; a
+ *  leading "[Flag]" (e.g. "[Not excluded]", "[High-risk]", "[Prohibited]") is
+ *  lifted out of the text and shown as a small heading above that example — 249
+ *  of 265 source bullets carry one. Bullets with no flag (e.g. the definitional
+ *  "is this an AI system?" examples) render as plain text with no heading. */
+function ExamplesList({ text }: { text: string }) {
+  const items = cleanContext(text)
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => l.replace(/^[-•]\s*/, ""));
+  return (
+    <div className="space-y-3">
+      {items.map((item, i) => {
+        const m = item.match(/^\[([^\]]+)\]\s*([\s\S]*)$/);
+        const flag = m ? m[1].trim() : null;
+        const body = (m ? m[2] : item).trim();
+        return (
+          <div key={i} className="space-y-0.5">
+            {flag && <h5 className="text-xs font-semibold text-foreground">{flag}</h5>}
+            <p className="leading-relaxed">{linkify(body)}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /** Owner context formatted for readability: ALL-CAPS lines become headings,
  *  "-" lines become bullet lists, the rest paragraphs. Keeps a long block of
  *  text from reading as one wall. */
@@ -244,7 +273,7 @@ function OwnerContextBody({ text, examples }: { text: string; examples?: string 
       })}
       {examples && (
         <ContextCollapsible heading="Examples">
-          {renderBodyLines(cleanContext(examples).split("\n").map((l) => l.trim()).filter(Boolean))}
+          <ExamplesList text={examples} />
         </ContextCollapsible>
       )}
     </div>
@@ -424,7 +453,7 @@ function CoContextBody({ text, examples }: { text: string; examples?: string }) 
       {examples && (
         // Below the context sections, above the Sources list.
         <ContextCollapsible heading="Examples">
-          {renderCoBody(cleanContext(examples).split("\n").map((l) => l.trim()))}
+          <ExamplesList text={examples} />
         </ContextCollapsible>
       )}
       {sources.length > 0 && (
