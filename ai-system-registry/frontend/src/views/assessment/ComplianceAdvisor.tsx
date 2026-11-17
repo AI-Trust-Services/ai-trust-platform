@@ -213,9 +213,13 @@ function OwnerContextBody({ text }: { text: string }) {
       cur.body.push(t);
     }
   }
+  // The owner view deliberately drops the "REFERENCES" section (legal citations
+  // for the compliance officer) — owners get the plain-language context only.
+  // The CO view (CoContextBody) keeps its sources.
+  const ownerBlocks = blocks.filter((b) => !/^references$/i.test(b.heading?.trim() ?? ""));
   return (
     <div className="space-y-4 text-sm leading-relaxed text-[#18181d]">
-      {blocks.map((b, bi) => (
+      {ownerBlocks.map((b, bi) => (
         <div key={bi} className="space-y-1.5">
           {b.heading && (
             <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">
