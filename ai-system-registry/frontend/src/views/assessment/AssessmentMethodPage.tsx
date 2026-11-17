@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import {
   ArrowRight,
   Check,
@@ -21,6 +21,11 @@ type Method = "ai" | "manual";
 export default function AssessmentMethodPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Where Cancel returns to: the page that launched this flow (threaded via
+  // location.state.from), falling back to the system detail page — never the
+  // landing page, which is where navigate(-1) ends up on a cross-MFE entry.
+  const cancelTo = (location.state as { from?: string } | null)?.from ?? `/systems/${id}`;
   const [selected, setSelected] = useState<Method>("ai");
   const [systemName, setSystemName] = useState("");
   const [coName, setCoName] = useState("");
@@ -288,7 +293,7 @@ export default function AssessmentMethodPage() {
         <div className="mx-auto flex h-10 w-full max-w-[912px] items-center justify-between">
           <Button
             variant="outline"
-            onClick={() => navigate(-1)}
+            onClick={() => navigate(cancelTo)}
             className="h-auto rounded-[10px] px-[10px] py-1.5"
           >
             Cancel

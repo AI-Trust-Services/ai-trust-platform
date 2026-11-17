@@ -517,7 +517,7 @@ function OverviewTab({
                 <Button size="sm" variant="outline"
                   disabled={!mayWriteAssessments}
                   title={mayWriteAssessments ? undefined : "Requires permission: assessments:write"}
-                  onClick={() => navigate(`/systems/${system.id}/assessment`)}>
+                  onClick={() => navigate(`/systems/${system.id}/assessment`, { state: { from: `/systems/${system.id}` } })}>
                   {assessments.length === 0 ? "Start" : "Continue"}
                 </Button>
               </div>

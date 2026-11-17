@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
-import { Outlet, useNavigate, useParams, useMatch } from "react-router";
+import { Outlet, useNavigate, useParams, useMatch, useLocation } from "react-router";
 import { Loader2, Save } from "lucide-react";
 import type { AssessmentState } from "../../types";
 import { api } from "../../api/client";
@@ -43,6 +43,7 @@ function sectionForQuestion(questionKey?: string): string | undefined {
 export default function AssessmentApp() {
   const { id, assessmentId: viewAssessmentId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   // "View results": the /assessment/view/:assessmentId route opens that specific
   // (historical) cycle read-only, regardless of write permission.
   const { can, loading: permsLoading } = usePermissions();
@@ -109,8 +110,12 @@ export default function AssessmentApp() {
       } else if (can("systems:write")) {
         const s = await api.getAssessmentState(id);
         if (!s.prefilled) {
-          // Cycle not opened yet — send to method selection.
-          navigate(`/systems/${id}/assessment/method`, { replace: true });
+          // Cycle not opened yet — send to method selection. Forward the origin
+          // so the method page's Cancel returns to wherever this flow started.
+          navigate(`/systems/${id}/assessment/method`, {
+            replace: true,
+            state: { from: (location.state as { from?: string } | null)?.from },
+          });
           return;
         }
         // A failed prefill still seeded question_states (prefilled=true), so GET
