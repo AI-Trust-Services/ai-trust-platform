@@ -245,7 +245,7 @@ export default function AssessmentMethodPage() {
             <div className="h-7" />
 
             {/* ── What happens next ── */}
-            <div className="flex items-start w-full overflow-hidden rounded-[10px] border border-border bg-card">
+            <div className="flex items-stretch w-full overflow-hidden rounded-[10px] border border-border bg-card">
               <FlowStep
                 number="1"
                 title="You complete the assessment"
@@ -358,7 +358,7 @@ function FlowStep({
   return (
     <div
       className={cn(
-        "flex flex-1 gap-[10px] h-[60px] items-start px-4 py-[14px]",
+        "flex flex-1 gap-[10px] min-h-[60px] items-start px-4 py-[14px]",
         !first && "border-l border-border",
       )}
     >
