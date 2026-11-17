@@ -298,7 +298,11 @@ export default function AssessmentMethodPage() {
             disabled={starting}
             className="h-auto gap-1.5 rounded-[10px] border-transparent bg-[#1147e9] px-[10px] py-1.5 text-white hover:bg-[#0d39c4] hover:text-white"
           >
-            {starting ? <Loader2 className="animate-spin" /> : <Sparkles />}
+            {starting ? (
+              <Loader2 className="animate-spin" />
+            ) : selected === "ai" ? (
+              <Sparkles />
+            ) : null}
             {selected === "ai"
               ? "Start AI-assisted assessment"
               : "Start manual assessment"}
