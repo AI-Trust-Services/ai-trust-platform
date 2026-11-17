@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Link, useParams } from "react-router";
 import { AlertTriangle, CheckCircle2, Circle, Loader2 } from "lucide-react";
 import type { AssessmentState, QuestionState } from "../../types";
@@ -46,6 +46,16 @@ export function AssessmentSidebar({
     () => Object.fromEntries(state.questions.map((q) => [q.question_key, q])),
     [state.questions],
   );
+
+  // With ~96 questions the active one is often outside the visible scroll area.
+  // Scroll the sidebar (its nearest scroll container) to it whenever the active
+  // question changes — including the initial deep link — so the list follows the
+  // question being viewed. `block/inline: "nearest"` only scrolls when needed and
+  // never scrolls the surrounding page/iframe.
+  const activeRef = useRef<HTMLAnchorElement | null>(null);
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeQuestionKey]);
 
   return (
     <aside className="flex h-full w-[300px] shrink-0 flex-col overflow-y-auto border-r border-border bg-card">
@@ -140,6 +150,7 @@ export function AssessmentSidebar({
                   return (
                     <li key={key}>
                       <Link
+                        ref={activeQuestionKey === key ? activeRef : undefined}
                         to={`${basePath}/q/${key}`}
                         className={cn(
                           "flex items-start gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-accent",
