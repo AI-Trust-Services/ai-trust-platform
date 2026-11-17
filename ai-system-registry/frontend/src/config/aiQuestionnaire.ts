@@ -24,6 +24,12 @@ export interface AiQuestionDef {
    *  text (Summary / provisions / recitals) with inline external source links.
    *  Absent for questions with no mapped CO context. */
   coContext?: string;
+  /** Illustrative examples for this question, shown to both the owner and the
+   *  CO as a collapsible "Examples" section in the Context tab (below the
+   *  context sections, above the CO's Sources list). Same text for both roles.
+   *  A bullet list transcribed from the questionnaire's "Example(s)" column;
+   *  absent for questions with no examples. */
+  examples?: string;
 }
 
 const rawQuestions = (questionnaireJson as { questions: AiQuestionDef[] }).questions;

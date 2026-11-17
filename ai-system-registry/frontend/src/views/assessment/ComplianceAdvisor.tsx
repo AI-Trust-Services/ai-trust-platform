@@ -194,7 +194,7 @@ function renderBodyLines(lines: string[]): ReactNode[] {
 /** Owner context formatted for readability: ALL-CAPS lines become headings,
  *  "-" lines become bullet lists, the rest paragraphs. Keeps a long block of
  *  text from reading as one wall. */
-function OwnerContextBody({ text }: { text: string }) {
+function OwnerContextBody({ text, examples }: { text: string; examples?: string }) {
   const lines = cleanContext(text)
     .split("\n")
     .map((l) => l.trim());
@@ -241,6 +241,11 @@ function OwnerContextBody({ text }: { text: string }) {
           </ContextCollapsible>
         );
       })}
+      {examples && (
+        <ContextCollapsible heading="Examples">
+          {renderBodyLines(cleanContext(examples).split("\n").map((l) => l.trim()).filter(Boolean))}
+        </ContextCollapsible>
+      )}
     </div>
   );
 }
@@ -369,7 +374,7 @@ function ContextCollapsible({ heading, children }: { heading: string; children: 
  *  including the Summary — collapses by default, inline URLs are clickable, and
  *  all external links are gathered into a collapsed-by-default Sources list at
  *  the end. */
-function CoContextBody({ text }: { text: string }) {
+function CoContextBody({ text, examples }: { text: string; examples?: string }) {
   const cleaned = cleanContext(text);
   const blocks: { heading: string | null; body: string[] }[] = [];
   let cur: { heading: string | null; body: string[] } | null = null;
@@ -415,6 +420,12 @@ function CoContextBody({ text }: { text: string }) {
           </ContextCollapsible>
         );
       })}
+      {examples && (
+        // Below the context sections, above the Sources list.
+        <ContextCollapsible heading="Examples">
+          {renderCoBody(cleanContext(examples).split("\n").map((l) => l.trim()))}
+        </ContextCollapsible>
+      )}
       {sources.length > 0 && (
         <ContextCollapsible heading={`Sources (${sources.length})`}>
           <ul className="space-y-1">
@@ -618,9 +629,13 @@ export function ComplianceAdvisor({
                   // Key by questionKey so navigating questions remounts the
                   // renderer and resets every collapsible (sections + Sources)
                   // back to its collapsed-by-default state.
-                  <CoContextBody key={questionKey} text={activeContext} />
+                  <CoContextBody key={questionKey} text={activeContext} examples={def?.examples} />
                 ) : (
-                  <OwnerContextBody key={questionKey} text={activeContext} />
+                  <OwnerContextBody
+                    key={questionKey}
+                    text={activeContext}
+                    examples={def?.examples}
+                  />
                 )}
               </>
             ) : (
