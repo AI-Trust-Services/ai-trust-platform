@@ -18,6 +18,7 @@ export const TIER_COLORS: Record<TierKey, string> = {
   "gpai-standard":  "#6C1AF4",
   limited:          "#e9a922",
   minimal:          "#1a7a3c",
+  pending:          "#999999",
 };
 
 export const LIFECYCLE_COLORS: Record<string, string> = {
@@ -45,4 +46,5 @@ export const TIER_LABELS: Record<TierKey, string> = {
   "gpai-standard":  "GPAI Standard",
   limited:          "Transparency Obligations",
   minimal:          "Minimal or No Risk",
+  pending:          "Pending Classification",
 };

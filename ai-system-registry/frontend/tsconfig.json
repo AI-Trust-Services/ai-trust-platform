@@ -14,7 +14,6 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
       "@ai-trust/react-hooks": ["../../libs/react-hooks/src/index.ts"],

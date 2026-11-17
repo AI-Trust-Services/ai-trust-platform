@@ -124,17 +124,16 @@ indexing:
 # Enabled by default in read-only mode; uses Thalamus for generation (THALAMUS_* in the Secret).
 # graphImage is NOT set here — on Gardener it is injected at deploy time via the
 # COGNEE_GRAPH_IMAGE key in the ai-trust-flux-values-<namespace> Secret (Flux valuesFrom,
-# see k8s/ocm/manifests.yaml). For kind it is set in values-kind.yaml.
+# see k8s/ocm/manifests.yaml). For kind it is set at deploy time via --set by the Makefile.
 cogneeEval:
   enabled: true
   backendPort: 8014
   dataStorageSize: 5Gi # cognee graph + vector + SQLite data
-  # Read-only production mode. When true the workload is a Deployment whose
-  # emptyDir is hydrated from a frozen graph snapshot image (graphImage) by an
-  # init container, COGNEE_READONLY=true gates off the ingest/feedback routers,
-  # and no graph mutation is possible. Build/test leaves this false (StatefulSet
-  # + PVC, full feedback loop). See cognee-eval/CLAUDE.md.
-  readOnly: true
+  # When graphImage is set (digest-pinned @sha256 ref) the workload is a Deployment whose
+  # emptyDir is hydrated from a frozen graph snapshot image by an init container, and
+  # COGNEE_READONLY=true gates off the ingest/feedback routers. When graphImage is unset
+  # the workload is a StatefulSet with a PVC (ingest mode, full feedback loop).
+  # See cognee-eval/CLAUDE.md.
 
 # ── the 7 near-identical backend+frontend MFE pairs ──
 # dependsOnJobs: Job names that must Complete before this backend starts

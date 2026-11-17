@@ -15,9 +15,6 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from sqlalchemy import func, select
-
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import (
     SYSTEMS_APPROVE,
@@ -37,17 +34,16 @@ from ai_trust_persistence.models.obligation import Obligation
 from ai_trust_persistence.models.question_comment import QuestionComment
 from ai_trust_persistence.models.question_state import QuestionState
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
-
 from app import email_sender
 from app.assessment_catalogue import (
     ASSESSMENT_QUESTION_KEYS,
     QUESTION_TYPES,
 )
+from app.assessment_prefill_pipeline import run_assessment_prefill_pipeline
 from app.classifier import classify_ai_questionnaire
 from app.dossier import create_dossier_in_session, write_ai_output_in_session
 from app.ids import new_id
 from app.llm import LLMParseError
-from app.questionnaire_pipeline import run_pipeline_streaming
 from app.questionnaire_required import QUESTION_LABEL
 from app.schemas.assessment import (
     AnswerRequest,
@@ -56,15 +52,17 @@ from app.schemas.assessment import (
     CommentCreate,
     CommentResponse,
     ConfidenceCounts,
-    ContributorRef,
     ConfirmResponse,
+    ContributorRef,
+    IssueRequest,
     QuestionStateResponse,
+    RejectRequest,
     SourceDocumentRef,
     SubmitRequest,
-    IssueRequest,
-    RejectRequest,
     _validate_question_key,
 )
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from sqlalchemy import func, select
 
 router = APIRouter(tags=["assessment"])
 logger = get_logger(__name__)
@@ -76,12 +74,6 @@ _AI_UNAVAILABLE = "AI classification is unavailable. Please try again shortly."
 # creates is therefore always under this framework (seeded by persistence
 # migration 0003). Named here rather than inlined as a magic string.
 _EU_AI_ACT_FRAMEWORK_ID = "FRM-EU-AI-ACT"
-
-# The questionnaire + answer prompt `/open` runs through the questionnaire-answer
-# pipeline (context/prompts/<id>.json / <id>.md) — same defaults as
-# POST /systems/{id}/questionnaire-run.
-_QUESTIONNAIRE_ID = "ai-questionnaire"
-_QUESTIONNAIRE_PROMPT_ID = "questionnaire_answer"
 
 # answerStrength (pipeline) → confidence band; the lowest wins for MULTISELECT.
 _STRENGTH_RANK = {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
@@ -137,12 +129,14 @@ def _proposals_from_results(results: list[Any]) -> dict[str, dict[str, Any]]:
 
     Returns ``{question_id: {answer, confidence, references, explanation}}`` for
     every known question that has a non-empty answer. Unknown ids and unanswered
-    items are skipped (the caller seeds those as blank, low-confidence states).
+    items are skipped (the caller seeds those blank, with no confidence band).
 
     MULTISELECT always serialises to a JSON array (even one option) — the frontend
     JSON.parse()s it; PREDEFINED/DESCRIPTIVE use the plain value. ``answerStrength``
     (HIGH/MEDIUM/LOW) maps to a confidence band; for MULTISELECT the lowest
-    strength across the returned options wins. No strength ⇒ ``low``."""
+    strength across the returned options wins. No strength ⇒ ``None`` — the prompt
+    requires a null ``answerStrength`` for ``NOT_ENOUGH_INFORMATION``/``CONFLICT``,
+    which is "not assessed", not "low confidence"."""
     known = set(ASSESSMENT_QUESTION_KEYS)
     out: dict[str, dict[str, Any]] = {}
     for item in results:
@@ -160,15 +154,14 @@ def _proposals_from_results(results: list[Any]) -> dict[str, dict[str, Any]]:
             if len(values) > 1 or QUESTION_TYPES.get(q_key) == "MULTISELECT"
             else values[0]
         )
-        strengths = [
-            a["answerStrength"]
-            for a in options
-            if a.get("answerStrength") in _STRENGTH_RANK
-        ]
+        answered_options = [a for a in options if a.get("value") not in (None, "")]
         confidence = (
-            min(strengths, key=lambda s: _STRENGTH_RANK[s]).lower()
-            if strengths
-            else "low"
+            min(
+                (a["answerStrength"] for a in answered_options),
+                key=lambda s: _STRENGTH_RANK[s],
+            ).lower()
+            if all(a.get("answerStrength") in _STRENGTH_RANK for a in answered_options)
+            else None
         )
         out[q_key] = {
             "answer": value,
@@ -243,12 +236,19 @@ async def _qualifying_comment_keys(
 def _needs_attention(
     row: AISystem, state: QuestionState | None, answer: str | None
 ) -> bool:
-    """A question needs the owner's attention when it is low-confidence OR the AI
-    could not pre-fill it (empty answer) — AND it has not yet been owner-confirmed.
-    Confirming a question clears it from the attention count."""
+    """A question needs the owner's attention when the AI did not establish an
+    answer — AND it has not yet been owner-confirmed. Confirming clears it.
+
+    "Did not establish" covers both bands below HIGH/MEDIUM:
+    ``low`` (a suggested pre-fill the prompt says requires human verification) and
+    *no band at all* (``confidence is None``). The latter is the pipeline's
+    ``NOT_ENOUGH_INFORMATION`` / ``CONFLICT`` outcome, where ``answerStrength`` is
+    null by contract — note the answer string is then non-blank, so the
+    empty-answer check below does not catch it. HIGH/MEDIUM answers are
+    auto-confirmed on the owner's behalf, so they exit at the guard above."""
     if _is_owner_confirmed(row, state):
         return False
-    if state is not None and state.confidence == "low":
+    if state is not None and state.confidence in (None, "low"):
         return True
     return answer is None or (isinstance(answer, str) and not answer.strip())
 
@@ -363,13 +363,24 @@ async def _run_prefill_background(
     assessment_id: str,
     username: str,
 ) -> None:
-    """Background task: run the questionnaire-answer pipeline (batches run in
-    parallel; their callbacks are serialised), writing each batch's answers into question_states as they arrive, then
-    classify and clear ``assessment.llm_status``.
+    """Background task started by ``/open``: run the AI-assessment prefill pipeline
+    (questionnaire run → classification run) with this assessment's persistence hooks.
 
-    Each batch is one LLM call covering a connected dependency group. After
-    each call we flush its answers to the DB so the frontend can poll
-    GET /state and see them before all batches are done.
+    The pipelines themselves (``app/questionnaire_pipeline.py``,
+    ``app/classification_pipeline.py``) are the same functions ``POST
+    /questionnaire-llm-run`` and ``POST /classification-llm-run`` trigger; only
+    these hooks are specific to the assessment:
+
+    * ``_on_batch`` — after each questionnaire batch, write its answers into the
+      existing ``question_states`` so the frontend sees them while polling
+      ``GET /state``.
+    * ``_finalize_tier`` — once the questionnaire is done (concurrently with the
+      label classification), derive the tier, ``org_role`` and sources and clear
+      ``assessment.llm_status`` in one transaction.
+
+    A failure of the questionnaire run or of ``_finalize_tier`` sets
+    ``llm_status="failed"`` (the frontend's retry banner); a failure of the label
+    classification is only logged by the pipeline (its output is not shown yet).
     """
 
     async def _on_batch(batch_results: list) -> None:
@@ -420,30 +431,22 @@ async def _run_prefill_background(
                 },
             )
 
-    try:
-        output = await run_pipeline_streaming(
-            system_id=system_id,
-            questionnaire_id=_QUESTIONNAIRE_ID,
-            prompt_id=_QUESTIONNAIRE_PROMPT_ID,
-            username=username,
-            batch_callback=_on_batch,
-        )
-        proposals = _proposals_from_results(
-            (output.get("result") or {}).get("results") or []
-        )
+    async def _finalize_tier(questionnaire_output: dict) -> None:
+        """Tier step: classify from the persisted answers, then clear llm_status.
 
-        # Classify and clear llm_status in one transaction.
+        Raises on a classifier failure so the surrounding handler marks the
+        prefill failed (nothing is written, the next ``/open`` retries).
+        """
+        proposals = _proposals_from_results(
+            (questionnaire_output.get("result") or {}).get("results") or []
+        )
         async with SessionLocal() as session:
             row = await _get_system(session, system_id)
             try:
                 classification, rationale = await classify_ai_questionnaire(row)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.error("assessment.classify_failed", extra={"error": str(exc)})
-                assessment = await _current_assessment(session, system_id)
-                if assessment:
-                    assessment.llm_status = "failed"
-                await session.commit()
-                return
+                raise
             row.tier = classification.tier
             row.basis = classification.basis
             row.annex_iii_area = classification.annex_iii_area
@@ -471,7 +474,7 @@ async def _run_prefill_background(
                 await write_ai_output_in_session(
                     session,
                     assessment_id,
-                    (output.get("result") or {}).get("results") or [],
+                    (questionnaire_output.get("result") or {}).get("results") or [],
                     {
                         "tier": classification.tier,
                         "basis": classification.basis,
@@ -482,7 +485,7 @@ async def _run_prefill_background(
                             s.model_dump() for s in _sources_from_proposals(proposals)
                         ],
                     },
-                    consumed=output.get("consumed"),
+                    consumed=questionnaire_output.get("consumed"),
                 )
                 await session.commit()
         except Exception as exc:  # noqa: BLE001
@@ -494,6 +497,14 @@ async def _run_prefill_background(
                     "error": str(exc),
                 },
             )
+
+    try:
+        await run_assessment_prefill_pipeline(
+            system_id,
+            username,
+            batch_callback=_on_batch,
+            on_questionnaire_done=_finalize_tier,
+        )
     except Exception as exc:  # noqa: BLE001
         logger.error(
             "assessment.prefill_background_failed",
@@ -519,8 +530,8 @@ async def open_assessment(
     """Seed blank question states immediately and return; the AI prefill runs in
     the background.
 
-    On first open: seeds all question_states (blank answers, low confidence, all
-    unconfirmed), marks ``assessment.llm_status = "pending"``, then schedules
+    On first open: seeds all question_states (blank answers, no confidence band,
+    all unconfirmed), marks ``assessment.llm_status = "pending"``, then schedules
     ``_run_prefill_background`` as a FastAPI background task (fires after the HTTP
     response is sent). Returns the blank state immediately with
     ``prefill_pending=True`` so the client can start polling GET /state.
@@ -558,7 +569,10 @@ async def open_assessment(
                     answer=None,
                     answer_source="ai_prefilled",
                     ai_original_answer=None,
-                    confidence="low",
+                    # No answer yet ⇒ no confidence band at all (not "low", which
+                    # would render a misleading red chip). The background prefill
+                    # overwrites this for every question the LLM answers.
+                    confidence=None,
                     ai_references=None,
                     ai_explanation=None,
                 )

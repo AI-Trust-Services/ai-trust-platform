@@ -15,8 +15,8 @@ RESTRICT so an assessment/system with a dossier cannot be deleted out from under
 it. TRUNCATE (test conftest) is not a row-level DELETE, so it bypasses the
 trigger and tests still reset cleanly.
 
-Revision ID: 0050
-Revises: 0049
+Revision ID: 0051
+Revises: 0050
 Create Date: 2026-11-10
 """
 
@@ -24,8 +24,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB
 
-revision = "0050"
-down_revision = "0049"
+revision = "0051"
+down_revision = "0050"
 branch_labels = None
 depends_on = None
 

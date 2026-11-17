@@ -14,11 +14,14 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import os
 import re
 from datetime import timedelta
+from typing import Any
 
 from minio import Minio
+from minio.error import S3Error
 
 from ai_trust_logging import get_logger
 
@@ -99,6 +102,52 @@ async def upload_file(
         "minio.file_uploaded", extra={"bucket": BUCKET, "key": key, "size": len(data)}
     )
     return key
+
+
+def _put_json_sync(key: str, data: bytes) -> None:
+    _get_client().put_object(
+        BUCKET,
+        key,
+        io.BytesIO(data),
+        length=len(data),
+        content_type="application/json",
+    )
+
+
+async def put_json(key: str, obj: Any) -> None:
+    """Serialise ``obj`` as UTF-8 JSON and store it under ``key`` (creating the bucket if needed).
+
+    Used by the LLM pipelines for their versioned result files; each run uses a
+    new key so nothing is ever overwritten.
+    """
+    data = json.dumps(obj, ensure_ascii=False, indent=2).encode("utf-8")
+    await ensure_bucket()
+    await asyncio.to_thread(_put_json_sync, key, data)
+    logger.info("minio.json_stored", extra={"key": key, "size": len(data)})
+
+
+def _get_json_sync(key: str) -> bytes:
+    response = _get_client().get_object(BUCKET, key)
+    try:
+        return response.read()
+    finally:
+        response.close()
+        response.release_conn()
+
+
+async def get_json(key: str) -> Any:
+    """Read and parse the JSON object stored under ``key``.
+
+    Raises ``KeyError`` when the object does not exist (callers map that to 404),
+    instead of leaking the MinIO SDK's ``S3Error``.
+    """
+    try:
+        raw = await asyncio.to_thread(_get_json_sync, key)
+    except S3Error as exc:
+        if exc.code in ("NoSuchKey", "NoSuchBucket"):
+            raise KeyError(f"Object '{key}' not found") from exc
+        raise
+    return json.loads(raw)
 
 
 def _presigned_sync(key: str, expires: timedelta) -> str:

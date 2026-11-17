@@ -68,7 +68,8 @@ jobs:
             --repo "${{ github.repository }}" \
             --body "🚀 Test deployment started — deploying \`feature:${PR_SHA::12}\` to namespace \`${{ steps.vars.outputs.namespace }}\` on \`ai-trust-test\`."
 
-      # Seeds the statuses that integration-tests.yml and e2e-system-tests.yml finalise
+      # Seeds the statuses that integration-tests.yml, e2e-system-tests.yml and
+      # playwright-frontend-tests.yml finalise
       # once this deployment succeeds. Done here as STEPS rather than as jobs because
       # every job in a pull_request-triggered workflow gets pinned to the PR as its own
       # check run — a step adds none.
@@ -89,6 +90,16 @@ jobs:
             repos/${{ github.repository }}/statuses/${PR_SHA} \
             -f state=pending \
             -f context=e2e-system-tests \
+            -f description="Waiting for deployment to finish..." \
+            -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Seed pending playwright-tests status
+        run: |
+          gh api \
+            --method POST \
+            repos/${{ github.repository }}/statuses/${PR_SHA} \
+            -f state=pending \
+            -f context=playwright-tests \
             -f description="Waiting for deployment to finish..." \
             -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
@@ -210,5 +221,16 @@ jobs:
             repos/${{ github.repository }}/statuses/${PR_SHA} \
             -f state=error \
             -f context=e2e-system-tests \
+            -f description="Skipped — deployment did not succeed." \
+            -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Resolve playwright-tests status on failed deploy
+        if: failure() || cancelled()
+        run: |
+          gh api \
+            --method POST \
+            repos/${{ github.repository }}/statuses/${PR_SHA} \
+            -f state=error \
+            -f context=playwright-tests \
             -f description="Skipped — deployment did not succeed." \
             -f target_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

@@ -1,6 +1,6 @@
 """Assessment dossier: FKs → CASCADE, append-only trigger blocks UPDATE only (#366).
 
-Migration 0050 created the dossier with ``ON DELETE RESTRICT`` FKs and a
+Migration 0051 created the dossier with ``ON DELETE RESTRICT`` FKs and a
 ``BEFORE UPDATE OR DELETE`` trigger. That made it impossible to delete or abort
 an assessment once it had been opened: the dossier's RESTRICT FK blocked the
 parent delete, so compliance ``/abort`` and ``/delete`` (and the registry
@@ -15,15 +15,15 @@ its dossier with it, while approved/historicized assessments are never deleted
     CONTENTS are still immutable (the real audit guarantee), but the assessment
     lifecycle can remove the row via cascade.
 
-Revision ID: 0051
-Revises: 0050
+Revision ID: 0052
+Revises: 0051
 Create Date: 2026-11-12
 """
 
 from alembic import op
 
-revision = "0051"
-down_revision = "0050"
+revision = "0052"
+down_revision = "0051"
 branch_labels = None
 depends_on = None
 

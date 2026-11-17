@@ -46,7 +46,7 @@ otel:
 
 cogneeEval:
   enabled: true
-  # Serves the frozen graph snapshot from GHCR (never ingests).
-  # graphImage is set at deploy time via COGNEE_GRAPH_IMAGE in .env (passed as --set by the Makefile).
-  # Set readOnly: false only on a dedicated build/test instance for graph curation.
-  readOnly: true
+  # graphImage is set at deploy time via COGNEE_GRAPH_IMAGE resolved from COGNEE_GRAPH_TAG in .env
+  # (passed as --set by the Makefile). When graphImage is set the pod runs as a read-only Deployment
+  # hydrated from the frozen GHCR snapshot. When unset (no tag or imagetools inspect failed) it falls
+  # back to a StatefulSet with a local PVC in ingest mode.

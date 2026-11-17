@@ -189,11 +189,12 @@ in [`tests/playwright/`](../tests/playwright/) and drives a **real browser** bla
 **real Keycloak OIDC login** — the browser-level counterpart of `tests/e2e_system/`.
 
 **How it runs.** Locally against kind (`APP_URL=http://localhost:8080`) or any deployed namespace;
-in CI via the **`playwright-test`** PR label
-([`.github/workflows/playwright-frontend-tests.yml`](../.github/workflows/playwright-frontend-tests.yml)),
-which runs against the PR author's already-deployed `ai-trust-test` namespace (deploy it first with
-`garden-deploy`). The HTML report and `test-results/` (traces, **failure screenshots**, videos) are
-uploaded as CI artifacts. **Not a PR gate** (same model as the `e2e-test` / `langfuse-test` labels).
+in CI automatically after every successful deployment
+([`.github/workflows/playwright-frontend-tests.yml`](../.github/workflows/playwright-frontend-tests.yml)):
+after `PR Deployment Test` (the PR author's `ai-trust-test` namespace, `garden-deploy` label) and after
+`Deployment Workflow` on main (`ai-trust-main`), or on demand via **Run workflow** or the **`playwright-test`** PR label. The result is
+published as the `playwright-tests` commit status. The HTML report and `test-results/` (traces, **failure screenshots**, videos) are
+uploaded as CI artifacts. **Not a PR gate** (same model as `integration-tests` / `e2e-system-tests`).
 
 **Auth & personas.** A Playwright `setup` project provisions personas via the users API and captures
 one `storageState` per persona (reused by every spec); a `teardown` project deletes the created
@@ -210,7 +211,7 @@ Legend: ✅ test covered · ⬜ test missing, functionality exists
 | Smoke | Registry MFE mounts (heading "AI System Registry") + backend healthy | ✅ `tests/playwright/tests/smoke-engineer.spec.ts` |
 | Smoke | Compliance MFE mounts (heading "Assessments") + backend healthy | ✅ `tests/playwright/tests/smoke-engineer.spec.ts` |
 | Smoke | Audit MFE mounts (heading "Audit Trail") + backend healthy | ✅ `tests/playwright/tests/smoke-engineer.spec.ts` |
-| Smoke | Overview MFE mounts (heading "Compliance Overview") + backend healthy | ✅ `tests/playwright/tests/smoke-engineer.spec.ts` |
+| Smoke | Overview MFE mounts — landing zone (`#/overview`, "Hi <name>,") and dashboard (`#/dashboard`, heading "Compliance Overview") — + backend healthy | ✅ `tests/playwright/tests/smoke-engineer.spec.ts` |
 | Smoke | Admin MFE mounts (heading "Platform Administration") + backend healthy | ✅ `tests/playwright/tests/smoke-admin.spec.ts` |
 | Smoke | Users/IAM MFE mounts (heading "Users & Roles") + backend healthy | ✅ `tests/playwright/tests/smoke-admin.spec.ts` |
 | Deep | AI Engineer registers a new system end-to-end (form → toast → list row) | ✅ `tests/playwright/tests/registry-register.spec.ts` |
