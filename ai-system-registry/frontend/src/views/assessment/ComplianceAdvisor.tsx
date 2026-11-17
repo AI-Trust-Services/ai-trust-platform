@@ -458,12 +458,19 @@ export function ComplianceAdvisor({
   // context. `activeContext` drives the context-first tab defaulting below.
   const activeContext = isComplianceOfficer ? def?.coContext : def?.ownerContext;
 
-  // Context-first: entering a question surfaces its context help; a question
-  // with no mapped context opens straight into the chat. Re-evaluated whenever
-  // the active question (and thus its context) changes.
+  // Context-first on first load, then the user's explicit tab choice persists
+  // across question navigation. `preferredTab` remembers that choice; a question
+  // with no context for this role can't show the Context tab, so it falls back
+  // to chat *without* overwriting the preference — the choice is restored as
+  // soon as a question with context is reached again.
   const [tab, setTab] = useState<"context" | "chat">("context");
+  const preferredTab = useRef<"context" | "chat">("context");
+  const selectTab = (t: "context" | "chat") => {
+    preferredTab.current = t;
+    setTab(t);
+  };
   useEffect(() => {
-    setTab(activeContext ? "context" : "chat");
+    setTab(activeContext ? preferredTab.current : "chat");
   }, [questionKey, activeContext]);
 
   // Cycle the human-readable progress lines while a turn is in flight. Advances
@@ -483,7 +490,7 @@ export function ComplianceAdvisor({
   async function send(message: string) {
     const text = message.trim();
     if (!text || !systemId || loading) return;
-    setTab("chat");
+    selectTab("chat");
     setError(null);
     setInput("");
     const scoped = guidance ? `[Section: ${guidance.title}]\n${text}` : text;
@@ -541,10 +548,10 @@ export function ComplianceAdvisor({
     >
       {/* Vertical tab rail (full height). */}
       <nav className="flex w-9 shrink-0 flex-col border-r border-border bg-[#f8fafe]">
-        <RailTab active={tab === "chat"} onClick={() => setTab("chat")}>
+        <RailTab active={tab === "chat"} onClick={() => selectTab("chat")}>
           AI Act Companion
         </RailTab>
-        <RailTab active={tab === "context"} onClick={() => setTab("context")}>
+        <RailTab active={tab === "context"} onClick={() => selectTab("context")}>
           Context
         </RailTab>
       </nav>
