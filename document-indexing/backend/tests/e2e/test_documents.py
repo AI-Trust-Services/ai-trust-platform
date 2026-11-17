@@ -319,6 +319,29 @@ async def test_delete_all_system_documents_empty_is_zero(client: httpx.AsyncClie
     assert r.json()["documents_deleted"] == 0
 
 
+async def test_bulk_delete_blocked_when_system_has_dossier(
+    client: httpx.AsyncClient, system_id: str
+):
+    """The bulk purge honors the same dossier guard as the single delete (#366):
+    while the system still has a dossier, purging its documents is refused (409),
+    so an out-of-band call can't orphan a live audit record. The documents survive."""
+    up = await client.post(
+        f"/v1/systems/{system_id}/documents",
+        files={"file": ("pinned.pdf", _PDF_BYTES, "application/pdf")},
+        headers=_HDR,
+    )
+    doc_id = up.json()["document_id"]
+    version_id = up.json()["version_id"]
+    await _seed_dossier_referencing(system_id, doc_id, version_id)
+
+    r = await client.delete(f"/v1/systems/{system_id}/documents", headers=_HDR)
+    assert r.status_code == 409
+    assert "assessment records" in r.json()["detail"].lower()
+
+    listing = await client.get(f"/v1/systems/{system_id}/documents", headers=_HDR)
+    assert len(listing.json()) == 1, "documents must survive a blocked bulk purge"
+
+
 # ── Retrieval ─────────────────────────────────────────────────────────────────
 
 

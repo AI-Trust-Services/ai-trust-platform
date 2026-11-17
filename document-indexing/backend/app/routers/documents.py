@@ -441,6 +441,32 @@ async def delete_document(document_id: str) -> dict:
     return {"deleted": True, "document_id": document_id}
 
 
+async def _assert_system_not_in_dossier(session: AsyncSession, system_id: str) -> None:
+    """Refuse a bulk doc-purge while the system still has an assessment dossier (#366).
+
+    The same audit guarantee as the single-document guard, applied to the whole
+    system: a dossier pins the documents a run used, so purging all originals out
+    from under it would break the audit record. The legitimate caller deletes the
+    AISystem row first — that cascades its assessments + dossiers (migration 0051)
+    — so by the time this bulk cleanup runs no dossier remains and the guard is a
+    no-op. It only fires on an out-of-band call that would orphan a live record.
+    """
+    referenced = (
+        await session.execute(
+            select(AssessmentDossier.id)
+            .where(AssessmentDossier.ai_system_id == system_id)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if referenced:
+        raise HTTPException(
+            409,
+            "This system has assessment records (dossiers) that pin its documents. "
+            "Delete the system first — that removes its assessment records — before "
+            "purging its documents.",
+        )
+
+
 @router.delete(
     "/systems/{system_id}/documents",
 )
@@ -454,6 +480,11 @@ async def delete_system_documents(
     abandoned draft registration) is removed. Idempotent: an unknown or document-less
     system returns a zero count, never 404.
 
+    Refused with 409 if the system still has an assessment dossier (#366) — same guard
+    as the single-document delete. The legitimate flow deletes the system first (which
+    cascades its dossiers), so this only blocks an out-of-band purge that would orphan
+    a live audit record.
+
     Authorized for anyone who may delete the system itself — ``systems:write`` (owners)
     or ``systems:approve`` (compliance officers, who lack ``systems:write``). Checked
     inline rather than via a single ``require_permission`` so the CO-initiated cleanup
@@ -464,6 +495,7 @@ async def delete_system_documents(
     ):
         raise HTTPException(403, "Permission denied")
     async with SessionLocal() as session:
+        await _assert_system_not_in_dossier(session, system_id)
         keys, count = await _purge_system_documents(session, system_id)
         await session.commit()
     for key in keys:
