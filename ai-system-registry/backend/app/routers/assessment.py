@@ -15,7 +15,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy import func, select
 
 from ai_trust_authorization import require_permission
@@ -57,7 +57,6 @@ from app.schemas.assessment import (
     ConfidenceCounts,
     ContributorRef,
     ConfirmResponse,
-    OpenAssessmentBody,
     QuestionStateResponse,
     SourceDocumentRef,
     SubmitRequest,
@@ -494,22 +493,16 @@ async def open_assessment(
     system_id: str,
     request: Request,
     background_tasks: BackgroundTasks,
-    body: OpenAssessmentBody = Body(default_factory=OpenAssessmentBody),
     _: str = Depends(require_permission(SYSTEMS_WRITE)),
 ):
     """Seed blank question states immediately and return; the AI prefill runs in
-    the background (unless ``body.skip_prefill`` is True — manual mode).
+    the background.
 
     On first open: seeds all question_states (blank answers, no confidence band,
-    all unconfirmed), marks ``assessment.llm_status = "pending"`` for AI-assisted
-    mode (or leaves it as ``None`` for manual mode), then schedules
+    all unconfirmed), marks ``assessment.llm_status = "pending"``, then schedules
     ``_run_prefill_background`` as a FastAPI background task (fires after the HTTP
     response is sent). Returns the blank state immediately with
     ``prefill_pending=True`` so the client can start polling GET /state.
-
-    Manual mode (``skip_prefill=True``): same seeding but ``answer_source="manual"``
-    on every question_state, ``llm_status`` left as ``None``, no background task.
-    The questionnaire is fully blank for the owner to fill in themselves.
 
     Idempotent: if question_states already exist (even with llm_status=pending from
     a prior open), returns the current state without re-seeding or re-running.
@@ -533,11 +526,7 @@ async def open_assessment(
                 await session.commit()
             return await _build_state(session, row, _current_user(request), assessment)
 
-        skip_prefill = body.skip_prefill if body else False
-        answer_source = "manual" if skip_prefill else "ai_prefilled"
-
-        # Seed all question_states blank — answers arrive via the background task
-        # (AI mode) or are entered by the owner (manual mode).
+        # Seed all question_states blank — answers arrive via the background task.
         for q_key in ASSESSMENT_QUESTION_KEYS:
             session.add(
                 QuestionState(
@@ -546,7 +535,7 @@ async def open_assessment(
                     system_id=system_id,
                     question_key=q_key,
                     answer=None,
-                    answer_source=answer_source,
+                    answer_source="ai_prefilled",
                     ai_original_answer=None,
                     # No answer yet ⇒ no confidence band at all (not "low", which
                     # would render a misleading red chip). The background prefill
@@ -556,21 +545,19 @@ async def open_assessment(
                     ai_explanation=None,
                 )
             )
-        if not skip_prefill:
-            assessment.llm_status = "pending"
+        assessment.llm_status = "pending"
         await session.commit()
         logger.info(
             "assessment.opened",
-            extra={"system_id": system_id, "prefill": "skipped" if skip_prefill else "background"},
+            extra={"system_id": system_id, "prefill": "background"},
         )
 
-    if not skip_prefill:
-        background_tasks.add_task(
-            _run_prefill_background,
-            system_id,
-            assessment.id,
-            _current_user(request),
-        )
+    background_tasks.add_task(
+        _run_prefill_background,
+        system_id,
+        assessment.id,
+        _current_user(request),
+    )
 
     async with SessionLocal() as session:
         row = await _get_system(session, system_id)

@@ -122,14 +122,6 @@ export const api = {
     request<AssessmentState>(`/systems/${encodeURIComponent(systemId)}/assessment/open`, {
       method: "POST",
     }),
-  // Manual mode: same as openAssessment but seeds blank question_states with
-  // answer_source="manual" and skips the AI prefill pipeline entirely.
-  openAssessmentManual: (systemId: string) =>
-    request<AssessmentState>(`/systems/${encodeURIComponent(systemId)}/assessment/open`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ skip_prefill: true }),
-    }),
   // Archive the approved cycle and begin a fresh one (owner-only; registry-side).
   startNewAssessment: (systemId: string) =>
     request<AssessmentState>(

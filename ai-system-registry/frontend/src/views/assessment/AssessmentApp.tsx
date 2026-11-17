@@ -113,7 +113,10 @@ export default function AssessmentApp() {
           navigate(`/systems/${id}/assessment/method`, { replace: true });
           return;
         }
-        setState(s);
+        // A failed prefill still seeded question_states (prefilled=true), so GET
+        // /state alone would never retry. Re-POST /open to re-trigger the
+        // background pipeline (idempotent; clears llm_status=failed).
+        setState(s.prefill_failed ? await api.openAssessment(id) : s);
       } else {
         const s = await api.getAssessmentState(id);
         setState(s);

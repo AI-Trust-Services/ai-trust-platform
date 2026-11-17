@@ -200,17 +200,6 @@ class SubmitRequest(BaseModel):
     note: str | None = None
 
 
-class OpenAssessmentBody(BaseModel):
-    """Optional body for POST /assessment/open.
-
-    ``skip_prefill=True`` seeds blank question_states with
-    ``answer_source="manual"`` and skips the background AI-prefill pipeline,
-    giving the owner a fully blank questionnaire to fill in manually.
-    """
-
-    skip_prefill: bool = False
-
-
 # ── Compliance Officer end view (#348) ───────────────────────────────────────
 
 # Tiers the CO may issue, and the only allowed companion.

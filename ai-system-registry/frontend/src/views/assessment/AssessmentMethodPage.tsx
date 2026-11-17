@@ -60,11 +60,9 @@ export default function AssessmentMethodPage() {
     setStarting(true);
     setError(null);
     try {
-      if (selected === "ai") {
-        await api.openAssessment(id);
-      } else {
-        await api.openAssessmentManual(id);
-      }
+      // Both methods currently open the same AI-prefill flow; the manual-entry
+      // path is handled separately (follow-up issue).
+      await api.openAssessment(id);
       navigate(`/systems/${id}/assessment`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to start assessment");
