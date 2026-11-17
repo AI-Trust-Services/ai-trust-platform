@@ -313,7 +313,7 @@ make test-int                       # kind cluster, namespace ai-trust
   even though `workflow_run` runs are attached to the default branch. `integration-tests.yml`
   deliberately has no `pull_request:` trigger, because every job in such a workflow gets pinned to the
   PR as its own check run. Its result never changes the deployment workflow's status.
-- Details → [tests/integration/README.md](tests/integration/README.md).
+- Details → [tests/integration/README.md](../tests/integration/README.md).
 
 #### On-demand label workflows (deployed-namespace, OIDC)
 Two workflows run automatically after a successful deployment, exactly like `integration-tests.yml`
@@ -330,11 +330,11 @@ or port-forward (contrast `tests/integration/`). Neither is a PR gate. Playwrigh
   mounts + its backend is healthy, and registers an AI system end-to-end. A `setup` project
   provisions personas and captures one `storageState` each; a `teardown` project cleans up. The HTML
   report + `test-results/` (traces, failure screenshots, videos) are uploaded as CI artifacts.
-  Details → [tests/playwright/README.md](tests/playwright/README.md) and the Frontend tests section
-  of [docs/tests.md](docs/tests.md).
+  Details → [tests/playwright/README.md](../tests/playwright/README.md) and the [Frontend tests](#frontend-tests)
+  section above.
 - **`langfuse-test`** → `.github/workflows/langfuse-benchmark.yml` runs
   `tests/langfuse_benchmark/benchmark.py`: batch-imports the 339 ground-truth scenarios via
   `POST /api/registry/v1/intake/batch` (needs `ENABLE_BATCH_IMPORT=true`, set in
   `k8s/env/ai-trust-test/.env`), classifies each through `/classify/evaluate`, and pushes a scored
   dataset + experiment run to Langfuse (`LANGFUSE_*` repo secrets). Details →
-  [tests/langfuse_benchmark/README.md](tests/langfuse_benchmark/README.md).
+  [tests/langfuse_benchmark/README.md](../tests/langfuse_benchmark/README.md).
