@@ -28,8 +28,7 @@ from ai_trust_persistence.models.assessment_dossier import (
 from ai_trust_persistence.models.document import Document, DocumentVersion
 from app import classifier
 from app.ids import new_id
-from app.llm.templates import load_template
-from app.questionnaire_loader import find_questionnaire
+from app.llm.templates import load_questionnaire_text, load_template
 from app.questionnaire_pipeline import _evidence_fields
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -123,7 +122,7 @@ def _build_config_snapshot() -> dict[str, Any]:
     **PM-open (#366):** if a dedicated classification config file is introduced,
     capture it here the same way the questionnaire is.
     """
-    content = find_questionnaire().read_text(encoding="utf-8")
+    content = load_questionnaire_text(_QUESTIONNAIRE_ID)
     classifier_src = Path(classifier.__file__).read_text(encoding="utf-8")
     return {
         "questionnaire": {
