@@ -170,3 +170,26 @@ async def delete_file(key: str) -> None:
         logger.info("minio.file_deleted", extra={"key": key})
     except Exception as e:  # noqa: BLE001 — deletion is best-effort
         logger.warning("minio.file_delete_failed", extra={"key": key, "error": str(e)})
+
+
+def _list_latest_classification_sync(system_id: str, config_id: str) -> Any:
+    prefix = f"classification-results/{system_id}/{config_id}/"
+    objects = list(_get_client().list_objects(BUCKET, prefix=prefix))
+    if not objects:
+        return None
+    # ISO timestamp suffix sorts lexicographically — max object_name == newest run.
+    latest = max(objects, key=lambda o: o.object_name)
+    return json.loads(_get_json_sync(latest.object_name))
+
+
+async def list_latest_classification(system_id: str, config_id: str) -> Any:
+    """Return the parsed JSON of the most recent classification run for this system+config.
+
+    Returns ``None`` when no run exists yet (caller maps to 404).
+    """
+    try:
+        return await asyncio.to_thread(_list_latest_classification_sync, system_id, config_id)
+    except S3Error as exc:
+        if exc.code in ("NoSuchKey", "NoSuchBucket"):
+            return None
+        raise
