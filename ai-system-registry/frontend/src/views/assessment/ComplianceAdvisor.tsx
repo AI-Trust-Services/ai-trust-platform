@@ -602,7 +602,10 @@ export function ComplianceAdvisor({
                   This section refers to the EU AI Act regarding…
                 </h3>
                 {isComplianceOfficer ? (
-                  <CoContextBody text={activeContext} />
+                  // Key by questionKey so navigating questions remounts the
+                  // renderer and resets every collapsible (sections + Sources)
+                  // back to its collapsed-by-default state.
+                  <CoContextBody key={questionKey} text={activeContext} />
                 ) : (
                   <OwnerContextBody text={activeContext} />
                 )}
