@@ -218,17 +218,29 @@ function OwnerContextBody({ text }: { text: string }) {
   // The CO view (CoContextBody) keeps its sources.
   const ownerBlocks = blocks.filter((b) => !/^references$/i.test(b.heading?.trim() ?? ""));
   return (
-    <div className="space-y-4 text-sm leading-relaxed text-[#18181d]">
-      {ownerBlocks.map((b, bi) => (
-        <div key={bi} className="space-y-1.5">
-          {b.heading && (
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">
-              {b.heading}
-            </h4>
-          )}
-          {renderBodyLines(b.body)}
-        </div>
-      ))}
+    <div className="space-y-3 text-sm leading-relaxed text-[#18181d]">
+      {ownerBlocks.map((b, bi) => {
+        const hasBody = b.body.some(Boolean);
+        // Each headed section collapses by default (same behaviour as the CO
+        // view); a block with no heading or no body renders plainly.
+        if (!b.heading || !hasBody) {
+          return (
+            <div key={bi} className="space-y-1.5">
+              {b.heading && (
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">
+                  {b.heading}
+                </h4>
+              )}
+              {renderBodyLines(b.body)}
+            </div>
+          );
+        }
+        return (
+          <ContextCollapsible key={bi} heading={b.heading}>
+            {renderBodyLines(b.body)}
+          </ContextCollapsible>
+        );
+      })}
     </div>
   );
 }
@@ -255,13 +267,6 @@ function isCoHeading(t: string): boolean {
   if (isHeadingLine(t)) return true;
   if (t.endsWith(":") && t.length <= 90) return true;
   return CO_HEADING_WORDS.has(t.replace(/:$/, "").trim().toLowerCase());
-}
-
-// Title (first block) and the Summary stay open; the verbatim legal material
-// (provisions, recitals, guidelines, secondary sections) collapses by default.
-function coBlockOpen(heading: string | null, index: number): boolean {
-  if (index === 0) return true;
-  return !!heading && /^summary\b/i.test(heading.trim());
 }
 
 /** Turn URLs in a text run into external links; plain text otherwise. */
@@ -344,7 +349,10 @@ function renderCoBody(body: string[]): ReactNode[] {
   return out;
 }
 
-function CoCollapsible({ heading, children }: { heading: string; children: ReactNode }) {
+// Collapsed-by-default section used by both the owner and CO context views: a
+// heading row that toggles its body open. Remounts (via the key on the context
+// body) reset every section back to collapsed on question navigation.
+function ContextCollapsible({ heading, children }: { heading: string; children: ReactNode }) {
   return (
     <Collapsible className="rounded-md border border-border">
       <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-foreground">
@@ -357,9 +365,10 @@ function CoCollapsible({ heading, children }: { heading: string; children: React
 }
 
 /** Compliance-officer legal context (issue #409). Longer and more structured
- *  than the owner context: the title + Summary stay open, the verbatim legal
- *  sections collapse by default, inline URLs are clickable, and all external
- *  links are gathered into a collapsed-by-default Sources list at the end. */
+ *  than the owner context: the title stays open, every section with body —
+ *  including the Summary — collapses by default, inline URLs are clickable, and
+ *  all external links are gathered into a collapsed-by-default Sources list at
+ *  the end. */
 function CoContextBody({ text }: { text: string }) {
   const cleaned = cleanContext(text);
   const blocks: { heading: string | null; body: string[] }[] = [];
@@ -386,7 +395,9 @@ function CoContextBody({ text }: { text: string }) {
     <div className="space-y-3 text-sm leading-relaxed text-[#18181d]">
       {blocks.map((b, i) => {
         const hasBody = b.body.some(Boolean);
-        if (coBlockOpen(b.heading, i) || !hasBody) {
+        // Blocks without a body (e.g. the title) render as a plain heading;
+        // everything with content collapses by default — the Summary included.
+        if (!hasBody) {
           return (
             <div key={i} className="space-y-1.5">
               {b.heading && (
@@ -399,13 +410,13 @@ function CoContextBody({ text }: { text: string }) {
           );
         }
         return (
-          <CoCollapsible key={i} heading={b.heading ?? "Details"}>
+          <ContextCollapsible key={i} heading={b.heading ?? "Details"}>
             {renderCoBody(b.body)}
-          </CoCollapsible>
+          </ContextCollapsible>
         );
       })}
       {sources.length > 0 && (
-        <CoCollapsible heading={`Sources (${sources.length})`}>
+        <ContextCollapsible heading={`Sources (${sources.length})`}>
           <ul className="space-y-1">
             {sources.map((u, i) => (
               <li key={i}>
@@ -420,7 +431,7 @@ function CoContextBody({ text }: { text: string }) {
               </li>
             ))}
           </ul>
-        </CoCollapsible>
+        </ContextCollapsible>
       )}
     </div>
   );
@@ -609,7 +620,7 @@ export function ComplianceAdvisor({
                   // back to its collapsed-by-default state.
                   <CoContextBody key={questionKey} text={activeContext} />
                 ) : (
-                  <OwnerContextBody text={activeContext} />
+                  <OwnerContextBody key={questionKey} text={activeContext} />
                 )}
               </>
             ) : (
