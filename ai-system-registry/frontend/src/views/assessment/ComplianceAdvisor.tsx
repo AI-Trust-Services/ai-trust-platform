@@ -14,11 +14,17 @@ import {
   Plus,
   AtSign,
   Lightbulb,
+  ChevronDown,
 } from "lucide-react";
 import type { ChatMessage, AdvisorSource } from "../../types";
 import { api } from "../../api/client";
 import { QUESTION_DEF_BY_ID } from "../../config/aiQuestionnaire";
 import aiTrustLogo from "../../assets/ai-trust-logo.svg";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 
 // Static per-section EU AI Act framing used to prefix chat turns with context.
@@ -223,6 +229,199 @@ function OwnerContextBody({ text }: { text: string }) {
   );
 }
 
+// Matches an external URL embedded inline in the CO legal text (stops at
+// whitespace and a closing paren, which usually wraps the link).
+const CO_URL_RE = /https?:\/\/[^\s)]+/g;
+
+// Section-label lines in the CO legal text that aren't ALL-CAPS: "Summary:",
+// "AI Act provision:", "Recitals", "Guidelines", etc. A short line ending in a
+// colon is treated as a heading too (e.g. "EC Guidelines on … (url):").
+const CO_HEADING_WORDS = new Set([
+  "summary",
+  "ai act provision",
+  "ai act provisions",
+  "recitals",
+  "recital",
+  "guidelines",
+  "guidance",
+  "references",
+]);
+
+function isCoHeading(t: string): boolean {
+  if (isHeadingLine(t)) return true;
+  if (t.endsWith(":") && t.length <= 90) return true;
+  return CO_HEADING_WORDS.has(t.replace(/:$/, "").trim().toLowerCase());
+}
+
+// Title (first block) and the Summary stay open; the verbatim legal material
+// (provisions, recitals, guidelines, secondary sections) collapses by default.
+function coBlockOpen(heading: string | null, index: number): boolean {
+  if (index === 0) return true;
+  return !!heading && /^summary\b/i.test(heading.trim());
+}
+
+/** Turn URLs in a text run into external links; plain text otherwise. */
+function linkify(text: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  let last = 0;
+  let key = 0;
+  for (const m of text.matchAll(CO_URL_RE)) {
+    const offset = m.index ?? 0;
+    const raw = m[0];
+    const clean = raw.replace(/[.,;:]+$/, "");
+    if (offset > last) out.push(text.slice(last, offset));
+    out.push(
+      <a
+        key={key++}
+        href={clean}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="break-words text-[var(--brand)] underline"
+      >
+        {clean}
+      </a>,
+    );
+    const tail = raw.slice(clean.length);
+    if (tail) out.push(tail);
+    last = offset + raw.length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+/** Unique external URLs across the whole CO context, for the Sources list. */
+function extractUrls(text: string): string[] {
+  const seen = new Set<string>();
+  for (const m of text.matchAll(CO_URL_RE)) {
+    seen.add(m[0].replace(/[.,;:]+$/, ""));
+  }
+  return [...seen];
+}
+
+/** Render a CO block's body: blank lines split paragraphs, "-"/"•" lines become
+ *  bullet lists, URLs become external links. */
+function renderCoBody(body: string[]): ReactNode[] {
+  const out: ReactNode[] = [];
+  let para: string[] = [];
+  let bullets: string[] = [];
+  let key = 0;
+  const flushPara = () => {
+    if (para.length) {
+      out.push(<p key={`p-${key++}`}>{linkify(para.join(" "))}</p>);
+      para = [];
+    }
+  };
+  const flushBullets = () => {
+    if (bullets.length) {
+      out.push(
+        <ul key={`ul-${key++}`} className="ml-4 list-disc space-y-1">
+          {bullets.map((b, i) => (
+            <li key={i}>{linkify(b.replace(/^[-•]\s*/, ""))}</li>
+          ))}
+        </ul>,
+      );
+      bullets = [];
+    }
+  };
+  for (const line of body) {
+    if (!line) {
+      flushBullets();
+      flushPara();
+    } else if (/^[-•]/.test(line)) {
+      flushPara();
+      bullets.push(line);
+    } else {
+      flushBullets();
+      para.push(line);
+    }
+  }
+  flushBullets();
+  flushPara();
+  return out;
+}
+
+function CoCollapsible({ heading, children }: { heading: string; children: ReactNode }) {
+  return (
+    <Collapsible className="rounded-md border border-border">
+      <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-foreground">
+        <span>{heading}</span>
+        <ChevronDown className="size-4 shrink-0 transition-transform group-data-[state=open]:rotate-180" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="space-y-1.5 px-3 pb-3">{children}</CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+/** Compliance-officer legal context (issue #409). Longer and more structured
+ *  than the owner context: the title + Summary stay open, the verbatim legal
+ *  sections collapse by default, inline URLs are clickable, and all external
+ *  links are gathered into a collapsed-by-default Sources list at the end. */
+function CoContextBody({ text }: { text: string }) {
+  const cleaned = cleanContext(text);
+  const blocks: { heading: string | null; body: string[] }[] = [];
+  let cur: { heading: string | null; body: string[] } | null = null;
+  for (const raw of cleaned.split("\n")) {
+    const t = raw.trim();
+    if (!t) {
+      if (cur) cur.body.push("");
+      continue;
+    }
+    if (isCoHeading(t)) {
+      cur = { heading: t.replace(/:$/, ""), body: [] };
+      blocks.push(cur);
+    } else {
+      if (!cur) {
+        cur = { heading: null, body: [] };
+        blocks.push(cur);
+      }
+      cur.body.push(t);
+    }
+  }
+  const sources = extractUrls(cleaned);
+  return (
+    <div className="space-y-3 text-sm leading-relaxed text-[#18181d]">
+      {blocks.map((b, i) => {
+        const hasBody = b.body.some(Boolean);
+        if (coBlockOpen(b.heading, i) || !hasBody) {
+          return (
+            <div key={i} className="space-y-1.5">
+              {b.heading && (
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">
+                  {b.heading}
+                </h4>
+              )}
+              {renderCoBody(b.body)}
+            </div>
+          );
+        }
+        return (
+          <CoCollapsible key={i} heading={b.heading ?? "Details"}>
+            {renderCoBody(b.body)}
+          </CoCollapsible>
+        );
+      })}
+      {sources.length > 0 && (
+        <CoCollapsible heading={`Sources (${sources.length})`}>
+          <ul className="space-y-1">
+            {sources.map((u, i) => (
+              <li key={i}>
+                <a
+                  href={u}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="break-words text-[var(--brand)] underline"
+                >
+                  {u}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </CoCollapsible>
+      )}
+    </div>
+  );
+}
+
 /** The right-hand **Assessment Companion** panel. A vertical tab rail switches
  * between the **AI Act Companion** (grounded EU AI Act chat backed by
  * POST /systems/{id}/advisor/ask) and the per-question **Context** tab (the
@@ -233,17 +432,17 @@ export function ComplianceAdvisor({
   questionKey,
   expanded,
   onExpandedChange,
-  hideOwnerContext = false,
+  isComplianceOfficer = false,
 }: {
   systemId?: string;
   section?: string;
   questionKey?: string;
   expanded: boolean;
   onExpandedChange: (v: boolean) => void;
-  // The Context tab text is owner/engineer-facing. Set for the compliance
-  // officer so their context is suppressed (CO-specific context arrives under a
-  // separate ticket); the tab then shows the neutral fallback and opens on chat.
-  hideOwnerContext?: boolean;
+  // The Context tab is role-split: owners/engineers see the owner context,
+  // the compliance officer (reviewer, systems:approve) sees the CO legal
+  // context. Never show one role the other's text.
+  isComplianceOfficer?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -254,18 +453,18 @@ export function ComplianceAdvisor({
   const scrollRef = useRef<HTMLDivElement>(null);
   const guidance = section ? SECTION_GUIDANCE[section] : undefined;
 
-  const ownerContext =
-    !hideOwnerContext && questionKey
-      ? QUESTION_DEF_BY_ID[questionKey]?.ownerContext
-      : undefined;
+  const def = questionKey ? QUESTION_DEF_BY_ID[questionKey] : undefined;
+  // Role-split context: CO sees the legal CO context, everyone else the owner
+  // context. `activeContext` drives the context-first tab defaulting below.
+  const activeContext = isComplianceOfficer ? def?.coContext : def?.ownerContext;
 
   // Context-first: entering a question surfaces its context help; a question
   // with no mapped context opens straight into the chat. Re-evaluated whenever
   // the active question (and thus its context) changes.
   const [tab, setTab] = useState<"context" | "chat">("context");
   useEffect(() => {
-    setTab(ownerContext ? "context" : "chat");
-  }, [questionKey, ownerContext]);
+    setTab(activeContext ? "context" : "chat");
+  }, [questionKey, activeContext]);
 
   // Cycle the human-readable progress lines while a turn is in flight. Advances
   // but holds on the last line (doesn't loop back) so it reads as forward motion.
@@ -397,12 +596,16 @@ export function ComplianceAdvisor({
 
         {tab === "context" ? (
           <div className="min-w-0 flex-1 overflow-y-auto px-7 pb-6 pt-2">
-            {ownerContext ? (
+            {activeContext ? (
               <>
                 <h3 className="mb-4 text-[18px] font-semibold leading-[26px] text-foreground">
                   This section refers to the EU AI Act regarding…
                 </h3>
-                <OwnerContextBody text={ownerContext} />
+                {isComplianceOfficer ? (
+                  <CoContextBody text={activeContext} />
+                ) : (
+                  <OwnerContextBody text={activeContext} />
+                )}
               </>
             ) : (
               <p className="text-sm text-muted-foreground">
