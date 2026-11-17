@@ -94,9 +94,12 @@ export default function AssessmentApp() {
       // also holds systems:write (for system registration/editing), it must not
       // trigger prefill/reclassification by opening an assessment. Writers who
       // are NOT approvers (owner / engineer) first check /state:
-      //   • questions already seeded → use state directly (method was chosen)
-      //   • no questions yet (fresh system) → redirect to method selection so the
+      //   • cycle already opened (question_states seeded) → use state directly
+      //     (method was chosen).
+      //   • not yet opened (fresh cycle) → redirect to method selection so the
       //     user picks AI-assisted vs manual before we call /open.
+      // NOTE: `questions` is always the full static catalogue — it can't signal
+      // "already opened". `prefilled` (question_states seeded) is the real flag.
       if (viewAssessmentId) {
         const s = await api.getAssessmentState(id, viewAssessmentId);
         setState(s);
@@ -105,8 +108,8 @@ export default function AssessmentApp() {
         setState(s);
       } else if (can("systems:write")) {
         const s = await api.getAssessmentState(id);
-        if (s.questions.length === 0) {
-          // No questions seeded yet — send to method selection.
+        if (!s.prefilled) {
+          // Cycle not opened yet — send to method selection.
           navigate(`/systems/${id}/assessment/method`, { replace: true });
           return;
         }

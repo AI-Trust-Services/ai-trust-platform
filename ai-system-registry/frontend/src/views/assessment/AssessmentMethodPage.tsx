@@ -36,9 +36,11 @@ export default function AssessmentMethodPage() {
       api.listIndexedDocuments(id).catch(() => [] as IndexedDocument[]),
     ])
       .then(([state, system, docs]) => {
-        // If an assessment is already open (questions seeded), skip method
-        // selection and go straight to the assessment.
-        if (state.questions.length > 0) {
+        // If this cycle has already been opened (question_states seeded via
+        // /open or /open-manual), skip method selection and go straight to the
+        // assessment. NOTE: `questions` is always the full static catalogue, so
+        // it can't signal "already opened" — `prefilled` is the real flag.
+        if (state.prefilled) {
           navigate(`/systems/${id}/assessment`, { replace: true });
           return;
         }
