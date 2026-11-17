@@ -41,11 +41,9 @@ kubectl get componentversion,resource,fluxdeployer -n ocm-system
 kubectl get helmrelease ai-trust-<namespace> -n ocm-system -o wide
 kubectl get pods -n <namespace>
 ```
-- OCM component descriptor: `.ocm/component-constructor.yaml`
-- OCM CRs (ComponentVersion, Resource, FluxDeployer), all named per `${NAMESPACE}`: `k8s/ocm/manifests.yaml`
-- Per-cluster env: `k8s/env/<cluster>/.env` (`K8S_NAMESPACE` sets that cluster's default namespace)
-- One-time cluster/namespace setup: `k8s/gardener_init/shoot-cluster-init.sh <cluster> [--namespace=<namespace>]` (installs OCM controller, Flux, Traefik, per-namespace DNS + TLS cert, RBAC — default namespace `ai-trust`; pass `--namespace=<name>` to additionally provision a developer/PR namespace on a shared cluster)
-- **PR deployment test** — adding the `garden-deploy` label to a PR (`.github/workflows/pr-deployment-test.yml`) deploys the PR branch to a namespace derived from the PR author on `ai-trust-test`. It runs the whole build→package→publish→deploy pipeline as one job (`namespace-deployment-test`) via composite actions + `docker-bake.hcl` (not a `workflow_call` to `build-push-deploy.yml`); the job's pass/fail is the PR check. That namespace must be initialized once via `shoot-cluster-init.sh ai-trust-test --namespace=<github-username>`.
+- Files: `.ocm/component-constructor.yaml` (descriptor), `k8s/ocm/manifests.yaml` (CRs, named per `${NAMESPACE}`), `k8s/env/<cluster>/.env` (`K8S_NAMESPACE` = cluster default namespace).
+- One-time setup: `k8s/gardener_init/shoot-cluster-init.sh <cluster> [--namespace=<namespace>]` — `--namespace` additionally provisions a developer/PR namespace on a shared cluster.
+- **PR deployment test** — the `garden-deploy` label deploys the PR to a namespace derived from the PR author on `ai-trust-test` (namespace must be initialized once via `shoot-cluster-init.sh ai-trust-test --namespace=<github-username>`). Details → [docs/ci-cd.md](docs/ci-cd.md).
 
 ### Run tests (any backend)
 ```bash
@@ -63,62 +61,24 @@ make test                # all tests
 Workers (`audit-flush-worker`, `policy-checker-worker`, `consumers/clickhouse-consumer`) follow the same pattern but live without a `backend/` subdirectory — `cd <worker-dir>` instead of `cd <component>/backend`.
 
 ### Integration tests (cross-service, live platform)
-`tests/integration/` is a **global** suite — it is not per-component and does not use ASGITransport. It
-drives real HTTP against a **running** platform (kind or a Gardener namespace) to verify contracts that
-span services: registry↔compliance shared `ai_systems` data, the evidence→requirement→obligation→assessment
-cascade, RBAC denials across backends, and the admin→users internal HTTP call.
+`tests/integration/` is a **global** suite (not per-component, no ASGITransport) that drives real HTTP against a **running** platform to verify cross-service contracts (registry↔compliance shared data, the evidence→requirement→obligation→assessment cascade, cross-backend RBAC denials, admin→users call).
 
 ```bash
-make test-e2e                       # per-service e2e tests (kind cluster, forwards Postgres + ClickHouse only)
-make test                           # test-e2e then test-int (full local suite)
-make test-int                       # kind cluster, namespace ai-trust
+make test-e2e   # per-service e2e tests (kind cluster, forwards Postgres + ClickHouse only)
+make test       # test-e2e then test-int (full local suite)
+make test-int   # kind cluster, namespace ai-trust
 ```
-- The `k8s/` make targets are **kind-only** — the namespace is fixed to `ai-trust` and cannot be
-  overridden from the environment (`NAMESPACE := ai-trust` in the Makefile wins over the environment).
-  Remote Gardener namespaces are only ever targeted by CI, which calls `k8s/scripts/forward-ports.sh`
-  directly with the namespace.
-- `make test-int` starts the port-forwards, runs pytest, and stops them again **even on failure**.
-- Services are reached via `kubectl port-forward` (`k8s/scripts/forward-ports.sh` / `kill-port-forwards.sh`)
-  on their in-cluster ports; every URL is overridable via env var (`REGISTRY_URL`, `COMPLIANCE_URL`, …).
-  The suite covers the MVP backends that expose cross-service contracts — `overview` and `dta` are
-  read-only and out of scope, and `monitoring`/`alerts` are `[MVP-off]` (dropped from the port-forward
-  list and the health smoke test; re-add them when GenAI-observability is re-enabled).
-- Auth bypasses oauth2-proxy by setting `X-Forwarded-Preferred-Username` directly, the same pattern the
-  per-service e2e tests use. `APP_ADMIN_USERNAME` (default `admin`) selects the platform admin used to
-  assign roles.
-- **Not a PR gate.** The `Integration Tests` workflow (`.github/workflows/integration-tests.yml`) runs
-  *after* a successful `PR Deployment Test` or `Deployment Workflow`, and optionally on demand via
-  **Run workflow** (`workflow_dispatch`). Both paths report to a single `integration-tests` commit
-  status on the PR head / pushed commit, overwritten in place: a step in `pr-deployment-test.yml` seeds
-  it pending, and the post-deployment run finalises it — so the result is visible on the PR and on main
-  even though `workflow_run` runs are attached to the default branch. `integration-tests.yml`
-  deliberately has no `pull_request:` trigger, because every job in such a workflow gets pinned to the
-  PR as its own check run. Its result never changes the deployment workflow's status.
-- Details → [tests/integration/README.md](tests/integration/README.md).
+- The `k8s/` make targets are **kind-only** — `NAMESPACE := ai-trust` in the Makefile wins over the environment. Remote Gardener namespaces are only targeted by CI, which calls `k8s/scripts/forward-ports.sh` directly.
+- Auth bypasses oauth2-proxy by setting `X-Forwarded-Preferred-Username` directly (same as the per-service e2e tests); `APP_ADMIN_USERNAME` (default `admin`) selects the admin used to assign roles. URLs are overridable via env (`REGISTRY_URL`, …).
+- **Not a PR gate** — `integration-tests.yml` runs *after* a successful `PR Deployment Test` / `Deployment Workflow` (or on demand) and reports an `integration-tests` commit status. Details → [tests/integration/README.md](tests/integration/README.md).
 
 ### On-demand label workflows (deployed-namespace, OIDC)
-Two workflows run automatically after a successful deployment, exactly like `integration-tests.yml`
-(`workflow_run` after `PR Deployment Test` / `Deployment Workflow`, plus `workflow_dispatch`; result
-reported as a commit status — `e2e-system-tests` / `playwright-tests` — seeded pending by the deploy
-workflows). Both authenticate through oauth2-proxy with a real Keycloak OIDC session — no kubeconfig
-or port-forward (contrast `tests/integration/`). Neither is a PR gate. Playwright can also be
-(re-)run on a PR via the `playwright-test` label (runs the branch's copy of the workflow). The third
-(`langfuse-test`) is label-triggered against the PR author's deployed namespace on `ai-trust-test`.
-- **`e2e-system-tests`** → `.github/workflows/e2e-system-tests.yml` runs `tests/e2e_system/` (black-box OIDC
-  E2E: auth, registration, self-assessment, classification) against the deployed namespace.
-- **`playwright-tests`** → `.github/workflows/playwright-frontend-tests.yml` runs `tests/playwright/`
-  (`@playwright/test`, TypeScript): a real browser logs in via OIDC, smoke-tests that each MVP MFE
-  mounts + its backend is healthy, and registers an AI system end-to-end. A `setup` project
-  provisions personas and captures one `storageState` each; a `teardown` project cleans up. The HTML
-  report + `test-results/` (traces, failure screenshots, videos) are uploaded as CI artifacts.
-  Details → [tests/playwright/README.md](tests/playwright/README.md) and the Frontend tests section
-  of [docs/tests.md](docs/tests.md).
-- **`langfuse-test`** → `.github/workflows/langfuse-benchmark.yml` runs
-  `tests/langfuse_benchmark/benchmark.py`: batch-imports the 339 ground-truth scenarios via
-  `POST /api/registry/v1/intake/batch` (needs `ENABLE_BATCH_IMPORT=true`, set in
-  `k8s/env/ai-trust-test/.env`), classifies each through `/classify/evaluate`, and pushes a scored
-  dataset + experiment run to Langfuse (`LANGFUSE_*` repo secrets). Details →
-  [tests/langfuse_benchmark/README.md](tests/langfuse_benchmark/README.md).
+Three workflows test a **deployed** namespace through oauth2-proxy with a real Keycloak OIDC session (no kubeconfig/port-forward). None is a PR gate; each reports a commit status:
+- **`e2e-system-tests`** (`e2e-system-tests.yml`) → `tests/e2e_system/` black-box OIDC E2E. Runs after a successful deployment.
+- **`playwright-tests`** (`playwright-frontend-tests.yml`) → `tests/playwright/` browser smoke + registration flow. Runs after deployment; re-run on a PR via the `playwright-test` label. Details → [tests/playwright/README.md](tests/playwright/README.md).
+- **`langfuse-test`** (`langfuse-benchmark.yml`) → `tests/langfuse_benchmark/` scores the 339 ground-truth scenarios and pushes a Langfuse experiment run. Label-triggered on the PR author's namespace on `ai-trust-test`. Details → [tests/langfuse_benchmark/README.md](tests/langfuse_benchmark/README.md).
+
+Full workflow semantics (status seeding, `workflow_run` triggers, enabled backends) → [docs/tests.md](docs/tests.md#ci-test-workflows).
 
 ### Pre-push checks
 Run these from the repo root before pushing to avoid CI failures:
@@ -276,60 +236,13 @@ Static HTML + `luigi-config.js` served by nginx (Luigi core from CDN). Nav nodes
 
 ## MVP scope — disabling services without removing code
 
-The platform ships a trimmed **MVP scope**: **Core governance** (registry,
-compliance, overview, users/IAM, admin, shell + Postgres/Keycloak/OpenFGA/MinIO),
-the **RAG indexing backend** (document-indexing, embedding-service), and
-the **Audit** trail (audit backend/frontend + audit-flush-worker + ClickHouse).
-**Disabled** for the MVP: the **AI test-bed** MFE (ai-test-bed backend/frontend +
-its `testbed-seed` Job — the RAG layer it consumed, document-indexing +
-embedding-service, stays enabled), **GenAI-Observability** (monitoring, alerts,
-decision-trace-analyzer) and the **OTLP telemetry pipeline**
-(otel-collector, otel-rmq-bridge, otel-clickhouse-consumer). Disabling the OTLP
-pipeline also drops the **RabbitMQ** StatefulSet — it has no other consumer (the
-OTLP pipeline is RabbitMQ's only user; the indexing worker polls Postgres, not
-RabbitMQ). **ClickHouse** stays enabled because Audit reads and writes it
-(monitoring/alerts/dta are its only other readers).
+The platform ships a trimmed **MVP scope**. **Enabled:** core governance (registry, compliance, overview, users/IAM, admin, shell + Postgres/Keycloak/OpenFGA/MinIO), the RAG indexing backend (document-indexing, embedding-service) and Audit (audit backend/frontend, audit-flush-worker, ClickHouse). **Disabled:** the AI test-bed MFE (+ `testbed-seed` Job), GenAI-Observability (monitoring, alerts, decision-trace-analyzer) and the OTLP pipeline (otel-collector, otel-rmq-bridge, otel-clickhouse-consumer, and with them RabbitMQ).
 
-**Nothing is deleted** — every disabled component's source, Dockerfile, template
-and manifest entry stays in the repo. A service is switched off by config across
-the layers below; grep `[MVP-off]` to find every toggle.
+**Nothing is deleted** — a service is switched off by config across build, OCM, Helm, nginx and nav layers; grep `[MVP-off]` to find every toggle. Two toggles are **mandatory** when disabling/re-enabling:
+- `.ocm/component-constructor.yaml` must list an image **iff** it is in `docker-bake.hcl` `group "default"` — a listed-but-unbuilt image aborts the deploy (`cannot determine digest`).
+- `shell/nginx.conf` `location` blocks for a disabled service must be commented out — static `proxy_pass` hostnames resolve at startup, so a missing upstream stops the shell from starting.
 
-| Layer | File | How it's toggled |
-|---|---|---|
-| Build (CI) | `docker-bake.hcl` `group "default"` | image commented out of the build list (the `target` block stays — build it ad-hoc with `docker buildx bake <name>`) |
-| OCM (CI) | `.ocm/component-constructor.yaml` | `ociImage` resource commented out — **mandatory**: `ocm add componentversions` resolves the digest of every listed image, so a listed-but-unbuilt image aborts the deploy with `cannot determine digest: ... not found`. Must mirror the bake list exactly |
-| Build (kind) | `k8s/scripts/build-and-load-images.sh` | `MVP_DISABLED` guard in `build()`; override with `--service <name>` |
-| Deploy (MFE pairs) | `values.yaml` `components[].enabled` + `templates/components.yaml` | `enabled: false` skips rendering. Guard is `ne $c.enabled false` → absent/true still renders (existing components need no flag) |
-| Deploy (infra/workers) | `values.yaml` `rabbitmq`/`otel`/`policyChecker` `.enabled` | each template wrapped in `{{- if .Values.<x>.enabled }}`. **ClickHouse and the audit-flush-worker are never gated** — Audit is always-on, so ClickHouse, the `clickhouse-migrate` Job (jobs.yaml), and `audit-flush-worker` render unconditionally |
-| Seed Jobs | `templates/jobs.yaml` | a Job that reuses a disabled MFE image must be gated too, else it ImagePullBackOffs. The `testbed-seed` Job is wrapped in a `{{- if $testbedEnabled }}` that scans `components` for `ai-test-bed` with `ne .enabled false` — so flipping the `ai-test-bed` component flag toggles the seed Job with it |
-| Proxy | `shell/nginx.conf` | the service's `location` blocks commented out — **mandatory**: static `proxy_pass` hostnames resolve at nginx startup, so a missing upstream stops the shell (the entry point) from starting at all. Contrast the `/api/cognee/` block, which uses `resolver` + a variable to defer resolution and tolerate absence |
-| Nav | `shell/public/luigi-config.js` | the nav node object commented out; the shell-bar alerts bell injection block (linked to the removed `/home/alerts` node) is also commented out |
-
-**Re-enabling a service:** flip its `enabled` flag(s) in `values.yaml`, un-comment its target in `docker-bake.hcl`
-`group "default"`, un-comment its `ociImage` entry in `.ocm/component-constructor.yaml` (must match the bake list —
-an unbuilt-but-listed image breaks `ocm add componentversions`),
-remove it from the `MVP_DISABLED` array in `build-and-load-images.sh`, and un-comment its entries in
-`shell/nginx.conf` and `shell/public/luigi-config.js`.
-Then rebuild the image and `make build && make upgrade && make rollout`.
-
-**OCM descriptor tracks the build list:**
-- `.ocm/component-constructor.yaml` lists only the images that are actually built.
-  Every `[MVP-off]` image is commented out here too, mirroring `docker-bake.hcl`.
-  `ocm transfer` never pulls images (it runs without `--copy-resources`), but the
-  earlier `ocm add componentversions` step **resolves the digest of every listed
-  image** — so a listed-but-unbuilt image is *not* harmless: it aborts the build
-  with `cannot determine digest: oci artifact ... not found`. A *missing* OCM entry
-  for a *deployed* image ships broken (see "Adding a new service"), so the rule is:
-  an image must be in this file **iff** it is in `docker-bake.hcl` `group "default"`.
-  When re-enabling a service, un-comment its entry here in the same step you
-  un-comment it in `docker-bake.hcl`.
-
-**Deliberately left untouched:**
-- `tests/integration/` still exercises the enabled backends against an MVP
-  deployment. The `[MVP-off]` backends (`monitoring`, `alerts`) have been
-  dropped from its port-forward list and health smoke test so the suite runs
-  clean against the MVP; the cross-service contract tests only ever touched
-  enabled backends. It remains **not a PR gate** (see "Integration tests" above).
+Layer-by-layer table and re-enable steps → [docs/mvp-scope.md](docs/mvp-scope.md).
 
 ## Components
 
@@ -364,23 +277,9 @@ When you add a new service, update all of these together — nothing enforces pa
 ### ai-system-registry/ (port 8001, `/api/registry/`)
 AI system registration and EU AI Act classification. LLM prompt wording is externalized to repo-root `context/prompts/*.md` (loaded by `ai-system-registry/backend/app/llm/templates.py`, baked into the image via that backend's Dockerfile). Details → [ai-system-registry/CLAUDE.md](ai-system-registry/CLAUDE.md).
 
-**External read API** (`routers/external.py`, `/v1/external/*`) — a read-only surface for an off-platform consumer (e.g. an extracted AI Test Bed repo), guarded by a static **bearer token** (`EXTERNAL_API_TOKEN`) instead of oauth2-proxy/OpenFGA: `GET /external/systems[/{id}]` (registration info), `GET /external/systems/{id}/assessment` (EU AI Act classification + justification), `POST /external/systems/{id}/context` (`search_ai_system_context` — proxies document-indexing `/v1/retrieve`, forwarding the seeded `svc-external-api` principal). Token unset → 503 (feature off). The token is surfaced read-only in the Admin Settings UI. **Single-tenant deployments only (`TENANCY_MODE=single`)** — a static-bearer caller carries no tenant OIDC claim, so in `jwt` mode the tenant middleware fail-closes the whole surface with 401 before the route runs (by design; the fix is not to punch a tenant-isolation hole for this path). Multi-tenant support would need the external token to map to a tenant and propagate real tenant credentials downstream — out of scope for now.
+**External read API** (`/v1/external/*`) — read-only surface for an off-platform consumer, guarded by a static bearer token (`EXTERNAL_API_TOKEN`; unset → 503) instead of oauth2-proxy/OpenFGA. **Single-tenant only** — in `jwt` mode the tenant middleware 401s it by design. Details → [ai-system-registry/CLAUDE.md](ai-system-registry/CLAUDE.md).
 
-**Model Cards** (`routers/model_cards.py`, IDs prefixed `MDL-`) — standalone model documentation objects, linked N:M to AI systems via `ai_system_model_cards` join table (with an optional `role` string).
-- `GET /model-cards` — flat list (no children loaded; `metrics`/`sources`/`datasets` always `[]`). `?limit=50&offset=0` (max 200).
-- `POST /model-cards` — creates a card; requires `name`. Returns full tree.
-- `GET /model-cards/{id}` — full nested tree (metrics, sources, datasets with preparations/measurements/feature_stores).
-- `PATCH /model-cards/{id}` — partial update of scalar fields via `model_fields_set`; empty body is a valid no-op (200).
-- `DELETE /model-cards/{id}` — returns the deleted card.
-- `POST /model-cards/{id}/metrics` (IDs `MCM-`) · `DELETE /model-cards/{id}/metrics/{mid}` — add/remove a metric row. DELETE filters by both `metric_id` AND `card_id` — wrong-card deletes return 404.
-- `POST /model-cards/{id}/sources` (IDs `MCS-`) · `DELETE /model-cards/{id}/sources/{sid}` — same pattern.
-- `POST /model-cards/{id}/datasets` (IDs `MCD-`) — creates dataset with nested `preparations` (ordered, IDs `MCP-`), `measurements` (`MCE-`), `feature_stores` (`MCF-`) + groups (`MCG-`). Returns the new dataset (not the full card).
-- `PATCH /model-cards/{id}/datasets/{did}` — scalar-only patch; children (preparations etc.) are untouched. Returns the updated dataset.
-- `PUT /model-cards/{id}/datasets/{did}` — **full replace**: deletes all children, re-inserts from body. Returns **204 No Content** (no body).
-- `DELETE /model-cards/{id}/datasets/{did}` — returns `{"status":"deleted","id":...}`. Wrong-card deletes return 404.
-- `GET /model-cards/{id}/systems` — AI systems that link to this card (`ModelSystemResponse`: system scalars + `role`).
-- `GET /systems/{id}/models` · `POST /systems/{id}/models` · `DELETE /systems/{id}/models/{card_id}` — list/link/unlink model cards on a system. POST is an upsert (updates `role` on repeat). DELETE returns `{"status":"unlinked","system_id":...,"model_card_id":...}`.
-- **Schemas** — `ModelCardResponse` (flat for list, nested for single GET), `SystemModelResponse` (extends `ModelCardResponse` + `role`), `ModelSystemResponse` (system scalars + `role: str | None = None`; `role` has a default because it comes from the join table, not the system row).
+**Model Cards** (`routers/model_cards.py`, IDs `MDL-`) — standalone model documentation, N:M-linked to AI systems via `ai_system_model_cards`. Full route list and schemas → [docs/model-cards-api.md](docs/model-cards-api.md).
 
 ### overview/ (port 8004, `/api/overview/`)
 Compliance-posture MFE, reads Postgres only, static HTML frontend. Details → [overview/CLAUDE.md](overview/CLAUDE.md).
@@ -424,10 +323,10 @@ See `.env.example` for the full list, defaults, and per-service mapping. Notable
 - **Auth** — `KEYCLOAK_*`, `USERS_BACKEND_CLIENT_SECRET`, `APP_PUBLIC_URL`, `APP_ADMIN_*`, `OAUTH2_PROXY_COOKIE_SECRET` (exactly 16/24/32 chars).
 - **compliance MinIO** — `MINIO_ENDPOINT` (in-cluster, uploads), `MINIO_PUBLIC_ENDPOINT` (presigned URLs), `MINIO_SECURE`, `MINIO_REGION`.
 - **alerts** — `ALERT_POLL_INTERVAL` (10 dev, 60+ prod).
-- **external read API** — `EXTERNAL_API_TOKEN` (required to enable `/api/registry/v1/external/*`; the static bearer token the off-platform consumer presents as `Authorization: Bearer <token>`; unset → those endpoints return 503), `EXTERNAL_API_SERVICE_PRINCIPAL` (default `svc-external-api`); the registry reuses `INDEXING_BACKEND_URL` for the context-retrieval proxy. Both the registry (validates) and the admin backend (surfaces the token read-only in Settings) read these. **Single-tenant only** — in `jwt` tenancy mode the tenant middleware 401s the bearer path (see the external read API note above).
-- **admin SMTP** — `SMTP_HOST/PORT/USER/PASSWORD/FROM/FROM_NAME/SSL/STARTTLS` seed the `platform_settings` row on first startup of the admin backend. After that, the DB value wins — changes via the Admin UI persist across redeploys. The registry backend also reads these same vars directly from the environment for its fire-and-forget notifications (it does not read from `platform_settings`).
-- **registry LLM (Thalamus)** — `THALAMUS_BASE_URL` (unset or `"stub"` = offline deterministic stub for dev/CI; set to the gateway URL incl. `/v1` for real inference, e.g. `https://api.thalamus.eu-de-1.cloud.sap/v1`), `THALAMUS_BEARER_TOKEN` (static token sent as `Authorization: Bearer`; required when a real URL is set — backend fails fast if empty), `THALAMUS_MODEL`, `THALAMUS_VISION_MODEL` (defaults to `THALAMUS_MODEL`); `ASSIST_TURN_CAP` (12), `ASSIST_MAX_TEXT_LENGTH` (15000), `QUESTIONNAIRE_MAX_TOKENS` (24000 — output-token cap per questionnaire-answer batch). Thalamus is OpenAI-compatible and is the **single inference backend** for both the registry and cognee-eval; switching models is a config-only change to `THALAMUS_MODEL` (no code change).
-- **Langfuse tracing** (optional, all backends via `ai-trust-env`) — `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` (blank = tracing disabled; keys are GitHub secrets overridden by CI). A Langfuse project is fixed by its key pair, so per-deployment separation is by the Langfuse `environment`: `LANGFUSE_TRACING_ENVIRONMENT` is **auto-derived from the deploy namespace** (= the GitHub username of whoever deployed) by `k8s/scripts/bootstrap.sh` and the CI deploy — never set it by hand.
+- **external read API** — `EXTERNAL_API_TOKEN` (static bearer for `/api/registry/v1/external/*`; unset → 503), `EXTERNAL_API_SERVICE_PRINCIPAL` (default `svc-external-api`); reuses `INDEXING_BACKEND_URL`. Read by the registry (validates) and the admin backend (shows the token read-only). **Single-tenant only** — 401 in `jwt` mode. Details → [ai-system-registry/CLAUDE.md](ai-system-registry/CLAUDE.md).
+- **admin SMTP** — `SMTP_*` seed the `platform_settings` row on first admin startup; afterwards the DB value wins (Admin UI changes persist across redeploys). The registry reads the same vars directly from the environment for notifications, not from `platform_settings`.
+- **registry LLM (Thalamus)** — `THALAMUS_BASE_URL` (unset or `"stub"` = offline stub for dev/CI), `THALAMUS_BEARER_TOKEN` (required with a real URL — fails fast if empty), `THALAMUS_MODEL`, `THALAMUS_VISION_MODEL`; also `ASSIST_TURN_CAP`, `ASSIST_MAX_TEXT_LENGTH`, `QUESTIONNAIRE_MAX_TOKENS`. OpenAI-compatible, the single inference backend for registry and cognee-eval; switching models is config-only.
+- **Langfuse tracing** (optional) — `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` (blank = off). `LANGFUSE_TRACING_ENVIRONMENT` is auto-derived from the deploy namespace by `k8s/scripts/bootstrap.sh` and CI — never set it by hand.
 
 ## otel-pipeline/
 
