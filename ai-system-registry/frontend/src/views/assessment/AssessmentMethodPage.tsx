@@ -23,13 +23,19 @@ export default function AssessmentMethodPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const navState = location.state as { from?: string; newCycle?: boolean } | null;
-  // Where Cancel returns to: the page that launched this flow (threaded via
-  // location.state.from), falling back to the system detail page — never the
-  // landing page, which is where navigate(-1) ends up on a cross-MFE entry.
-  const cancelTo = navState?.from ?? `/systems/${id}`;
   // "Start new assessment" sets newCycle: archive the approved cycle (or reopen
   // the current one) via /start-new, and don't bounce off an already-opened cycle.
   const newCycle = navState?.newCycle ?? false;
+
+  // Cancel returns to wherever the flow was launched. In-MFE launches (detail
+  // page, systems list) thread an explicit `from` so we navigate there directly.
+  // A cross-MFE launch (e.g. the overview landing page) carries no `from` — the
+  // browser history is the only link back, so fall back to top-window back, which
+  // is unreliable for in-MFE routes but correct for a shell-level node.
+  function cancel() {
+    if (navState?.from) navigate(navState.from);
+    else (window.top ?? window).history.back();
+  }
   const [selected, setSelected] = useState<Method>("ai");
   const [systemName, setSystemName] = useState("");
   const [coName, setCoName] = useState("");
@@ -297,7 +303,7 @@ export default function AssessmentMethodPage() {
         <div className="mx-auto flex h-10 w-full max-w-[912px] items-center justify-between">
           <Button
             variant="outline"
-            onClick={() => navigate(cancelTo)}
+            onClick={cancel}
             className="h-auto rounded-[10px] px-[10px] py-1.5"
           >
             Cancel
