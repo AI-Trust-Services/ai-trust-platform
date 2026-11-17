@@ -318,7 +318,7 @@ See `.env.example` for the full list. Notable groups:
 - **alerts** — `ALERT_POLL_INTERVAL` (10 dev, 60+ prod).
 - **external read API** — `EXTERNAL_API_TOKEN` (static bearer for `/api/registry/v1/external/*`; unset → 503), `EXTERNAL_API_SERVICE_PRINCIPAL` (default `svc-external-api`). Single-tenant only. Details → [ai-system-registry/CLAUDE.md](ai-system-registry/CLAUDE.md).
 - **admin SMTP** — `SMTP_*` seed `platform_settings` on first startup; DB value wins afterwards. The registry reads these vars **directly from env** for notifications — it does not read `platform_settings`, so Admin UI SMTP changes do not affect registry emails.
-- **registry LLM (Thalamus)** — `THALAMUS_BASE_URL` (unset or `"stub"` = offline stub), `THALAMUS_BEARER_TOKEN` (required with real URL), `THALAMUS_MODEL`, `THALAMUS_VISION_MODEL`; also `ASSIST_TURN_CAP`, `ASSIST_MAX_TEXT_LENGTH`, `QUESTIONNAIRE_MAX_TOKENS`.
+- **registry LLM (Thalamus)** — `THALAMUS_BASE_URL` (unset or `"stub"` = offline stub), `THALAMUS_BEARER_TOKEN` (required with real URL), `THALAMUS_MODEL`, `THALAMUS_VISION_MODEL`; also `ASSIST_TURN_CAP`, `ASSIST_MAX_TEXT_LENGTH`, `QUESTIONNAIRE_MAX_TOKENS`. Thalamus is OpenAI-compatible and is the **single inference backend** for both the registry and cognee-eval; switching models is a config-only change to `THALAMUS_MODEL` (no code change).
 - **Langfuse tracing** (optional) — `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` (blank = off). `LANGFUSE_TRACING_ENVIRONMENT` is auto-derived from the namespace — never set by hand.
 
 ## otel-pipeline/
