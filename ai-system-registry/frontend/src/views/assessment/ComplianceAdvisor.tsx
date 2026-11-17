@@ -221,9 +221,10 @@ function OwnerContextBody({ text, examples }: { text: string; examples?: string 
     <div className="space-y-3 text-sm leading-relaxed text-[#18181d]">
       {ownerBlocks.map((b, bi) => {
         const hasBody = b.body.some(Boolean);
-        // Each headed section collapses by default (same behaviour as the CO
-        // view); a block with no heading or no body renders plainly.
-        if (!b.heading || !hasBody) {
+        // Every section with content collapses by default (same as the CO
+        // view). A heading-less block (e.g. a context that is a single
+        // paragraph) collapses under a generic "Context" title.
+        if (!hasBody) {
           return (
             <div key={bi} className="space-y-1.5">
               {b.heading && (
@@ -236,7 +237,7 @@ function OwnerContextBody({ text, examples }: { text: string; examples?: string 
           );
         }
         return (
-          <ContextCollapsible key={bi} heading={b.heading}>
+          <ContextCollapsible key={bi} heading={b.heading ?? "Context"}>
             {renderBodyLines(b.body)}
           </ContextCollapsible>
         );
