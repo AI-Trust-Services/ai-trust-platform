@@ -32,6 +32,7 @@ from app.questionnaire_tree import collect_question_ids, label_question_ids
 
 from ai_trust_logging import get_logger
 
+from app.classification_config import DEFAULT_CLASSIFICATION_CONFIG_ID, DEFAULT_CLASSIFICATION_PROMPT_ID
 from app.llm.client import chat
 from app.llm.parsing import LLMParseError, parse_with_retry
 from app.llm.templates import load_template, load_questionnaire
@@ -39,11 +40,6 @@ from app.llm.validators import validate_answer_entries, validate_classification_
 from app import minio_client
 
 logger = get_logger(__name__)
-
-# Template IDs use the subfolder prefix supported by the loader. Shared by every
-# caller so an empty-body request runs exactly what the assessment runs.
-DEFAULT_CLASSIFICATION_PROMPT_ID = "risk_classification/risk_role_classification"
-DEFAULT_CLASSIFICATION_CONFIG_ID = "risk_classification/risk_role_classification_config"
 
 _CLASSIFICATION_MAX_TOKENS = int(os.environ.get("CLASSIFICATION_MAX_TOKENS", "2048"))
 

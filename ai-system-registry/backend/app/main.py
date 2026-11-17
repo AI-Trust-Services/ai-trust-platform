@@ -18,6 +18,7 @@ from app.routers import (
     classification,
     classify,
     external,
+    hierarchy_solver,
     intake,
     intake_assist,
     me,
@@ -115,6 +116,7 @@ app.include_router(me.router, prefix="/v1")
 app.include_router(external.router, prefix="/v1")
 app.include_router(questionnaire.router, prefix="/v1")
 app.include_router(classification.router, prefix="/v1")
+app.include_router(hierarchy_solver.router, prefix="/v1")
 app.include_router(advisor.router, prefix="/v1")
 
 
