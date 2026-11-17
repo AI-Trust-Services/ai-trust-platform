@@ -9,18 +9,16 @@ import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from app.classification_pipeline import (
     DEFAULT_CLASSIFICATION_CONFIG_ID,
     InvalidRunKeyError,
     _check_run_key,
-    _collect_question_ids,
-    _label_question_ids,
     _scope_questionnaire_data,
     run_classification,
 )
 from app.llm.templates import load_questionnaire
-
+from app.questionnaire_tree import collect_question_ids as _collect_question_ids
+from app.questionnaire_tree import label_question_ids as _label_question_ids
 
 # ---------------------------------------------------------------------------
 # _collect_question_ids / _label_question_ids
@@ -242,9 +240,8 @@ async def test_label_with_missing_question_is_skipped_not_classified():
 async def test_foreign_run_key_is_rejected_before_any_minio_read():
     foreign = "questionnaire-results/SYS-OTHER/ai-questionnaire/x.json"
     get_json, put_json, p1, p2, p3 = _minio(_full_questionnaire_result())
-    with p1, p2, p3:
-        with pytest.raises(InvalidRunKeyError):
-            await run_classification(_SYSTEM, foreign)
+    with p1, p2, p3, pytest.raises(InvalidRunKeyError):
+        await run_classification(_SYSTEM, foreign)
     get_json.assert_not_awaited()
     put_json.assert_not_awaited()
 
