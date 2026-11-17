@@ -236,11 +236,10 @@ export default function AssessmentApp() {
             questionKey={activeQuestionKey}
             expanded={advisorExpanded}
             onExpandedChange={setAdvisorExpanded}
-            // The owner-facing Context text is for owners/engineers filling the
-            // questionnaire. The compliance officer (reviewer, systems:approve)
-            // gets CO-specific context under a separate ticket — until then, do
-            // not leak the owner context to them.
-            hideOwnerContext={can("systems:approve")}
+            // The Context tab is role-split: the compliance officer (reviewer,
+            // systems:approve) sees the CO legal context; owners/engineers see
+            // the owner context. Neither sees the other's text.
+            isComplianceOfficer={can("systems:approve")}
           />
         </div>
       </div>

@@ -19,6 +19,11 @@ export interface AiQuestionDef {
    *  companion's Context tab (issue #410). Absent for questions with no
    *  mapped context text. */
   ownerContext?: string;
+  /** Compliance-officer-facing legal context shown display-only in the
+   *  companion's Context tab for the CO (issue #409). Longer, structured legal
+   *  text (Summary / provisions / recitals) with inline external source links.
+   *  Absent for questions with no mapped CO context. */
+  coContext?: string;
 }
 
 const rawQuestions = (questionnaireJson as { questions: AiQuestionDef[] }).questions;
