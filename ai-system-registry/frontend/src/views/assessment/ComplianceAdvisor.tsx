@@ -233,12 +233,17 @@ export function ComplianceAdvisor({
   questionKey,
   expanded,
   onExpandedChange,
+  hideOwnerContext = false,
 }: {
   systemId?: string;
   section?: string;
   questionKey?: string;
   expanded: boolean;
   onExpandedChange: (v: boolean) => void;
+  // The Context tab text is owner/engineer-facing. Set for the compliance
+  // officer so their context is suppressed (CO-specific context arrives under a
+  // separate ticket); the tab then shows the neutral fallback and opens on chat.
+  hideOwnerContext?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -249,9 +254,10 @@ export function ComplianceAdvisor({
   const scrollRef = useRef<HTMLDivElement>(null);
   const guidance = section ? SECTION_GUIDANCE[section] : undefined;
 
-  const ownerContext = questionKey
-    ? QUESTION_DEF_BY_ID[questionKey]?.ownerContext
-    : undefined;
+  const ownerContext =
+    !hideOwnerContext && questionKey
+      ? QUESTION_DEF_BY_ID[questionKey]?.ownerContext
+      : undefined;
 
   // Context-first: entering a question surfaces its context help; a question
   // with no mapped context opens straight into the chat. Re-evaluated whenever
