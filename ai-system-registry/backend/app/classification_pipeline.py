@@ -28,6 +28,8 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
+from app.questionnaire_tree import collect_question_ids, label_question_ids
+
 from ai_trust_logging import get_logger
 
 from app.llm.client import chat
@@ -48,41 +50,6 @@ _CLASSIFICATION_MAX_TOKENS = int(os.environ.get("CLASSIFICATION_MAX_TOKENS", "20
 
 class InvalidRunKeyError(ValueError):
     """The questionnaire run key does not belong to the system being classified."""
-
-
-# ---------------------------------------------------------------------------
-# Question-id collection (recursive rule-tree walk)
-# ---------------------------------------------------------------------------
-
-
-def _collect_question_ids(node: Any) -> set[str]:
-    """Recursively walk a label rule's ``when`` tree and collect all questionId values."""
-    if isinstance(node, list):
-        ids: set[str] = set()
-        for item in node:
-            ids |= _collect_question_ids(item)
-        return ids
-    if isinstance(node, dict):
-        if "questionId" in node:
-            return {node["questionId"]}
-        ids = set()
-        for value in node.values():
-            ids |= _collect_question_ids(value)
-        return ids
-    return set()
-
-
-def _label_question_ids(label: dict) -> set[str]:
-    """Collect all questionIds referenced by any rule in a label."""
-    ids: set[str] = set()
-    for rule in label.get("rules", []):
-        ids |= _collect_question_ids(rule.get("when", {}))
-    return ids
-
-
-# ---------------------------------------------------------------------------
-# Questionnaire data scoping
-# ---------------------------------------------------------------------------
 
 
 def _scope_questionnaire_data(
@@ -227,7 +194,7 @@ async def run_classification(
     runnable: list[tuple[dict, list[dict]]] = []
     skipped: list[dict] = []
     for label in active_labels:
-        question_ids = _label_question_ids(label)
+        question_ids = label_question_ids(label)
         scoped = _scope_questionnaire_data(questionnaire_results, question_ids)
         missing = sorted(question_ids - {r.get("questionId") for r in scoped})
         if missing:
