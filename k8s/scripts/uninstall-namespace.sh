@@ -14,7 +14,8 @@
 #   3. StatefulSets, Deployments, Jobs  --force --grace-period=0  in <ns>  (controllers first, else pods respawn)
 #   4. ReplicaSets, Pods  --force --grace-period=0     in <ns>
 #   5. PVCs               --force --grace-period=0     in <ns>  (after pods, so pvc-protection releases)
-#   6. Verifies pods/PVCs/StatefulSets are gone; strips PVC finalizers as a last resort.
+#   6. Verifies pods/PVCs/StatefulSets/Deployments/Jobs and both Flux objects are gone;
+#      strips PVC finalizers as a last resort.
 #
 # What it deliberately KEEPS: the namespace itself, Secrets/ConfigMaps (incl. the TLS cert secret),
 # the Gardener Certificate, the Traefik ServersTransport and the RBAC Roles - all provisioned once by
@@ -144,9 +145,12 @@ if ! wait_gone "FluxDeployer ${RELEASE}" release_objects "$FLUXDEPLOYER"; then
 fi
 
 # ---------------------------------------------------------------- namespaced workloads
-if [[ "$DRY_RUN" != "1" ]] && ! kubectl get namespace "$NS" >/dev/null 2>&1; then
-  log "namespace '${NS}' does not exist yet - first deploy, nothing else to clean"
-  exit 0
+if [[ "$DRY_RUN" != "1" ]]; then
+  namespace_object="$(kubectl get namespace "$NS" -o name --ignore-not-found)" || die "unable to check namespace '${NS}'"
+  if [[ -z "$namespace_object" ]]; then
+    log "namespace '${NS}' does not exist yet - first deploy, nothing else to clean"
+    exit 0
+  fi
 fi
 
 log "deleting controllers in ${NS} (so pods are not recreated)"
@@ -168,6 +172,8 @@ if ! wait_gone "pods in ${NS}" names pods "$NS"; then
 fi
 
 wait_gone "statefulsets in ${NS}" names statefulsets "$NS" || failed=1
+wait_gone "deployments in ${NS}" names deployments "$NS" || failed=1
+wait_gone "jobs in ${NS}" names jobs "$NS" || failed=1
 
 if ! wait_gone "PVCs in ${NS}" names pvc "$NS"; then
   for pvc in $(names pvc "$NS"); do
@@ -176,10 +182,8 @@ if ! wait_gone "PVCs in ${NS}" names pvc "$NS"; then
   wait_gone "PVCs in ${NS} (after finalizer strip)" names pvc "$NS" || failed=1
 fi
 
-if [[ "$DRY_RUN" != "1" ]] && kubectl get "$HELMRELEASE" "$RELEASE" -n "$OCM_NS" >/dev/null 2>&1; then
-  warn "HelmRelease ${RELEASE} still exists"
-  failed=1
-fi
+wait_gone "HelmRelease ${RELEASE} (final)" release_objects "$HELMRELEASE" || failed=1
+wait_gone "FluxDeployer ${RELEASE} (final)" release_objects "$FLUXDEPLOYER" || failed=1
 
 if ((failed)); then
   die "namespace '${NS}' was not fully cleaned - see warnings above"

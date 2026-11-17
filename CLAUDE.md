@@ -102,8 +102,8 @@ Two workflows run automatically after a successful deployment, exactly like `int
 (`workflow_run` after `PR Deployment Test` / `Deployment Workflow`, plus `workflow_dispatch`; result
 reported as a commit status — `e2e-system-tests` / `playwright-tests` — seeded pending by the deploy
 workflows). Both authenticate through oauth2-proxy with a real Keycloak OIDC session — no kubeconfig
-or port-forward (contrast `tests/integration/`). Neither is a PR gate. Playwright can also be
-(re-)run on a PR via the `playwright-test` label (runs the branch's copy of the workflow). The third
+or port-forward (contrast `tests/integration/`). Neither is a PR gate. Playwright can be re-run
+on demand via **Run workflow** (`workflow_dispatch`). The third
 (`langfuse-test`) is label-triggered against the PR author's deployed namespace on `ai-trust-test`.
 - **`e2e-system-tests`** → `.github/workflows/e2e-system-tests.yml` runs `tests/e2e_system/` (black-box OIDC
   E2E: auth, registration, self-assessment, classification) against the deployed namespace.
