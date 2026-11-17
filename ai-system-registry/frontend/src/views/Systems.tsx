@@ -47,7 +47,7 @@ function goToAssessments(
   navigate: (path: string) => void,
 ) {
   if (action === "start" || action === "continue") {
-    navigate(`/systems/${systemId}/assessment`);
+    navigate(`/systems/${systemId}/assessment${action === "start" ? "/method" : ""}`);
     return;
   }
   localStorage.setItem("compliance.viewSystem", JSON.stringify({ systemId, systemName }));

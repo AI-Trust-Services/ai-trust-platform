@@ -93,15 +93,28 @@ export default function AssessmentApp() {
       // never the write-gated POST /open prefill — even though the CO role now
       // also holds systems:write (for system registration/editing), it must not
       // trigger prefill/reclassification by opening an assessment. Writers who
-      // are NOT approvers (owner / engineer) prefill via POST /open (idempotent).
-      const s = viewAssessmentId
-        ? await api.getAssessmentState(id, viewAssessmentId)
-        : can("systems:approve")
-          ? await api.getAssessmentState(id)
-          : can("systems:write")
-            ? await api.openAssessment(id)
-            : await api.getAssessmentState(id);
-      setState(s);
+      // are NOT approvers (owner / engineer) first check /state:
+      //   • questions already seeded → use state directly (method was chosen)
+      //   • no questions yet (fresh system) → redirect to method selection so the
+      //     user picks AI-assisted vs manual before we call /open.
+      if (viewAssessmentId) {
+        const s = await api.getAssessmentState(id, viewAssessmentId);
+        setState(s);
+      } else if (can("systems:approve")) {
+        const s = await api.getAssessmentState(id);
+        setState(s);
+      } else if (can("systems:write")) {
+        const s = await api.getAssessmentState(id);
+        if (s.questions.length === 0) {
+          // No questions seeded yet — send to method selection.
+          navigate(`/systems/${id}/assessment/method`, { replace: true });
+          return;
+        }
+        setState(s);
+      } else {
+        const s = await api.getAssessmentState(id);
+        setState(s);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to open assessment");
     }
