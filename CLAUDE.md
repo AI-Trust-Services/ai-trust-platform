@@ -46,6 +46,7 @@ kubectl get pods -n <namespace>
 - Per-cluster env: `k8s/env/<cluster>/.env` (`K8S_NAMESPACE` sets that cluster's default namespace)
 - One-time cluster/namespace setup: `k8s/gardener_init/shoot-cluster-init.sh <cluster> [--namespace=<namespace>]` (installs OCM controller, Flux, Traefik, per-namespace DNS + TLS cert, RBAC — default namespace `ai-trust`; pass `--namespace=<name>` to additionally provision a developer/PR namespace on a shared cluster)
 - **PR deployment test** — adding the `garden-deploy` label to a PR (`.github/workflows/pr-deployment-test.yml`) deploys the PR branch to a namespace derived from the PR author on `ai-trust-test`. It runs the whole build→package→publish→deploy pipeline as one job (`namespace-deployment-test`) via composite actions + `docker-bake.hcl` (not a `workflow_call` to `build-push-deploy.yml`); the job's pass/fail is the PR check. That namespace must be initialized once via `shoot-cluster-init.sh ai-trust-test --namespace=<github-username>`.
+- **`garden-reinstall` label** — same workflow/job as `garden-deploy`, but first force-wipes the author's namespace contents (not the namespace) in the background while images build; the deploy step waits for it (`k8s/scripts/uninstall-namespace.sh`, extra RBAC `gardener_init/rbac-reinstall.yaml` applied for `ai-trust-test` only — re-run `shoot-cluster-init.sh` once per existing namespace). Details → [docs/ci-cd.md](docs/ci-cd.md).
 
 ### Run tests (any backend)
 ```bash
@@ -101,8 +102,8 @@ Two workflows run automatically after a successful deployment, exactly like `int
 (`workflow_run` after `PR Deployment Test` / `Deployment Workflow`, plus `workflow_dispatch`; result
 reported as a commit status — `e2e-system-tests` / `playwright-tests` — seeded pending by the deploy
 workflows). Both authenticate through oauth2-proxy with a real Keycloak OIDC session — no kubeconfig
-or port-forward (contrast `tests/integration/`). Neither is a PR gate. Playwright can also be
-(re-)run on a PR via the `playwright-test` label (runs the branch's copy of the workflow). The third
+or port-forward (contrast `tests/integration/`). Neither is a PR gate. Playwright can be re-run
+on demand via **Run workflow** (`workflow_dispatch`). The third
 (`langfuse-test`) is label-triggered against the PR author's deployed namespace on `ai-trust-test`.
 - **`e2e-system-tests`** → `.github/workflows/e2e-system-tests.yml` runs `tests/e2e_system/` (black-box OIDC
   E2E: auth, registration, self-assessment, classification) against the deployed namespace.
