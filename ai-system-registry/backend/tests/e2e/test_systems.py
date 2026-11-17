@@ -78,6 +78,7 @@ async def test_intake_persists_registration_fields_and_owner(
         "/v1/intake",
         json={
             "name": "Owner Test System",
+            "description": "Technical description for the compliance officer.",
             "intended_purpose": "Testing",
             "contributors": ["alice", "bob"],
             "git_repo_url": "https://github.com/org/repo",
@@ -88,6 +89,8 @@ async def test_intake_persists_registration_fields_and_owner(
     assert r.status_code == 201
     sys = r.json()["system"]
     assert sys["business_owners"] == _ASSIGNEE  # owner = creator
+    assert sys["description"] == "Technical description for the compliance officer."
+    assert sys["intended_purpose"] == "Testing"
     assert sys["contributors"] == ["alice", "bob"]
     assert sys["git_repo_url"] == "https://github.com/org/repo"
     assert sys["planned_rollout_date"] == "2027-01-15"

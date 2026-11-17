@@ -17,6 +17,15 @@ def test_valid_question_keys_contains_known_ids():
         assert key in VALID_QUESTION_KEYS, f"Expected {key} in VALID_QUESTION_KEYS"
 
 
+def test_purpose_section_removed():
+    """The intended-purpose questionnaire section was replaced by the single
+    mandatory free-text field on the registration form (branch 400)."""
+    purpose_keys = [k for k in VALID_QUESTION_KEYS if k.startswith("Purpose_")]
+    assert purpose_keys == [], (
+        f"Purpose_* questions must be removed, found {purpose_keys}"
+    )
+
+
 def test_question_label_non_empty():
     assert len(QUESTION_LABEL) > 50
 
