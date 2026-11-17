@@ -178,12 +178,18 @@ async def test_open_creates_dossier_with_frozen_inputs(client: httpx.AsyncClient
     assert len(c["sha256"]) == 64
 
 
-def _insert_document(
-    system_id: str, doc_id: str, version_id: str, filename: str, status: str
-) -> None:
+def _insert_document(system_id: str, filename: str, status: str) -> tuple[str, str]:
     """Seed a document + a current version at the given indexing status, so the
-    snapshot query (current + indexed) can pick it up. ``documents.ai_system_id``
-    has no FK, so no extra parent rows are needed."""
+    snapshot query (current + indexed) can pick it up. Returns (doc_id, version_id).
+
+    IDs are generated per call (``new_id``) — ``documents`` has no FK to
+    ``ai_systems`` and the registry conftest does not truncate it, so hardcoded
+    IDs would collide across re-runs. The snapshot filters by ``ai_system_id``
+    (unique per run), so leftover rows from other systems never leak in."""
+    from app.ids import new_id
+
+    doc_id = new_id("DOC")
+    version_id = new_id("DOCV")
     conn = _pg()
     try:
         cur = conn.cursor()
@@ -209,6 +215,7 @@ def _insert_document(
         conn.commit()
     finally:
         conn.close()
+    return doc_id, version_id
 
 
 @pytest.mark.asyncio
@@ -219,20 +226,16 @@ async def test_snapshot_pins_current_indexed_document_versions(
     version_id); a version still processing at open is excluded (it did not feed
     the run)."""
     system_id = await _create_system(client, "Docs System", "desc")
-    _insert_document(
-        system_id, "DOC-DOSIND01", "DOCV-DOSIND01", "indexed.pdf", "indexed"
-    )
-    _insert_document(
-        system_id, "DOC-DOSPEN02", "DOCV-DOSPEN02", "pending.pdf", "pending"
-    )
+    indexed_doc, indexed_ver = _insert_document(system_id, "indexed.pdf", "indexed")
+    _insert_document(system_id, "pending.pdf", "pending")
 
     await _open_and_settle(client, system_id)
 
     docs = _fetch_dossier(system_id)["inputs"]["documents"]
     assert len(docs) == 1, "only the current + indexed version is captured"
     d0 = docs[0]
-    assert d0["document_id"] == "DOC-DOSIND01"
-    assert d0["version_id"] == "DOCV-DOSIND01"
+    assert d0["document_id"] == indexed_doc
+    assert d0["version_id"] == indexed_ver
     assert d0["version_label"] == "1.0"
     assert d0["filename"] == "indexed.pdf"
     assert d0["indexed_at"] is not None
@@ -246,6 +249,50 @@ async def test_reopen_does_not_create_a_second_dossier(client: httpx.AsyncClient
     await _open_and_settle(client, system_id)
     # _fetch_dossier asserts exactly one row.
     _fetch_dossier(system_id)
+
+
+@pytest.mark.asyncio
+async def test_open_is_best_effort_when_dossier_fails(
+    client: httpx.AsyncClient, monkeypatch
+):
+    """A failing dossier snapshot must not 500 /open or poison the transaction.
+
+    Regression guard for the savepoint: a snapshot query error inside
+    create_dossier_in_session rolls back only the dossier (begin_nested), so the
+    seeded question_states + llm_status still commit and /open returns 200.
+    Without the savepoint the poisoned txn would fail the outer commit → 500.
+    """
+    import app.routers.assessment as asmt
+    from sqlalchemy import text
+
+    async def _boom(session, row, assessment_id):
+        # Simulate a snapshot query error (poisons the subtransaction).
+        await session.execute(text("SELECT 1 FROM table_that_does_not_exist"))
+
+    monkeypatch.setattr(asmt, "create_dossier_in_session", _boom)
+
+    system_id = await _create_system(client, "Resilient System", "desc")
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/open", headers=_hdr(_OWNER)
+    )
+    assert r.status_code == 200, r.text
+
+    conn = _pg()
+    try:
+        cur = conn.cursor()
+        # No dossier was created …
+        cur.execute(
+            "SELECT count(*) FROM assessment_dossiers WHERE ai_system_id = %s",
+            (system_id,),
+        )
+        assert cur.fetchone()[0] == 0
+        # … but the cycle opened: question_states still committed.
+        cur.execute(
+            "SELECT count(*) FROM question_states WHERE system_id = %s", (system_id,)
+        )
+        assert cur.fetchone()[0] > 0, "question_states should still be seeded"
+    finally:
+        conn.close()
 
 
 # ── (B) append the AI output layer after the pipeline completes ───────────────

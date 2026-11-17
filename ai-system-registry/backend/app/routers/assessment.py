@@ -564,9 +564,15 @@ async def open_assessment(
             )
         # #366: freeze the assessment dossier (inputs/config/prompts) at start,
         # atomically with seeding this cycle. Best-effort — a snapshot failure
-        # must not block starting the assessment.
+        # must not block starting the assessment. The savepoint is what makes it
+        # best-effort: without it a failed snapshot query (or a deferred INSERT
+        # violation surfacing at the outer commit) would abort the whole txn and
+        # still 500 /open. begin_nested() flushes the INSERT here, so any failure
+        # rolls back only the dossier and leaves the seeded question_states intact.
         try:
-            await create_dossier_in_session(session, row, assessment.id)
+            async with session.begin_nested():
+                await create_dossier_in_session(session, row, assessment.id)
+                await session.flush()
         except Exception as exc:  # noqa: BLE001
             logger.error(
                 "assessment.dossier_create_failed",
