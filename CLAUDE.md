@@ -317,7 +317,7 @@ See `.env.example` for the full list. Notable groups:
 - **compliance MinIO** — `MINIO_ENDPOINT` (in-cluster uploads), `MINIO_PUBLIC_ENDPOINT` (presigned URLs), `MINIO_SECURE`, `MINIO_REGION`.
 - **alerts** — `ALERT_POLL_INTERVAL` (10 dev, 60+ prod).
 - **external read API** — `EXTERNAL_API_TOKEN` (static bearer for `/api/registry/v1/external/*`; unset → 503), `EXTERNAL_API_SERVICE_PRINCIPAL` (default `svc-external-api`). Single-tenant only. Details → [ai-system-registry/CLAUDE.md](ai-system-registry/CLAUDE.md).
-- **admin SMTP** — `SMTP_*` seed `platform_settings` on first startup; DB value wins afterwards.
+- **admin SMTP** — `SMTP_*` seed `platform_settings` on first startup; DB value wins afterwards. The registry reads these vars **directly from env** for notifications — it does not read `platform_settings`, so Admin UI SMTP changes do not affect registry emails.
 - **registry LLM (Thalamus)** — `THALAMUS_BASE_URL` (unset or `"stub"` = offline stub), `THALAMUS_BEARER_TOKEN` (required with real URL), `THALAMUS_MODEL`, `THALAMUS_VISION_MODEL`; also `ASSIST_TURN_CAP`, `ASSIST_MAX_TEXT_LENGTH`, `QUESTIONNAIRE_MAX_TOKENS`.
 - **Langfuse tracing** (optional) — `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` (blank = off). `LANGFUSE_TRACING_ENVIRONMENT` is auto-derived from the namespace — never set by hand.
 
