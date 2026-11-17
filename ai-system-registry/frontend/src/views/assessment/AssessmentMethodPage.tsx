@@ -289,7 +289,7 @@ export default function AssessmentMethodPage() {
       <div className="shrink-0 border-t border-border bg-card py-[14px]">
         <div className="mx-auto flex h-10 w-full max-w-[912px] items-center justify-between">
           <button
-            onClick={() => navigate(`/systems/${id}`)}
+            onClick={() => navigate(-1)}
             className="rounded-[10px] border border-border bg-card px-[10px] py-1.5 text-sm font-medium text-foreground hover:bg-accent"
           >
             Cancel
