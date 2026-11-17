@@ -434,7 +434,7 @@ function fileActionWarning(
     if (impact === "submitted")
       return "Uploading a new version aborts the assessment awaiting Compliance Officer review. Its progress is discarded and it must be redone on the new version. The previous version is kept in the document's history for the record.";
     if (impact === "draft")
-      return "Uploading a new version resets the in-progress assessment and re-runs the AI pre-fill on the new version. The previous version is kept in the document's history for the record.";
+      return "Uploading a new version aborts the in-progress assessment and discards its progress — it is not re-run automatically. Once the new version has finished processing, start a new assessment to run the AI pre-fill again. The previous version is kept in the document's history for the record.";
     return "Uploading a new version supersedes the current file for future assessments. The previous version is kept in the document's history.";
   }
   if (impact === "approved")
