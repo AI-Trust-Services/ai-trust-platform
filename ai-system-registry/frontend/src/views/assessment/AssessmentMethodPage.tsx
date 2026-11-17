@@ -104,11 +104,10 @@ export default function AssessmentMethodPage() {
 
             {/* Subtitle */}
             <p className="max-w-[640px] text-sm leading-5 text-muted-foreground">
-              14 questions across 3 sections determine whether{" "}
-              <span className="font-semibold text-foreground">{systemName}</span>{" "}
-              is in scope of the EU AI Act and which risk class applies. Either
-              way, you confirm every answer before it goes to your compliance
-              officer.
+              Let our AI model assess your documentation and fill it out for you
+              to review, or take the time to manually complete our
+              questionnaire. Either way, you confirm every answer before it goes
+              to your compliance officer.
             </p>
 
             <div className="h-6" />
@@ -337,7 +336,7 @@ function BenefitList({ items }: { items: string[] }) {
     <div className="flex flex-col gap-2 items-start w-full">
       {items.map((item) => (
         <div key={item} className="flex gap-2 items-start w-full">
-          <Check className="mt-[3px] size-3.5 shrink-0 text-foreground" />
+          <Check className="mt-[3px] size-3.5 shrink-0 text-[#008844]" />
           <span className="flex-1 text-sm text-foreground">{item}</span>
         </div>
       ))}
