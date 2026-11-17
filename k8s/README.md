@@ -170,6 +170,13 @@ so a new image only needs one `target` + `group "default"` entry in `docker-bake
 "Adding a new service"). It reports progress via PR comments; the single job's pass/fail **is** the PR check
 (`namespace-deployment-test`) — there is no separate `deploy-test` commit status.
 
+Adding **`garden-reinstall`** instead runs the same workflow but first force-wipes the author's namespace
+(FluxDeployer, HelmRelease, StatefulSets/Deployments/Jobs, ReplicaSets/Pods/PVCs — `--force --grace-period=0`,
+finalizers stripped as a last resort) in the background while images build; the deploy waits for it. The
+namespace, TLS cert and RBAC are kept. It needs the extra RBAC from `gardener_init/rbac-reinstall.yaml`
+(applied by `shoot-cluster-init.sh` for `ai-trust-test` only) — re-run the init command above once for
+namespaces created earlier. Details → [docs/ci-cd.md](../docs/ci-cd.md#garden-reinstall--deploy-from-a-clean-namespace).
+
 ### Integration tests
 
 `tests/integration/` runs cross-service API tests against a **live cluster** via `kubectl port-forward`. The `Integration Tests` workflow (`.github/workflows/integration-tests.yml`) triggers automatically after a successful `PR Deployment Test` or `Deployment Workflow`, and on demand via **Run workflow** — it is a separate workflow and does not affect deployment status. It reports its result as an `integration-tests` commit status on the deployed commit.

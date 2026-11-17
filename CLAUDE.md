@@ -46,6 +46,7 @@ kubectl get pods -n <namespace>
 - Per-cluster env: `k8s/env/<cluster>/.env` (`K8S_NAMESPACE` sets that cluster's default namespace)
 - One-time cluster/namespace setup: `k8s/gardener_init/shoot-cluster-init.sh <cluster> [--namespace=<namespace>]` (installs OCM controller, Flux, Traefik, per-namespace DNS + TLS cert, RBAC — default namespace `ai-trust`; pass `--namespace=<name>` to additionally provision a developer/PR namespace on a shared cluster)
 - **PR deployment test** — adding the `garden-deploy` label to a PR (`.github/workflows/pr-deployment-test.yml`) deploys the PR branch to a namespace derived from the PR author on `ai-trust-test`. It runs the whole build→package→publish→deploy pipeline as one job (`namespace-deployment-test`) via composite actions + `docker-bake.hcl` (not a `workflow_call` to `build-push-deploy.yml`); the job's pass/fail is the PR check. That namespace must be initialized once via `shoot-cluster-init.sh ai-trust-test --namespace=<github-username>`.
+- **`garden-reinstall` label** — same workflow/job as `garden-deploy`, but first force-wipes the author's namespace contents (not the namespace) in the background while images build; the deploy step waits for it (`k8s/scripts/uninstall-namespace.sh`, extra RBAC `gardener_init/rbac-reinstall.yaml` applied for `ai-trust-test` only — re-run `shoot-cluster-init.sh` once per existing namespace). Details → [docs/ci-cd.md](docs/ci-cd.md).
 
 ### Run tests (any backend)
 ```bash
