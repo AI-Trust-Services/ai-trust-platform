@@ -220,10 +220,38 @@ function ExamplesList({ text }: { text: string }) {
   );
 }
 
+/** Content of the shared "Examples" collapsible: the primary examples, then —
+ *  when present — the secondary-source "Extended examples" under a divider
+ *  heading (they carry no `[Flag]` of their own, so without the heading they'd
+ *  blend into the primary list). Shared by the owner and CO context views. */
+function ExamplesBody({ examples, extended }: { examples: string; extended?: string }) {
+  return (
+    <>
+      <ExamplesList text={examples} />
+      {extended && (
+        <>
+          <h5 className="mt-4 border-t border-border pt-3 text-xs font-semibold uppercase tracking-wide text-foreground">
+            Extended examples
+          </h5>
+          <ExamplesList text={extended} />
+        </>
+      )}
+    </>
+  );
+}
+
 /** Owner context formatted for readability: ALL-CAPS lines become headings,
  *  "-" lines become bullet lists, the rest paragraphs. Keeps a long block of
  *  text from reading as one wall. */
-function OwnerContextBody({ text, examples }: { text: string; examples?: string }) {
+function OwnerContextBody({
+  text,
+  examples,
+  extendedExamples,
+}: {
+  text: string;
+  examples?: string;
+  extendedExamples?: string;
+}) {
   const lines = cleanContext(text)
     .split("\n")
     .map((l) => l.trim());
@@ -273,7 +301,7 @@ function OwnerContextBody({ text, examples }: { text: string; examples?: string 
       })}
       {examples && (
         <ContextCollapsible heading="Examples">
-          <ExamplesList text={examples} />
+          <ExamplesBody examples={examples} extended={extendedExamples} />
         </ContextCollapsible>
       )}
     </div>
@@ -404,7 +432,15 @@ function ContextCollapsible({ heading, children }: { heading: string; children: 
  *  including the Summary — collapses by default, inline URLs are clickable, and
  *  all external links are gathered into a collapsed-by-default Sources list at
  *  the end. */
-function CoContextBody({ text, examples }: { text: string; examples?: string }) {
+function CoContextBody({
+  text,
+  examples,
+  extendedExamples,
+}: {
+  text: string;
+  examples?: string;
+  extendedExamples?: string;
+}) {
   const cleaned = cleanContext(text);
   const blocks: { heading: string | null; body: string[] }[] = [];
   let cur: { heading: string | null; body: string[] } | null = null;
@@ -453,7 +489,7 @@ function CoContextBody({ text, examples }: { text: string; examples?: string }) 
       {examples && (
         // Below the context sections, above the Sources list.
         <ContextCollapsible heading="Examples">
-          <ExamplesList text={examples} />
+          <ExamplesBody examples={examples} extended={extendedExamples} />
         </ContextCollapsible>
       )}
       {sources.length > 0 && (
@@ -659,12 +695,18 @@ export function ComplianceAdvisor({
                   // Key by questionKey so navigating questions remounts the
                   // renderer and resets every collapsible (sections + Sources)
                   // back to its collapsed-by-default state.
-                  <CoContextBody key={questionKey} text={activeContext} examples={def?.examples} />
+                  <CoContextBody
+                    key={questionKey}
+                    text={activeContext}
+                    examples={def?.examples}
+                    extendedExamples={def?.extendedExamples}
+                  />
                 ) : (
                   <OwnerContextBody
                     key={questionKey}
                     text={activeContext}
                     examples={def?.examples}
+                    extendedExamples={def?.extendedExamples}
                   />
                 )}
               </>

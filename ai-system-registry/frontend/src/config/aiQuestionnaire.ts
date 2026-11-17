@@ -45,6 +45,12 @@ export interface AiQuestionDef {
    *  A bullet list transcribed from the questionnaire's "Example(s)" column;
    *  absent for questions with no examples. */
   examples?: string;
+  /** Additional examples from secondary sources (academic commentary, case
+   *  law, boundary cases), transcribed from the questionnaire's "Extended
+   *  Examples" column. Rendered below `examples` in the same "Examples" section
+   *  under an "Extended examples" sub-heading. Same text for both roles; absent
+   *  for questions with no extended examples. */
+  extendedExamples?: string;
 }
 
 const rawQuestions = (questionnaireJson as { questions: AiQuestionDef[] }).questions;
