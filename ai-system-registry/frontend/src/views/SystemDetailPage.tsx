@@ -1406,18 +1406,15 @@ export default function SystemDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [editMode, setEditMode] = useState(false);
 
-  // "Start new assessment" — the registry endpoint archives an approved cycle and
-  // begins a fresh one, or (if the current cycle is unapproved) just opens that
-  // one. Then navigate into the single-page app for the current cycle.
-  async function startNew() {
+  // "Start new assessment" — route through method selection first. The method
+  // page archives an approved cycle (or opens the current one) via /start-new on
+  // the user's choice; the `newCycle` flag tells it to begin a fresh cycle rather
+  // than bounce to an already-opened one.
+  function startNew() {
     if (!id) return;
-    try {
-      await api.startNewAssessment(id);
-    } catch (e) {
-      showToast(`Could not start a new assessment: ${(e as Error).message}`, true);
-      return;
-    }
-    navigate(`/systems/${id}/assessment`);
+    navigate(`/systems/${id}/assessment/method`, {
+      state: { from: `/systems/${id}`, newCycle: true },
+    });
   }
 
   const loadAll = useCallback(async () => {

@@ -22,10 +22,14 @@ export default function AssessmentMethodPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const navState = location.state as { from?: string; newCycle?: boolean } | null;
   // Where Cancel returns to: the page that launched this flow (threaded via
   // location.state.from), falling back to the system detail page — never the
   // landing page, which is where navigate(-1) ends up on a cross-MFE entry.
-  const cancelTo = (location.state as { from?: string } | null)?.from ?? `/systems/${id}`;
+  const cancelTo = navState?.from ?? `/systems/${id}`;
+  // "Start new assessment" sets newCycle: archive the approved cycle (or reopen
+  // the current one) via /start-new, and don't bounce off an already-opened cycle.
+  const newCycle = navState?.newCycle ?? false;
   const [selected, setSelected] = useState<Method>("ai");
   const [systemName, setSystemName] = useState("");
   const [coName, setCoName] = useState("");
@@ -42,11 +46,10 @@ export default function AssessmentMethodPage() {
       api.listIndexedDocuments(id).catch(() => [] as IndexedDocument[]),
     ])
       .then(([state, system, docs]) => {
-        // If this cycle has already been opened (question_states seeded via
-        // /open or /open-manual), skip method selection and go straight to the
-        // assessment. NOTE: `questions` is always the full static catalogue, so
-        // it can't signal "already opened" — `prefilled` is the real flag.
-        if (state.prefilled) {
+        // If this cycle has already been opened (question_states seeded), skip
+        // method selection and go straight to the assessment — unless this is a
+        // "start new" flow (newCycle), which intentionally begins a fresh cycle.
+        if (state.prefilled && !newCycle) {
           navigate(`/systems/${id}/assessment`, { replace: true });
           return;
         }
@@ -58,7 +61,7 @@ export default function AssessmentMethodPage() {
         setChecking(false);
       })
       .catch(() => setChecking(false));
-  }, [id, navigate]);
+  }, [id, navigate, newCycle]);
 
   async function handleStart() {
     if (!id || starting) return;
@@ -66,8 +69,9 @@ export default function AssessmentMethodPage() {
     setError(null);
     try {
       // Both methods currently open the same AI-prefill flow; the manual-entry
-      // path is handled separately (follow-up issue).
-      await api.openAssessment(id);
+      // path is handled separately (follow-up issue). A "start new" flow archives
+      // the approved cycle (or reopens the current one) via /start-new.
+      await (newCycle ? api.startNewAssessment(id) : api.openAssessment(id));
       navigate(`/systems/${id}/assessment`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to start assessment");
