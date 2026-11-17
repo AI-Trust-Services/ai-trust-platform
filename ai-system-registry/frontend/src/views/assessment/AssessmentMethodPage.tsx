@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { api } from "../../api/client";
 import type { IndexedDocument } from "../../types";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type Method = "ai" | "manual";
@@ -287,27 +288,24 @@ export default function AssessmentMethodPage() {
       {/* ── Sticky footer ── */}
       <div className="shrink-0 border-t border-border bg-card py-[14px]">
         <div className="mx-auto flex h-10 w-full max-w-[912px] items-center justify-between">
-          <button
+          <Button
+            variant="outline"
             onClick={() => navigate(-1)}
-            className="rounded-[10px] border border-border bg-card px-[10px] py-1.5 text-sm font-medium text-foreground hover:bg-accent"
+            className="h-auto rounded-[10px] px-[10px] py-1.5"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handleStart}
             disabled={starting}
-            className="flex items-center gap-1.5 rounded-[10px] bg-[#1147e9] px-[10px] py-1.5 text-sm font-medium text-white hover:bg-[#0d39c4] disabled:opacity-60"
+            className="h-auto gap-1.5 rounded-[10px] border-transparent bg-[#1147e9] px-[10px] py-1.5 text-white hover:bg-[#0d39c4] hover:text-white"
           >
-            {starting ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Sparkles className="size-4" />
-            )}
+            {starting ? <Loader2 className="animate-spin" /> : <Sparkles />}
             {selected === "ai"
               ? "Start AI-assisted assessment"
               : "Start manual assessment"}
-            {!starting && <ArrowRight className="size-4" />}
-          </button>
+            {!starting && <ArrowRight />}
+          </Button>
         </div>
       </div>
     </div>
