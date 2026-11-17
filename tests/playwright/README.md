@@ -86,8 +86,7 @@ npx playwright show-report        # open the HTML report after a run
 runs this suite against the just-deployed namespace, triggered (like `integration-tests.yml` and
 `e2e-system-tests.yml`) by `workflow_run` after a successful `PR Deployment Test` (the PR author's
 namespace on `ai-trust-test`) or `Deployment Workflow` (push to main → `ai-trust-main`), or manually via
-**Run workflow** (`workflow_dispatch`), or by adding the **`playwright-test`** label to a PR whose
-namespace is already deployed (this runs the PR branch's copy of the workflow). The result is the `playwright-tests` commit status on the PR /
+**Run workflow** (`workflow_dispatch`). The result is the `playwright-tests` commit status on the PR /
 main commit. For PRs, add the `garden-deploy` label and initialise the namespace once with
 `shoot-cluster-init.sh ai-trust-test --namespace=<github-username>`.
 The HTML report and `test-results/` (traces, failure screenshots, videos) are uploaded as artifacts.

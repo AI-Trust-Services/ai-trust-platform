@@ -192,7 +192,7 @@ in [`tests/playwright/`](../tests/playwright/) and drives a **real browser** bla
 in CI automatically after every successful deployment
 ([`.github/workflows/playwright-frontend-tests.yml`](../.github/workflows/playwright-frontend-tests.yml)):
 after `PR Deployment Test` (the PR author's `ai-trust-test` namespace, `garden-deploy` label) and after
-`Deployment Workflow` on main (`ai-trust-main`), or on demand via **Run workflow** or the **`playwright-test`** PR label. The result is
+`Deployment Workflow` on main (`ai-trust-main`), or on demand via **Run workflow** (`workflow_dispatch`). The result is
 published as the `playwright-tests` commit status. The HTML report and `test-results/` (traces, **failure screenshots**, videos) are
 uploaded as CI artifacts. **Not a PR gate** (same model as `integration-tests` / `e2e-system-tests`).
 

@@ -1,13 +1,21 @@
 name: PR Deployment Test
 run-name: "Deploy PR #${{ github.event.pull_request.number }} (${{ github.event.pull_request.user.login }})"
 
-# Triggered by adding the "garden-deploy" label to a PR.
+# Triggered by adding the "garden-deploy" or "garden-reinstall" label to a PR.
 # Builds the PR branch and deploys it to the PR author's namespace on ai-trust-test.
+#
+#   garden-deploy    — build + deploy (upgrade in place; existing data/PVCs are kept).
+#   garden-reinstall — same, plus a forced wipe of the author's namespace first
+#                      (k8s/scripts/uninstall-namespace.sh: FluxDeployer, HelmRelease, then
+#                      statefulsets/deployments/jobs/replicasets/pods/PVCs, force + grace-period=0).
+#                      The wipe starts in the BACKGROUND right after checkout so it overlaps the
+#                      image build; "Wait for namespace cleanup" blocks the deploy until it is done.
 #
 # Prerequisites (one-time per developer namespace):
 #   bash k8s/gardener_init/shoot-cluster-init.sh ai-trust-test --namespace=<github-username>
+#   (re-run it once to pick up rbac-reinstall.yaml if the namespace predates garden-reinstall)
 #
-# Usage: add the "garden-deploy" label to a PR.
+# Usage: add the "garden-deploy" or "garden-reinstall" label to a PR (remove + re-add to re-run).
 
 on:
   pull_request:
@@ -29,8 +37,9 @@ jobs:
   deploy-test:
     name: namespace-deployment-test
     runs-on: ubuntu-24.04
-    if: github.event.label.name == 'garden-deploy'
+    if: contains(fromJSON('["garden-deploy","garden-reinstall"]'), github.event.label.name)
     env:
+      REINSTALL: ${{ github.event.label.name == 'garden-reinstall' }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
       PR_SHA: ${{ github.event.pull_request.head.sha }}
       PR_BRANCH: ${{ github.event.pull_request.head.ref }}
@@ -62,11 +71,22 @@ jobs:
           gardener_cluster: ai-trust-test
           namespace: ${{ github.event.pull_request.user.login }}
 
+      # garden-reinstall only: authenticate now and wipe the namespace in the background so the
+      # cleanup overlaps the (long) image build. Waited for by "Wait for namespace cleanup" below.
+      - name: Start background namespace cleanup
+        if: env.REINSTALL == 'true'
+        uses: ./.github/actions/reinstall-cleanup-start
+        with:
+          cluster: ${{ steps.vars.outputs.cluster }}
+          namespace: ${{ steps.vars.outputs.namespace }}
+
       - name: Post deployment started comment
         run: |
+          MODE="deploying"
+          [[ "${REINSTALL}" == "true" ]] && MODE="reinstalling (namespace wipe + deploy)"
           gh pr comment "${PR_NUMBER}" \
             --repo "${{ github.repository }}" \
-            --body "🚀 Test deployment started — deploying \`feature:${PR_SHA::12}\` to namespace \`${{ steps.vars.outputs.namespace }}\` on \`ai-trust-test\`."
+            --body "🚀 Test deployment started — ${MODE} \`feature:${PR_SHA::12}\` to namespace \`${{ steps.vars.outputs.namespace }}\` on \`ai-trust-test\`."
 
       # Seeds the statuses that integration-tests.yml, e2e-system-tests.yml and
       # playwright-frontend-tests.yml finalise
@@ -139,6 +159,40 @@ jobs:
         with:
           cluster: ${{ steps.vars.outputs.cluster }}
           owner: ${{ steps.vars.outputs.owner }}
+
+      # garden-reinstall only: the deploy must not start while old pods/PVCs/HelmRelease still exist.
+      # Fails fast if the background process died, fails the job if the cleanup failed.
+      - name: Wait for namespace cleanup
+        if: env.REINSTALL == 'true'
+        shell: bash
+        run: |
+          TIMEOUT=900
+          ELAPSED=0
+          echo "Waiting for background cleanup (log: ${REINSTALL_CLEANUP_LOG})..."
+          while [[ ! -f "$REINSTALL_CLEANUP_EXIT" ]]; do
+            PID="$(cat "$REINSTALL_CLEANUP_PID" 2>/dev/null || echo "")"
+            if [[ -z "$PID" ]] || ! kill -0 "$PID" 2>/dev/null; then
+              sleep 3   # exit file is written right as the process ends - re-check once
+              [[ -f "$REINSTALL_CLEANUP_EXIT" ]] && break
+              echo "::group::cleanup log"; cat "$REINSTALL_CLEANUP_LOG" || true; echo "::endgroup::"
+              echo "error: background cleanup process is gone without reporting a result" >&2
+              exit 1
+            fi
+            if (( ELAPSED >= TIMEOUT )); then
+              echo "::group::cleanup log"; cat "$REINSTALL_CLEANUP_LOG" || true; echo "::endgroup::"
+              echo "error: namespace cleanup did not finish within ${TIMEOUT}s" >&2
+              exit 1
+            fi
+            sleep 5
+            ELAPSED=$(( ELAPSED + 5 ))
+          done
+          RC="$(cat "$REINSTALL_CLEANUP_EXIT")"
+          echo "::group::cleanup log"; cat "$REINSTALL_CLEANUP_LOG" || true; echo "::endgroup::"
+          if [[ "$RC" != "0" ]]; then
+            echo "error: namespace cleanup failed (exit ${RC}) - not deploying onto a half-cleaned namespace" >&2
+            exit 1
+          fi
+          echo "Namespace cleanup finished successfully."
 
       - name: Deploy to cluster
         uses: ./.github/actions/apply-to-cluster
