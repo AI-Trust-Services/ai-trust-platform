@@ -52,12 +52,12 @@ def collect_question_ids(node: Any) -> set[str]:
     return set()
 
 
-def label_question_ids(label: dict) -> set[str]:
+def get_question_ids_from_label(label: dict) -> set[str]:
     """Return all questionIds referenced by any rule in a label.
 
     Input: a label object from risk_role_classification_config.json, e.g.:
       {"id": "HIGH_RISK", "activate": true, "rules": [{"when": {"any": [{"questionId": "High_Risk_1", ...}]}}]}
-    Example: label_question_ids({"rules": [{"when": {"questionId": "High_Risk_1", "operator": "CONTAINS", "value": "X"}}]})
+    Example: get_question_ids_from_label({"rules": [{"when": {"questionId": "High_Risk_1", "operator": "CONTAINS", "value": "X"}}]})
              → {"High_Risk_1"}
     """
     ids: set[str] = set()

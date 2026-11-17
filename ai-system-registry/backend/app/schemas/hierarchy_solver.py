@@ -28,7 +28,7 @@ class LabelOverrides(BaseModel):
 class ResolvedLabel(BaseModel):
     label_id: str = Field(alias="labelId")
     result: bool
-    source: Literal["pipeline", "user"]
+    source: Literal["pipeline", "user", "skipped"]
 
     # Raw float from Pipeline 2 classifications[].confidence (0–100).
     # None when source="user" (override drops the pipeline value).

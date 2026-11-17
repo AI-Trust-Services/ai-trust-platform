@@ -10,7 +10,7 @@ from app.questionnaire_tree import (
     collect_question_ids,
     eval_label,
     eval_tree,
-    label_question_ids,
+    get_question_ids_from_label,
 )
 
 # ---------------------------------------------------------------------------
@@ -46,7 +46,7 @@ def test_collect_question_ids_list():
     assert collect_question_ids(nodes) == {"Q1", "Q2"}
 
 
-def test_label_question_ids_multiple_rules():
+def test_get_question_ids_from_label_multiple_rules():
     label = {
         "id": "HIGH_RISK",
         "rules": [
@@ -54,7 +54,7 @@ def test_label_question_ids_multiple_rules():
             {"when": {"questionId": "Q2", "operator": "CONTAINS", "value": "MACHINERY"}},
         ],
     }
-    assert label_question_ids(label) == {"Q1", "Q2"}
+    assert get_question_ids_from_label(label) == {"Q1", "Q2"}
 
 
 # ---------------------------------------------------------------------------
