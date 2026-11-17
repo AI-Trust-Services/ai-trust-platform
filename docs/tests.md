@@ -192,7 +192,7 @@ in [`tests/playwright/`](../tests/playwright/) and drives a **real browser** bla
 in CI automatically after every successful deployment
 ([`.github/workflows/playwright-frontend-tests.yml`](../.github/workflows/playwright-frontend-tests.yml)):
 after `PR Deployment Test` (the PR author's `ai-trust-test` namespace, `garden-deploy` label) and after
-`Deployment Workflow` on main (`ai-trust-main`), or on demand via **Run workflow** or the **`playwright-test`** PR label. The result is
+`Deployment Workflow` on main (`ai-trust-main`), or on demand via **Run workflow** (`workflow_dispatch`). The result is
 published as the `playwright-tests` commit status. The HTML report and `test-results/` (traces, **failure screenshots**, videos) are
 uploaded as CI artifacts. **Not a PR gate** (same model as `integration-tests` / `e2e-system-tests`).
 
@@ -275,3 +275,66 @@ Placeholder scope, to be confirmed:
 - **Purpose:** build a baseline and spot untested areas. Targets and any gate are decided later,
   once baseline data exists. Until then, MVP acceptance is measured by the business scenarios above.
 
+
+## CI test workflows
+
+> Moved out of the root [CLAUDE.md](../CLAUDE.md) to keep it under the 40k-char limit.
+
+#### Integration tests (cross-service, live platform)
+
+`tests/integration/` is a **global** suite — it is not per-component and does not use ASGITransport. It
+drives real HTTP against a **running** platform (kind or a Gardener namespace) to verify contracts that
+span services: registry↔compliance shared `ai_systems` data, the evidence→requirement→obligation→assessment
+cascade, RBAC denials across backends, and the admin→users internal HTTP call.
+
+```bash
+make test-e2e                       # per-service e2e tests (kind cluster, forwards Postgres + ClickHouse only)
+make test                           # test-e2e then test-int (full local suite)
+make test-int                       # kind cluster, namespace ai-trust
+```
+- The `k8s/` make targets are **kind-only** — the namespace is fixed to `ai-trust` and cannot be
+  overridden from the environment (`NAMESPACE := ai-trust` in the Makefile wins over the environment).
+  Remote Gardener namespaces are only ever targeted by CI, which calls `k8s/scripts/forward-ports.sh`
+  directly with the namespace.
+- `make test-int` starts the port-forwards, runs pytest, and stops them again **even on failure**.
+- Services are reached via `kubectl port-forward` (`k8s/scripts/forward-ports.sh` / `kill-port-forwards.sh`)
+  on their in-cluster ports; every URL is overridable via env var (`REGISTRY_URL`, `COMPLIANCE_URL`, …).
+  The suite covers the MVP backends that expose cross-service contracts — `overview` and `dta` are
+  read-only and out of scope, and `monitoring`/`alerts` are `[MVP-off]` (dropped from the port-forward
+  list and the health smoke test; re-add them when GenAI-observability is re-enabled).
+- Auth bypasses oauth2-proxy by setting `X-Forwarded-Preferred-Username` directly, the same pattern the
+  per-service e2e tests use. `APP_ADMIN_USERNAME` (default `admin`) selects the platform admin used to
+  assign roles.
+- **Not a PR gate.** The `Integration Tests` workflow (`.github/workflows/integration-tests.yml`) runs
+  *after* a successful `PR Deployment Test` or `Deployment Workflow`, and optionally on demand via
+  **Run workflow** (`workflow_dispatch`). Both paths report to a single `integration-tests` commit
+  status on the PR head / pushed commit, overwritten in place: a step in `pr-deployment-test.yml` seeds
+  it pending, and the post-deployment run finalises it — so the result is visible on the PR and on main
+  even though `workflow_run` runs are attached to the default branch. `integration-tests.yml`
+  deliberately has no `pull_request:` trigger, because every job in such a workflow gets pinned to the
+  PR as its own check run. Its result never changes the deployment workflow's status.
+- Details → [tests/integration/README.md](../tests/integration/README.md).
+
+#### On-demand label workflows (deployed-namespace, OIDC)
+Two workflows run automatically after a successful deployment, exactly like `integration-tests.yml`
+(`workflow_run` after `PR Deployment Test` / `Deployment Workflow`, plus `workflow_dispatch`; result
+reported as a commit status — `e2e-system-tests` / `playwright-tests` — seeded pending by the deploy
+workflows). Both authenticate through oauth2-proxy with a real Keycloak OIDC session — no kubeconfig
+or port-forward (contrast `tests/integration/`). Neither is a PR gate. Playwright can also be
+(re-)run on a PR via the `playwright-test` label (runs the branch's copy of the workflow). The third
+(`langfuse-test`) is label-triggered against the PR author's deployed namespace on `ai-trust-test`.
+- **`e2e-system-tests`** → `.github/workflows/e2e-system-tests.yml` runs `tests/e2e_system/` (black-box OIDC
+  E2E: auth, registration, self-assessment, classification) against the deployed namespace.
+- **`playwright-tests`** → `.github/workflows/playwright-frontend-tests.yml` runs `tests/playwright/`
+  (`@playwright/test`, TypeScript): a real browser logs in via OIDC, smoke-tests that each MVP MFE
+  mounts + its backend is healthy, and registers an AI system end-to-end. A `setup` project
+  provisions personas and captures one `storageState` each; a `teardown` project cleans up. The HTML
+  report + `test-results/` (traces, failure screenshots, videos) are uploaded as CI artifacts.
+  Details → [tests/playwright/README.md](../tests/playwright/README.md) and the [Frontend tests](#frontend-tests)
+  section above.
+- **`langfuse-test`** → `.github/workflows/langfuse-benchmark.yml` runs
+  `tests/langfuse_benchmark/benchmark.py`: batch-imports the 339 ground-truth scenarios via
+  `POST /api/registry/v1/intake/batch` (needs `ENABLE_BATCH_IMPORT=true`, set in
+  `k8s/env/ai-trust-test/.env`), classifies each through `/classify/evaluate`, and pushes a scored
+  dataset + experiment run to Langfuse (`LANGFUSE_*` repo secrets). Details →
+  [tests/langfuse_benchmark/README.md](../tests/langfuse_benchmark/README.md).

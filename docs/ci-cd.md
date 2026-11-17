@@ -210,6 +210,7 @@ Without it the deploy fails — the CI identity holds no rights in an unprovisio
 |---|---|---|---|---|
 | Push to `main` | `ai-trust` | ✓ `ai-trust-main-<sha>` | ✓ `0.0.0-ai-trust-main-<sha>` | `ai-trust-main` / `ai-trust` (automatic) |
 | `garden-deploy` label on a PR | `<pr-author>` | ✓ `<pr-author>-<sha>` | ✓ `0.0.0-<pr-author>-<sha>` | `ai-trust-test` / `<pr-author>` |
+| `garden-reinstall` label on a PR | `<pr-author>` | ✓ `<pr-author>-<sha>` | ✓ `0.0.0-<pr-author>-<sha>` | `ai-trust-test` / `<pr-author>` — after a forced namespace wipe |
 | `workflow_dispatch` → `ai-trust-test` | input, else `github.actor` | ✓ `<ns>-<sha>` | ✓ `0.0.0-<ns>-<sha>` | `ai-trust-test` / `<ns>` |
 | `workflow_dispatch` → `ai-trust-main` | `ai-trust` (forced) | ✓ `ai-trust-main-<sha>` | ✓ `0.0.0-ai-trust-main-<sha>` | `ai-trust-main` / `ai-trust` |
 
@@ -238,6 +239,54 @@ single job's success/failure **is** the PR check — there is no separate `deplo
    deploy, all inline (no `workflow_call` into `build-push-deploy.yml`).
 4. **report** — success/failure PR comments (and app-URL comments on linked issues) via `if: success()`
    / `if: failure()` steps that never mask the job's own conclusion.
+
+### `garden-reinstall` — deploy from a clean namespace
+
+The `garden-reinstall` label runs the **same workflow and the same job** as `garden-deploy` (the job
+`if:` accepts either label; a job-level `REINSTALL` flag gates two extra steps). Use it when an in-place
+upgrade is not enough — stale PVC data (postgres, clickhouse, minio, document-indexing, cognee-eval
+StatefulSets keep their PVCs across `helm uninstall`), leftover pods/jobs, or a wedged HelmRelease.
+Like `garden-deploy` the label stays on the PR; remove and re-add it to run again.
+
+The wipe overlaps the image build instead of adding to it:
+
+1. **Start (right after `compute-vars`)** — composite action `reinstall-cleanup-start` authenticates to
+   the shoot cluster early (same pattern as `integration-tests.yml`) and launches
+   `k8s/scripts/uninstall-namespace.sh <ns>` **detached** (`setsid nohup`), writing a log, PID and
+   exit-code file under `$RUNNER_TEMP`. It uses its own copy of the kubeconfig, because
+   `apply-to-cluster` re-authenticates later and rewrites the workspace one.
+2. **Build / package / publish** run as usual while the cleanup works.
+3. **Wait (right before `Deploy to cluster`)** — the step *Wait for namespace cleanup* blocks until the
+   exit-code file appears (timeout 15 min), prints the cleanup log, and **fails the job** if the cleanup
+   failed, timed out, or its process died. The deploy therefore never starts on a half-cleaned namespace.
+   The existing failure steps resolve the seeded commit statuses to `error` as for any failed deploy.
+
+`uninstall-namespace.sh` order (all deletes `--ignore-not-found`, idempotent):
+
+| # | Action | Why |
+|---|---|---|
+| 1 | delete FluxDeployer `ai-trust-<ns>` (`ocm-system`) | first — otherwise it recreates the HelmRelease |
+| 2 | delete HelmRelease `ai-trust-<ns>`, wait ≤120 s | Flux runs `helm uninstall`; if it hangs, **finalizers are stripped** |
+| 3 | delete StatefulSets, Deployments, Jobs (`--all`) in `<ns>` | controllers go before pods, so pods are not respawned |
+| 4 | delete ReplicaSets, Pods `--all --force --grace-period=0` | |
+| 5 | delete PVCs `--all --force --grace-period=0` | after pods, so PVC protection can release |
+| 6 | verify pods/StatefulSets/PVCs are gone | PVCs still `Terminating` after ≤120 s get their finalizers stripped; exit non-zero if anything remains |
+
+**Deliberately kept:** the namespace itself, all Secrets/ConfigMaps (incl. the TLS cert secret), the
+Gardener `Certificate`, the Traefik ServersTransport, the RBAC Roles (all provisioned once by
+`shoot-cluster-init.sh`, not recreatable by CI), and the OCM `Resource`/`ComponentVersion` (re-applied
+by `apply-to-cluster`). Guards: the script refuses an invalid name and the protected namespaces
+(`default`, `kube-*`, `ocm-system`, `flux-system`, `ai-trust`, `traefik`); a namespace that does not exist
+yet is a no-op (first deploy).
+
+**RBAC prerequisite.** The CI service account cannot delete Pods/StatefulSets/ReplicaSets with the base
+`rbac.yaml`. `k8s/gardener_init/rbac-reinstall.yaml` grants exactly that per namespace, and
+`shoot-cluster-init.sh` applies it **only for the `ai-trust-test` cluster** (`ai-trust-main` keeps its
+least-privilege RBAC). Namespaces initialised before this feature need a **one-time re-run**:
+```bash
+bash k8s/gardener_init/shoot-cluster-init.sh ai-trust-test --namespace=<github-username>
+```
+Otherwise the cleanup's `kubectl auth can-i` preflight fails the job immediately with that exact hint.
 
 ---
 

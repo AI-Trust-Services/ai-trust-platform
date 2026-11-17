@@ -1,0 +1,81 @@
+name: Start Reinstall Cleanup
+description: >
+  Authenticates to the Gardener shoot cluster and starts k8s/scripts/uninstall-namespace.sh as a
+  detached background process, so the namespace is wiped while images build. The caller must later
+  wait for it (pr-deployment-test.yml, step "Wait for namespace cleanup") before deploying.
+
+inputs:
+  cluster:
+    description: "Target cluster name (directory under k8s/env/)"
+    required: true
+  namespace:
+    description: "Namespace to wipe (the PR author's namespace)"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # Same early-auth pattern as integration-tests.yml: only the three non-secret GARDENER_* vars.
+    - name: Load cluster env (API server, OIDC audience)
+      shell: bash
+      run: |
+        ENV_FILE="k8s/env/${{ inputs.cluster }}/.env"
+        if [[ ! -f "$ENV_FILE" ]]; then
+          echo "error: $ENV_FILE not found" >&2
+          exit 1
+        fi
+        set -a
+        # shellcheck disable=SC1090
+        source <(grep -E '^(GARDENER_SHOOT_API_SERVER|GARDENER_CA_DISCOVERY_URL|GARDENER_OIDC_AUDIENCE)=' "$ENV_FILE" | tr -d '\r')
+        set +a
+        echo "GARDENER_SHOOT_API_SERVER=${GARDENER_SHOOT_API_SERVER}" >> "$GITHUB_ENV"
+        echo "GARDENER_CA_DISCOVERY_URL=${GARDENER_CA_DISCOVERY_URL}" >> "$GITHUB_ENV"
+        echo "GARDENER_OIDC_AUDIENCE=${GARDENER_OIDC_AUDIENCE}" >> "$GITHUB_ENV"
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v5
+
+    - name: Authenticate to Gardener cluster (SA token, 1h)
+      uses: gardener/cc-utils/.github/actions/kubernetes-auth@1e70b044f4d3305267a559e7ae74b4de57e1fdee
+      with:
+        server: ${{ env.GARDENER_SHOOT_API_SERVER }}
+        server-ca-discovery-url: ${{ env.GARDENER_CA_DISCOVERY_URL }}
+        audience: ${{ env.GARDENER_OIDC_AUDIENCE }}
+        service-account-name: github-actions
+        service-account-namespace: ocm-system
+        service-account-token-expiration: 3600
+
+    - name: Launch cleanup in the background
+      shell: bash
+      env:
+        TARGET_NAMESPACE: ${{ inputs.namespace }}
+      run: |
+        # apply-to-cluster re-authenticates later and rewrites $GITHUB_WORKSPACE/kubeconfig.yaml.
+        # The background process gets its own copy so it never reads a half-written file, and
+        # KUBECONFIG is intentionally NOT exported to GITHUB_ENV (later steps manage their own).
+        umask 077
+        KC="$RUNNER_TEMP/kubeconfig-cleanup.yaml"
+        cp "$GITHUB_WORKSPACE/kubeconfig.yaml" "$KC"
+
+        LOG="$RUNNER_TEMP/reinstall-cleanup.log"
+        EXIT_FILE="$RUNNER_TEMP/reinstall-cleanup.exit"
+        PID_FILE="$RUNNER_TEMP/reinstall-cleanup.pid"
+        rm -f "$LOG" "$EXIT_FILE" "$PID_FILE"
+
+        # setsid detaches from this step's process group so it survives the step ending.
+        # The exit code is written atomically (tmp + mv) so the wait step never reads a partial file.
+        setsid nohup bash -c '
+          KUBECONFIG="$1" bash "$2" "$3"
+          rc=$?
+          echo "$rc" > "$4.tmp" && mv "$4.tmp" "$4"
+        ' _ "$KC" "$GITHUB_WORKSPACE/k8s/scripts/uninstall-namespace.sh" "$TARGET_NAMESPACE" "$EXIT_FILE" \
+          > "$LOG" 2>&1 < /dev/null &
+        echo "$!" > "$PID_FILE"
+        disown
+
+        {
+          echo "REINSTALL_CLEANUP_LOG=$LOG"
+          echo "REINSTALL_CLEANUP_EXIT=$EXIT_FILE"
+          echo "REINSTALL_CLEANUP_PID=$PID_FILE"
+        } >> "$GITHUB_ENV"
+        echo "Started background cleanup of namespace '${TARGET_NAMESPACE}' (pid $(cat "$PID_FILE"))"

@@ -247,6 +247,15 @@ echo ""
 echo "==> [5/5] Applying RBAC (creates ${NAMESPACE} and ocm-system roles for CI)"
 sed "s/\${NAMESPACE}/${NAMESPACE}/g" "$SCRIPT_DIR/rbac.yaml" | kubectl apply -f -
 
+# The `garden-reinstall` PR label force-deletes StatefulSets/ReplicaSets/Pods in the PR author's
+# namespace. Those extra rights are only granted on the ai-trust-test cluster - never ai-trust-main.
+if [[ "$CLUSTER_NAME" == "ai-trust-test" ]]; then
+  echo "    Applying reinstall RBAC (garden-reinstall label) for namespace ${NAMESPACE}"
+  sed "s/\${NAMESPACE}/${NAMESPACE}/g" "$SCRIPT_DIR/rbac-reinstall.yaml" | kubectl apply -f -
+else
+  echo "    Skipping reinstall RBAC (only applied on ai-trust-test, this is '${CLUSTER_NAME}')"
+fi
+
 echo ""
 echo "==> shoot-cluster-init complete for '$CLUSTER_NAME' (namespace: $NAMESPACE)."
 echo ""

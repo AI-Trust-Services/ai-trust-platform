@@ -1,14 +1,10 @@
 name: Playwright Frontend Tests
 
-# Three ways in:
+# Two ways in:
 #   1. workflow_run — automatic, after a successful deployment (the main path)
 #        PR   — "PR Deployment Test" (garden-deploy label) → ai-trust-test / <pr-author>
 #        main — "Deployment Workflow" (push to main)       → ai-trust-main  / ai-trust
-#   2. pull_request [labeled] — optional: add the "playwright-test" label to a PR to (re-)run
-#      against the PR author's already-deployed ai-trust-test namespace (add "garden-deploy"
-#      first). Unlike 1 and 3 this runs the PR BRANCH's copy of this file, so it is also the
-#      way to test changes to this workflow before merging.
-#   3. workflow_dispatch — optional manual run / re-run against a live namespace,
+#   2. workflow_dispatch — optional manual run / re-run against a live namespace,
 #      no redeploy. Both inputs are defaulted, so it is one click.
 #
 # Runs in parallel with Integration Tests and E2E System Tests — all three trigger directly
@@ -27,20 +23,15 @@ name: Playwright Frontend Tests
 #   appear on the PR at all. Same pattern as the `deploy-test` status in
 #   pr-deployment-test.yml.
 #
-# Trade-off of the optional label trigger: every job in a pull_request-triggered
+# Deliberately NO `pull_request:` trigger here. Every job in a pull_request-triggered
 # workflow is pinned to the PR as its own check run, and `pull_request: [labeled]`
-# fires for EVERY label (GitHub has no label-name filter in `on:`) — so the PR shows a
-# "Skipped" Playwright check whenever some other label is added. It is harmless; the
-# `playwright-tests` commit status (seeded by a STEP in pr-deployment-test.yml, since
-# steps create no check runs) remains the authoritative result.
+# fires for EVERY label (GitHub has no label-name filter in `on:`) — which left a
+# "Skipped" Playwright Frontend Tests check whenever any other label (garden-reinstall,
+# etc.) was added. The `playwright-tests` commit status seeded by pr-deployment-test.yml
+# is the authoritative result; the label-triggered check run was redundant noise.
 #
 # Like tests/e2e_system/, this suite needs no kubeconfig or port-forward — it drives a real
 # browser through oauth2-proxy with a real Keycloak OIDC login.
-#
-# Authorization: the workflow_run path only runs after a deployment that
-# pr-deployment-test.yml already gated on repo write access. The label path has no such
-# deployment in front of it, so it re-checks write access itself (the job injects the
-# platform-admin password into PR-head test code).
 #
 # EDITING THIS FILE: workflow_run does not just attach its runs to the default
 # branch, it also RUNS THE DEFAULT BRANCH'S COPY of this file. Changes here
@@ -56,9 +47,6 @@ on:
       - "Deployment Workflow"
     types:
       - completed
-  # Optional: add the "playwright-test" label to re-test the PR author's deployed namespace.
-  pull_request:
-    types: [labeled]
   # Optional on-demand run: re-test an already-deployed namespace without
   # redeploying. Both inputs have defaults, so "Run workflow" works with no edits.
   workflow_dispatch:
@@ -96,21 +84,9 @@ jobs:
     # deployment that actually succeeded.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' && github.event.label.name == 'playwright-test') ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
 
     steps:
-      - name: Check authorization (label trigger only)
-        if: github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PERMISSION=$(gh api "repos/${{ github.repository }}/collaborators/${{ github.actor }}/permission"             --jq '.permission' 2>/dev/null || echo "none")
-          if [[ "$PERMISSION" != "admin" && "$PERMISSION" != "write" && "$PERMISSION" != "maintain" ]]; then
-            echo "::error::${{ github.actor }} lacks write access — refusing to run privileged tests on PR-head code."
-            exit 1
-          fi
-
       - name: Download deployment context (Deployment Workflow only)
         if: github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Deployment Workflow'
         uses: actions/download-artifact@v4
@@ -136,11 +112,6 @@ jobs:
               fi
             fi
             head_sha="${GITHUB_SHA}"
-          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            # Label trigger — the PR author's namespace on ai-trust-test, PR head commit.
-            cluster="ai-trust-test"
-            namespace="${{ github.event.pull_request.user.login }}"
-            head_sha="${{ github.event.pull_request.head.sha }}"
           else
             WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
             if [[ "${WORKFLOW_NAME}" == "Deployment Workflow" ]]; then

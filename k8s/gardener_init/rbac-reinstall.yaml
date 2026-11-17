@@ -1,0 +1,51 @@
+# Extra permissions for the `garden-reinstall` PR label (k8s/scripts/uninstall-namespace.sh).
+#
+# Applied by shoot-cluster-init.sh ONLY for the ai-trust-test cluster, on top of rbac.yaml. The
+# regular CI Role (ai-trust-ci-deployer in rbac.yaml) already covers deleting PVCs, Jobs, Deployments
+# and (in ocm-system) HelmReleases/FluxDeployers. A forced reinstall additionally has to remove
+# StatefulSets (postgres/clickhouse/minio/... - otherwise they respawn force-deleted pods),
+# ReplicaSets and Pods, which rbac.yaml does not allow. ai-trust-main deliberately does not get this.
+#
+# NAMESPACE is substituted by shoot-cluster-init.sh when applying this file.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ai-trust-ci-reinstaller
+  namespace: ${NAMESPACE}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets", "replicasets"]
+    verbs: ["get", "list", "watch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ai-trust-ci-reinstaller
+  namespace: ${NAMESPACE}
+subjects:
+  - kind: User
+    name: "github.com:284992593:1285188431" # AI-Trust-Services/ai-trust-platform - see structured-auth-configmap.yaml
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: ai-trust-ci-reinstaller
+  apiGroup: rbac.authorization.k8s.io
+---
+# The workflow authenticates as the github-actions ServiceAccount (see rbac.yaml).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ai-trust-ci-reinstaller-sa
+  namespace: ${NAMESPACE}
+subjects:
+  - kind: ServiceAccount
+    name: github-actions
+    namespace: ocm-system
+roleRef:
+  kind: Role
+  name: ai-trust-ci-reinstaller
+  apiGroup: rbac.authorization.k8s.io
