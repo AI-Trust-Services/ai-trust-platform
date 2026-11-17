@@ -310,6 +310,13 @@ async def test_pipeline_writes_ai_output_layer(client: httpx.AsyncClient):
     assert isinstance(payload["answers"], list)
     # The stub classifier derives a tier from the stub answers.
     assert payload["classification"]["tier"] is not None
+    # Self-describing: records the inputs this run actually consumed (#366) — the
+    # relational evidence the LLM saw + the documents RAG surfaced (empty here:
+    # the indexing backend is unreachable in e2e, so RAG returns nothing).
+    consumed = payload["consumed_inputs"]
+    assert isinstance(consumed["evidence"], dict) and consumed["evidence"]
+    assert consumed["evidence"]["description"] == "desc"
+    assert isinstance(consumed["documents"], list)
 
 
 # ── immutability: contents frozen (UPDATE), but a dossier is deletable ─────────

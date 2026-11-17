@@ -482,6 +482,7 @@ async def _run_prefill_background(
                             s.model_dump() for s in _sources_from_proposals(proposals)
                         ],
                     },
+                    consumed=output.get("consumed"),
                 )
                 await session.commit()
         except Exception as exc:  # noqa: BLE001

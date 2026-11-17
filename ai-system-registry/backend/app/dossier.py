@@ -190,8 +190,17 @@ async def write_ai_output_in_session(
     assessment_id: str,
     answers: list[dict[str, Any]],
     classification: dict[str, Any],
+    consumed: dict[str, Any] | None = None,
 ) -> None:
     """Append the ``ai`` output layer once the pipeline completes.
+
+    ``consumed`` records the inputs the pipeline *actually* used this run (frozen
+    relational evidence + the documents RAG surfaced, pinned by version). It is
+    stored as ``payload.consumed_inputs`` so the output is self-describing: the
+    dossier's ``inputs`` is the state at /open, while ``consumed_inputs`` is what
+    produced *this* output — which can differ (a doc that finished indexing after
+    open, a retry, a live-row edit in the window). Together they close the
+    "frozen inputs don't constrain the run" gap (#366).
 
     Write-once: a second ``ai`` layer is dropped via ON CONFLICT DO NOTHING on
     ``UNIQUE(dossier_id, layer)`` (so a pipeline retry can't duplicate). No-op if
@@ -216,7 +225,11 @@ async def write_ai_output_in_session(
             id=new_id("DOO"),
             dossier_id=dossier_id,
             layer="ai",
-            payload={"answers": answers, "classification": classification},
+            payload={
+                "answers": answers,
+                "classification": classification,
+                "consumed_inputs": consumed,
+            },
         )
         .on_conflict_do_nothing(constraint="uq_dossier_output_layer")
     )

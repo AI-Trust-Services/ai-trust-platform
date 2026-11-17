@@ -111,6 +111,27 @@ def _system_evidence(row: AISystem) -> str:
     return "\n".join(lines)
 
 
+def _consumed_documents(rag_chunks: list[dict]) -> list[dict]:
+    """Distinct documents the RAG step actually surfaced this run — i.e. what the
+    LLM really saw, pinned by ``version_id`` where available.
+
+    Recorded alongside the AI output (#366) so the dossier captures the *actual*
+    inputs each attempt consumed, which can differ from the /open snapshot (a doc
+    that finished indexing after open, a retry, etc.). Order-preserving dedupe by
+    version/document/filename."""
+    seen: dict[str, dict] = {}
+    for chunk in rag_chunks:
+        src = chunk.get("source") or {}
+        key = src.get("version_id") or src.get("document_id") or src.get("filename")
+        if key and key not in seen:
+            seen[key] = {
+                "document_id": src.get("document_id"),
+                "version_id": src.get("version_id"),
+                "filename": src.get("filename"),
+            }
+    return list(seen.values())
+
+
 async def _retrieve_rag_documents(system_id: str, username: str) -> list[dict]:
     """Retrieve RAG document chunks for the system. Returns empty list on any failure."""
     payload = {
@@ -414,6 +435,14 @@ async def run_pipeline_streaming(
         "run_key": run_key,
         "presigned_url": presigned_url,
         "result": result,
+        # The inputs this run actually consumed (#366) — frozen relational evidence
+        # as serialized for the LLM + the documents RAG surfaced, pinned by version.
+        # Attached to the dossier's AI output layer so the record reflects the real
+        # inputs even when they diverge from the /open snapshot.
+        "consumed": {
+            "evidence": _evidence_fields(row),
+            "documents": _consumed_documents(rag_chunks),
+        },
     }
 
 
@@ -499,4 +528,12 @@ async def run_pipeline(
         "run_key": run_key,
         "presigned_url": presigned_url,
         "result": result,
+        # The inputs this run actually consumed (#366) — frozen relational evidence
+        # as serialized for the LLM + the documents RAG surfaced, pinned by version.
+        # Attached to the dossier's AI output layer so the record reflects the real
+        # inputs even when they diverge from the /open snapshot.
+        "consumed": {
+            "evidence": _evidence_fields(row),
+            "documents": _consumed_documents(rag_chunks),
+        },
     }
