@@ -11,7 +11,7 @@
 #   1. FluxDeployer  ai-trust-<ns>  (ocm-system) - first, otherwise it recreates the HelmRelease
 #   2. HelmRelease   ai-trust-<ns>  (ocm-system) - Flux runs `helm uninstall`; finalizers stripped
 #                                                   if it does not disappear within the timeout
-#   3. StatefulSets, Deployments, Jobs        in <ns>  (controllers first, else pods respawn)
+#   3. StatefulSets, Deployments, Jobs  --force --grace-period=0  in <ns>  (controllers first, else pods respawn)
 #   4. ReplicaSets, Pods  --force --grace-period=0     in <ns>
 #   5. PVCs               --force --grace-period=0     in <ns>  (after pods, so pvc-protection releases)
 #   6. Verifies pods/PVCs/StatefulSets are gone; strips PVC finalizers as a last resort.
@@ -150,7 +150,7 @@ if [[ "$DRY_RUN" != "1" ]] && ! kubectl get namespace "$NS" >/dev/null 2>&1; the
 fi
 
 log "deleting controllers in ${NS} (so pods are not recreated)"
-run kubectl delete statefulset,deployment,job --all -n "$NS" --ignore-not-found --wait=false
+run kubectl delete statefulset,deployment,job --all -n "$NS" --ignore-not-found --force --grace-period=0 --wait=false
 
 log "force-deleting replicasets and pods in ${NS}"
 run kubectl delete replicaset,pod --all -n "$NS" --ignore-not-found --force --grace-period=0 --wait=false
