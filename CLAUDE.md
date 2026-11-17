@@ -242,8 +242,6 @@ The platform ships a trimmed **MVP scope**. **Enabled:** core governance (regist
 - `.ocm/component-constructor.yaml` must list an image **iff** it is in `docker-bake.hcl` `group "default"` — a listed-but-unbuilt image aborts the deploy (`cannot determine digest`).
 - `shell/nginx.conf` `location` blocks for a disabled service must be commented out — static `proxy_pass` hostnames resolve at startup, so a missing upstream stops the shell from starting.
 
-Layer-by-layer table and re-enable steps → [docs/mvp-scope.md](docs/mvp-scope.md).
-
 ## Components
 
 Each component has `frontend/` (nginx, internal) and `backend/` (FastAPI, internal). All traffic routes through `:8080` via the shell proxy. **Per-component detail lives in each component's own `CLAUDE.md`** (linked below) and loads on demand when you work in that directory.
