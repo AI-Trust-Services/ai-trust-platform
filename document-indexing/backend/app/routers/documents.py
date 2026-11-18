@@ -392,9 +392,21 @@ async def _assert_not_in_dossier(session: AsyncSession, document_id: str) -> Non
     referenced document — it keeps the pinned version intact. Same shared DB, so
     this is a plain JSONB containment check.
 
+    Acquires a row lock on the document before checking dossiers so that a
+    concurrent POST /assessment/open that reads this document's chunks and then
+    writes a dossier referencing it is serialised against the delete commit
+    (TOCTOU guard — see #366 review).
+
     ponytail: brute-force JSONB scan (no GIN index) — dossiers are few; add
     `ix_assessment_dossiers_inputs` (gin) if this ever shows up in a slow query.
     """
+    doc = (
+        await session.execute(
+            select(Document).where(Document.id == document_id).with_for_update()
+        )
+    ).scalar_one_or_none()
+    if not doc:
+        raise HTTPException(404, "Document not found")
     referenced = (
         await session.execute(
             select(AssessmentDossier.id)
