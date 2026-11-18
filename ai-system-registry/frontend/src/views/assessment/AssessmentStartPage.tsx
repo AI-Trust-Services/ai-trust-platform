@@ -37,6 +37,20 @@ export default function AssessmentStartPage() {
   // 409s on a non-pending_review status), matching the CO/contributor read-only view.
   const canIssue = state.status_label === "locked" && can("systems:approve");
 
+  // Resume at the first question that still needs the current user, rather than
+  // always restarting at question 1. "Open" = editable by me and not yet
+  // owner-confirmed (an assignee can only edit their assigned questions, so this
+  // lands them on their first open one; the owner lands on the first unconfirmed
+  // question overall). Skip questions still waiting on the AI prefill. Falls back
+  // to the first unconfirmed, then to the very first, so it always goes somewhere.
+  const byKey = Object.fromEntries(state.questions.map((q) => [q.question_key, q]));
+  const firstOpenKey =
+    ORDERED_QUESTION_KEYS.find(
+      (k) => byKey[k]?.can_edit && !byKey[k]?.owner_confirmed && !byKey[k]?.llm_pending,
+    ) ??
+    ORDERED_QUESTION_KEYS.find((k) => !byKey[k]?.owner_confirmed) ??
+    ORDERED_QUESTION_KEYS[0];
+
   return (
     <div className="mx-auto max-w-4xl px-8 py-8">
       <p className="text-sm text-muted-foreground">EU AI Act Compliance</p>
@@ -146,10 +160,10 @@ export default function AssessmentStartPage() {
 
       <div className="mt-6 flex items-center gap-4">
         <button
-          onClick={() => navigate(`${basePath}/q/${ORDERED_QUESTION_KEYS[0]}`)}
+          onClick={() => navigate(`${basePath}/q/${firstOpenKey}`)}
           className="rounded-md bg-[#1147E9] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#0d39c4]"
         >
-          Continue to first question
+          Continue assessment
         </button>
         {canIssue && (
           <button

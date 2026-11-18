@@ -18,7 +18,7 @@ export function RecentSystemsPanel({ systems }: RecentSystemsPanelProps) {
   return (
     <section className="flex flex-col gap-3">
       <h2 className="text-sm font-semibold text-foreground">Recent AI Systems</h2>
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-3">
         {visible.map((s) => (
           <RecentSystemCard key={s.id} system={s} />
         ))}
