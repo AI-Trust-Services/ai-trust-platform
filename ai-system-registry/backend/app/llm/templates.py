@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from functools import lru_cache
+from functools import cache, lru_cache
 from pathlib import Path
 
 from ai_trust_logging import get_logger
@@ -76,7 +76,7 @@ def _resolve_inside_prompts_dir(identifier: str, suffix: str) -> Path:
     return path
 
 
-@lru_cache(maxsize=None)
+@cache
 def load_template(template_id: str) -> str:
     """Read ``<prompts_dir>/<template_id>.md``. Cached by id.
 
@@ -124,7 +124,6 @@ def render_template(template_id: str, **variables: str) -> str:
     return text
 
 
-@lru_cache(maxsize=None)
 def load_questionnaire_text(questionnaire_id: str) -> str:
     """Return the raw ``<prompts_dir>/<questionnaire_id>.json`` text.
 
@@ -142,6 +141,7 @@ def load_questionnaire_text(questionnaire_id: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+@cache
 def load_questionnaire(questionnaire_id: str) -> dict:
     """Read ``<prompts_dir>/<questionnaire_id>.json`` and return the parsed dict.
 
