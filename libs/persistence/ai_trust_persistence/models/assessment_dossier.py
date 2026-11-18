@@ -15,7 +15,7 @@ class AssessmentDossier(Base):
 
     Issue #366. This row is INSERTed once at assessment start and its contents are
     **never updated** — a BEFORE UPDATE trigger rejects every UPDATE (see
-    migrations 0050 + 0051), so a captured dossier can never be tampered with. It
+    migrations 0051 + 0052), so a captured dossier can never be tampered with. It
     freezes exactly what went into a run, so an auditor can reconstruct "which
     inputs/configuration produced which outputs" independent of later edits to the
     live AISystem row, its documents, or the prompt/config files.
@@ -26,7 +26,7 @@ class AssessmentDossier(Base):
     this frozen row. "Run complete" is *derived* from the presence of an ``ai``
     output row, not a mutable status column (there is none, by design).
 
-    FKs are ``CASCADE`` (migration 0051, originally RESTRICT): a dossier lives and
+    FKs are ``CASCADE`` (migration 0052, originally RESTRICT): a dossier lives and
     dies with its assessment. A deleted/aborted (stale) assessment takes its
     dossier with it; approved/historicized assessments are never deleted
     (compliance blocks that at the app layer), so their dossiers persist. RESTRICT
@@ -80,11 +80,11 @@ class AssessmentDossierOutput(Base):
     ticket may add ``co_issued``.
 
     Write-once-per-layer: INSERTed once, never updated (a BEFORE UPDATE trigger,
-    migrations 0050 + 0051, rejects mutation), and ``UNIQUE(dossier_id, layer)``
+    migrations 0051 + 0052, rejects mutation), and ``UNIQUE(dossier_id, layer)``
     guarantees a layer cannot be written twice. This is *why* the AI layer can
     never be overwritten by the user-confirmed layer (#370's hard requirement):
     they are physically separate, immutable rows — not two fields on one mutable
-    row. The FK is ``CASCADE`` (0051), so a layer is removed only when its dossier
+    row. The FK is ``CASCADE`` (0052), so a layer is removed only when its dossier
     is (i.e. when the assessment is deleted).
     """
 
