@@ -357,8 +357,12 @@ async def run_questionnaire_pipeline(
     validation **or callback** raises is logged (``questionnaire_pipeline.
     batch_failed``) and skipped — it does not abort the other batches.
 
-    Returns ``{run_key, presigned_url, result}`` where ``result`` is
-    ``{"results": [...]}`` merged in category order.
+    Returns ``{run_key, presigned_url, result, consumed}`` where ``result`` is
+    ``{"results": [...]}`` merged in category order, and ``consumed`` is
+    ``{"evidence": {...}, "documents": [...]}`` — the relational fields and RAG
+    documents that were actually used for this run (frozen into the dossier's AI
+    output layer by ``_finalize_tier``; may differ from the ``/open`` snapshot if
+    documents changed between open and pipeline completion).
 
     Raises:
         KeyError: system not found (caller maps to 404).
