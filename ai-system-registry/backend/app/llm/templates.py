@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from functools import lru_cache
+from functools import cache, lru_cache
 from pathlib import Path
 
 from ai_trust_logging import get_logger
@@ -76,7 +76,7 @@ def _resolve_inside_prompts_dir(identifier: str, suffix: str) -> Path:
     return path
 
 
-@lru_cache(maxsize=None)
+@cache
 def load_template(template_id: str) -> str:
     """Read ``<prompts_dir>/<template_id>.md``. Cached by id.
 
@@ -124,12 +124,13 @@ def render_template(template_id: str, **variables: str) -> str:
     return text
 
 
-@lru_cache(maxsize=None)
-def load_questionnaire(questionnaire_id: str) -> dict:
-    """Read ``<prompts_dir>/<questionnaire_id>.json`` and return the parsed dict.
+def load_questionnaire_text(questionnaire_id: str) -> str:
+    """Return the raw ``<prompts_dir>/<questionnaire_id>.json`` text.
 
-    Cached by id. Raises ``PromptTemplateError`` when the file does not exist or
-    contains invalid JSON.
+    Resolves through ``_resolve_prompts_dir()`` (honors ``PROMPTS_DIR``), the same
+    path the pipeline's ``load_questionnaire`` uses — so a verbatim+sha256 snapshot
+    of it captures exactly the questionnaire used for inference, not a bundled copy.
+    Raises ``PromptTemplateError`` when the file does not exist.
     """
     path = _resolve_inside_prompts_dir(questionnaire_id, ".json")
     if not path.is_file():
@@ -137,9 +138,20 @@ def load_questionnaire(questionnaire_id: str) -> dict:
             f"Questionnaire '{questionnaire_id}' not found at '{path}'. "
             f"Questionnaire files live in context/prompts/ (set PROMPTS_DIR to override)."
         )
+    return path.read_text(encoding="utf-8")
+
+
+@cache
+def load_questionnaire(questionnaire_id: str) -> dict:
+    """Read ``<prompts_dir>/<questionnaire_id>.json`` and return the parsed dict.
+
+    Cached by id. Raises ``PromptTemplateError`` when the file does not exist or
+    contains invalid JSON.
+    """
+    text = load_questionnaire_text(questionnaire_id)
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(text)
     except json.JSONDecodeError as exc:
         raise PromptTemplateError(
-            f"Questionnaire '{questionnaire_id}' at '{path}' contains invalid JSON: {exc}"
+            f"Questionnaire '{questionnaire_id}' contains invalid JSON: {exc}"
         ) from exc
