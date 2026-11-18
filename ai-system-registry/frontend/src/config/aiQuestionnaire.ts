@@ -15,6 +15,27 @@ export interface AiQuestionDef {
   type: QuestionType;
   allowedAnswers: string[] | MultiselectOption[];
   appliesWhen?: unknown;
+  /** Owner-facing EU AI Act context shown display-only in the assessment
+   *  companion's Context tab (issue #410). Absent for questions with no
+   *  mapped context text. */
+  ownerContext?: string;
+  /** Compliance-officer-facing legal context shown display-only in the
+   *  companion's Context tab for the CO (issue #409). Longer, structured legal
+   *  text (Summary / provisions / recitals) with inline external source links.
+   *  Absent for questions with no mapped CO context. */
+  coContext?: string;
+  /** Illustrative examples for this question, shown to both the owner and the
+   *  CO as a collapsible "Examples" section in the Context tab (below the
+   *  context sections, above the CO's Sources list). Same text for both roles.
+   *  A bullet list transcribed from the questionnaire's "Example(s)" column;
+   *  absent for questions with no examples. */
+  examples?: string;
+  /** Additional examples from secondary sources (academic commentary, case
+   *  law, boundary cases), transcribed from the questionnaire's "Extended
+   *  Examples" column. Rendered below `examples` in the same "Examples" section
+   *  under an "Extended examples" sub-heading. Same text for both roles; absent
+   *  for questions with no extended examples. */
+  extendedExamples?: string;
 }
 
 const rawQuestions = (questionnaireJson as { questions: AiQuestionDef[] }).questions;
