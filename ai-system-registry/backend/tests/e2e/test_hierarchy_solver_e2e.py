@@ -186,8 +186,8 @@ async def test_resolve_risk_winner_override(client):
     body = r.json()
     assert body["risk"]["labelId"] == "PROHIBITED"
     assert body["risk"]["source"] == "user"
-    assert body["risk"]["confidence"] is None
-    assert body["risk"]["confidenceBand"] is None
+    assert body["risk"]["confidence"] == 100
+    assert body["risk"]["confidenceBand"] == "High"
 
 
 @pytest.mark.asyncio
@@ -223,12 +223,12 @@ async def test_resolve_labels_override_sets_source_user(client):
     # HIGH_RISK forced false → next risk winner or MINIMAL
     risk = body["risk"]
     assert risk["labelId"] != "HIGH_RISK" or risk["result"] is False
-    # The overridden label has source="user" and no confidence
+    # The overridden label has source="user" and confidence=100
     all_labels = [body["risk"]] + body["roles"]
     high_risk = next((l for l in all_labels if l["labelId"] == "HIGH_RISK"), None)
     if high_risk:
         assert high_risk["source"] == "user"
-        assert high_risk["confidence"] is None
+        assert high_risk["confidence"] == 100
 
 
 @pytest.mark.asyncio

@@ -536,4 +536,25 @@ export interface AuditEventListResponse {
   items: AuditEvent[];
 }
 
+// ── Hierarchy Solver (POST /classification/resolve) ──────────────────────────
+export interface ResolvedLabel {
+  labelId: string;
+  result: boolean;
+  source: "pipeline" | "user" | "skipped";
+  confidence: number | null;
+  confidenceBand: "High" | "Medium" | "Low" | null;
+  explanation: string | null;
+}
+
+export interface ResolveResponse {
+  risk: ResolvedLabel;
+  roles: ResolvedLabel[];
+}
+
+export interface LabelOverrides {
+  answers?: Record<string, string[]>;
+  labels?: Record<string, boolean>;
+  riskWinner?: string;
+}
+
 

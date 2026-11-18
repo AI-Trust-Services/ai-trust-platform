@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 _RISK_HIERARCHY = ["PROHIBITED", "HIGH_RISK", "TRANSPARENCY", "MINIMAL"]
 _RISK_LABEL_IDS = frozenset(_RISK_HIERARCHY)
 
-_CONFIG_PATH = Path(__file__).parents[3] / "context" / "prompts" / "hierarchy_solver_config.json"
+_CONFIG_PATH = Path(__file__).parents[1] / "context" / "prompts" / "hierarchy_solver_config.json"
 _DEFAULT_THRESHOLDS = {"high": 90, "medium": 60}
 
 
@@ -127,16 +127,21 @@ def solve(
         user_overridden = classification and (classification.get("_user_overridden") or classification.get("_answers_overridden"))
 
         if label_id == "MINIMAL":
-            # MINIMAL is not in the pipeline config — it is the solver's fallback when no
-            # risk label is true. riskWinner="MINIMAL" is handled above and never reaches here.
-            # TODO: derive confidence from the other risk labels (e.g. min of their confidences)
-            # so the UI can show a meaningful band instead of None.
+            # ponytail: min of other risk-label confidences — proxy for "we're as sure as the
+            # weakest counterargument"; upgrade to §8/§9 tree eval if MINIMAL gets its own rules.
+            other_confidences = [
+                c["confidence"]
+                for rid in _RISK_HIERARCHY[:-1]  # PROHIBITED, HIGH_RISK, TRANSPARENCY
+                if (c := classification_map.get(rid)) and c.get("confidence") is not None
+            ]
+            confidence = min(other_confidences) if other_confidences else None
+            band = _confidence_band(label_id, confidence) if confidence is not None else None
             return ResolvedLabel(
                 labelId=label_id,
                 result=True,
                 source="pipeline",
-                confidence=None,
-                confidenceBand=None,
+                confidence=confidence,
+                confidenceBand=band,
                 explanation=None,
             )
 
@@ -149,8 +154,8 @@ def solve(
                 labelId=label_id,
                 result=classification["result"],
                 source="user",
-                confidence=None,
-                confidenceBand=None,
+                confidence=100,
+                confidenceBand="High",
                 explanation=None,
             )
 
@@ -172,8 +177,8 @@ def solve(
             labelId=overrides.risk_winner,
             result=True,
             source="user",
-            confidence=None,
-            confidenceBand=None,
+            confidence=100,
+            confidenceBand="High",
             explanation=None,
         )
     else:
