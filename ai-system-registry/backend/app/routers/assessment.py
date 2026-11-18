@@ -15,9 +15,6 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from sqlalchemy import func, select
-
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import (
     SYSTEMS_APPROVE,
@@ -37,7 +34,6 @@ from ai_trust_persistence.models.obligation import Obligation
 from ai_trust_persistence.models.question_comment import QuestionComment
 from ai_trust_persistence.models.question_state import QuestionState
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
-
 from app import email_sender
 from app.assessment_catalogue import (
     ASSESSMENT_QUESTION_KEYS,
@@ -45,6 +41,7 @@ from app.assessment_catalogue import (
 )
 from app.assessment_prefill_pipeline import run_assessment_prefill_pipeline
 from app.classifier import classify_ai_questionnaire
+from app.dossier import create_dossier_in_session, write_ai_output_in_session
 from app.ids import new_id
 from app.llm import LLMParseError
 from app.questionnaire_required import QUESTION_LABEL
@@ -55,15 +52,17 @@ from app.schemas.assessment import (
     CommentCreate,
     CommentResponse,
     ConfidenceCounts,
-    ContributorRef,
     ConfirmResponse,
+    ContributorRef,
+    IssueRequest,
     QuestionStateResponse,
+    RejectRequest,
     SourceDocumentRef,
     SubmitRequest,
-    IssueRequest,
-    RejectRequest,
     _validate_question_key,
 )
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from sqlalchemy import func, select
 
 router = APIRouter(tags=["assessment"])
 logger = get_logger(__name__)
@@ -445,7 +444,7 @@ async def _run_prefill_background(
             row = await _get_system(session, system_id)
             try:
                 classification, rationale = await classify_ai_questionnaire(row)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.error("assessment.classify_failed", extra={"error": str(exc)})
                 raise
             row.tier = classification.tier
@@ -464,6 +463,39 @@ async def _run_prefill_background(
             logger.info(
                 "assessment.prefill_completed",
                 extra={"system_id": system_id, "tier": row.tier},
+            )
+
+        # #366: freeze the AI output layer (per-question answers + proposed
+        # classification) into the dossier. Separate txn + own error handling so
+        # this append-only, write-once side-effect can never roll back the
+        # classification result committed above.
+        try:
+            async with SessionLocal() as session:
+                await write_ai_output_in_session(
+                    session,
+                    assessment_id,
+                    (questionnaire_output.get("result") or {}).get("results") or [],
+                    {
+                        "tier": classification.tier,
+                        "basis": classification.basis,
+                        "annex_iii_area": classification.annex_iii_area,
+                        "org_role": rationale.get("org_role"),
+                        "rationale": rationale,
+                        "assessment_sources": [
+                            s.model_dump() for s in _sources_from_proposals(proposals)
+                        ],
+                    },
+                    consumed=questionnaire_output.get("consumed"),
+                )
+                await session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "assessment.dossier_ai_output_failed",
+                extra={
+                    "system_id": system_id,
+                    "assessment_id": assessment_id,
+                    "error": str(exc),
+                },
             )
 
     try:
@@ -544,6 +576,26 @@ async def open_assessment(
                     ai_references=None,
                     ai_explanation=None,
                 )
+            )
+        # #366: freeze the assessment dossier (inputs/config/prompts) at start,
+        # atomically with seeding this cycle. Best-effort — a snapshot failure
+        # must not block starting the assessment. The savepoint is what makes it
+        # best-effort: without it a failed snapshot query (or a deferred INSERT
+        # violation surfacing at the outer commit) would abort the whole txn and
+        # still 500 /open. begin_nested() flushes the INSERT here, so any failure
+        # rolls back only the dossier and leaves the seeded question_states intact.
+        try:
+            async with session.begin_nested():
+                await create_dossier_in_session(session, row, assessment.id)
+                await session.flush()
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "assessment.dossier_create_failed",
+                extra={
+                    "system_id": system_id,
+                    "assessment_id": assessment.id,
+                    "error": str(exc),
+                },
             )
         assessment.llm_status = "pending"
         await session.commit()
