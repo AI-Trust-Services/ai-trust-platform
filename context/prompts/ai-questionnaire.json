@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0",
   "questionnaireId": "ai-questionnaire",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "title": "AI System Questionnaire",
   "defaultLanguage": "en",
   "questions": [
@@ -14,19 +14,24 @@
     },
     {
       "id": "Scope_2",
-      "question": "Is the AI System or its output used exclusively for one or more of the following matters?",
+      "question": "Is the AI System or its output used exclusively for one or more of the following areas?",
       "category": "Scope",
       "type": "MULTISELECT",
       "allowedAnswers": [
         {
           "value": "Defense",
           "code": "a",
-          "label": "Military, defense or national security purposes"
+          "label": "Military, defense or national security"
         },
         {
           "value": "Research",
           "code": "b",
           "label": "Scientific research and development"
+        },
+        {
+          "value": "NOT_APPLICABLE",
+          "code": "not_applicable",
+          "label": "The AI system or its output is not used exclusively within the areas listed above"
         }
       ]
     },
@@ -73,334 +78,329 @@
       "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
     },
     {
-      "id": "Description_1",
-      "question": "System type and components: What kind of AI or automated decision-making is involved (e.g. large language model, classical ML classifier, computer vision model, rules engine, scoring algorithm, or a combination)? What are the specific models or components used, including names, versions, and providers where applicable?",
-      "category": "Description",
-      "type": "DESCRIPTIVE"
-    },
-    {
-      "id": "Description_2",
-      "question": "System position: Is the AI the product itself, a component embedded in a wider product, or an API consumed by third parties?",
-      "category": "Description",
-      "type": "DESCRIPTIVE"
-    },
-    {
-      "id": "Description_3",
-      "question": "Architecture: What are the main components and their boundaries? Which parts are AI-driven and which are deterministic? What are the key runtime dependencies?",
-      "category": "Description",
-      "type": "DESCRIPTIVE"
-    },
-    {
-      "id": "Description_4",
-      "question": "Data flows: What types of data does the system take as input, where does it come from, and does it include sensitive or regulated categories? Does the output directly trigger a downstream action, or does it require human approval before anything happens?",
-      "category": "Description",
-      "type": "DESCRIPTIVE"
-    },
-    {
-      "id": "Description_5",
-      "question": "Affected population: Who or what does the system’s output affect: the end user, a third party, or a downstream automated system?",
-      "category": "Description",
-      "type": "DESCRIPTIVE"
-    },
-    {
-      "id": "Description_6",
-      "question": "Oversight and auditability: Is a human in, on, or in command of the loop? Are inputs, outputs, and decisions logged, and if so, for how long and retrievable by whom?",
-      "category": "Description",
-      "type": "DESCRIPTIVE"
-    },
-    {
-      "id": "Description_7",
-      "question": "Update cadence: How often are models or decision logic updated or retrained, and who controls that process?",
-      "category": "Description",
-      "type": "DESCRIPTIVE"
-    },
-    {
-      "id": "Description_8",
-      "question": "Failure behaviour: What does the system do when it cannot produce a reliable output or encounters an error?",
-      "category": "Description",
-      "type": "DESCRIPTIVE"
-    },
-    {
-      "id": "Description_9",
-      "question": "What is the current development stage (e.g. proof of concept, pilot, beta, production)?",
-      "category": "Description",
-      "type": "DESCRIPTIVE"
-    },
-    {
-      "id": "Description_10",
-      "question": "What is the planned rollout timeline and target regions or user groups?",
-      "category": "Description",
-      "type": "DESCRIPTIVE"
-    },
-    {
-      "id": "Description_11",
-      "question": "Has any deployment already occurred, and if so, at what scale?",
-      "category": "Description",
-      "type": "DESCRIPTIVE"
-    },
-    {
-      "id": "Purpose_1",
-      "question": "What is the AI system intended to be used for and what use cases does this AI system have specifically within the organisation?",
-      "category": "Purpose",
-      "type": "DESCRIPTIVE",
-      "descriptionGuidance": "If there are multiple purposes, please list them all clearly and specifically. A risk classification and role assessment must occur for every intended purpose."
-    },
-    {
-      "id": "Purpose_2",
-      "question": "Which use cases are specifically excluded from usage?",
-      "category": "Purpose",
-      "type": "DESCRIPTIVE"
-    },
-    {
-      "id": "Purpose_3",
-      "question": "What specific output is created by the system?",
-      "category": "Purpose",
-      "type": "DESCRIPTIVE"
-    },
-    {
-      "id": "Purpose_4",
-      "question": "Who is user of the AI system?",
-      "category": "Purpose",
-      "type": "DESCRIPTIVE"
-    },
-    {
-      "id": "Purpose_5",
-      "question": "How often is the AI system to be used?",
-      "category": "Purpose",
-      "type": "DESCRIPTIVE"
-    },
-    {
-      "id": "Purpose_6",
-      "question": "What consequences can wrong, distorted, or delayed usage of the AI system have?",
-      "category": "Purpose",
-      "type": "DESCRIPTIVE"
-    },
-    {
-      "id": "Purpose_7",
-      "question": "Does the system make a final decision with legal or similarly significant effect?",
-      "category": "Purpose",
-      "type": "DESCRIPTIVE"
-    },
-    {
-      "id": "Purpose_8",
-      "question": "Can a person effectively check, override, or stop the output of the AI system?",
-      "category": "Purpose",
-      "type": "DESCRIPTIVE"
-    },
-    {
       "id": "Prohibited_1",
-      "question": "Does the AI system use biometric categorisation systems that categorise individual persons based on their biometric data to deduce or infer their race, political opinions, trade union membership, religious or philosophical beliefs, sex life or sexual orientation?",
+      "question": "Does the AI system perform, enable, or is it intended to be used for one or more of the following practices? You can indicate more than one practice if appropriate for the AI system.",
       "category": "Prohibited",
-      "type": "PREDEFINED",
-      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
+      "type": "MULTISELECT",
+      "allowedAnswers": [
+        {
+          "value": "SENSITIVE_BIOMETRIC_CATEGORISATION",
+          "code": "a",
+          "label": "Biometric categorisation to infer race, political opinions, trade union membership, religious or philosophical beliefs, sex life, or sexual orientation",
+          "optionSemantics": "Select when the AI system uses biometric categorisation systems that categorise individual persons based on their biometric data to deduce or infer their race, political opinions, trade union membership, religious or philosophical beliefs, sex life or sexual orientation."
+        },
+        {
+          "value": "MANIPULATIVE_OR_DECEPTIVE_TECHNIQUES",
+          "code": "b",
+          "label": "Use of subliminal, intentionally manipulative, or deceptive techniques",
+          "optionSemantics": "Select when the AI system uses subliminal, intentionally manipulative, or deceptive techniques. Whether these techniques affect the ability to make an informed decision and cause or are reasonably likely to cause significant harm is assessed in the follow-up questions."
+        },
+        {
+          "value": "EXPLOITATION_OF_VULNERABILITY",
+          "code": "c",
+          "label": "Exploitation of vulnerabilities due to age, disability, or a particular social or economic situation",
+          "optionSemantics": "Select when the AI system exploits vulnerabilities of a person or a particular group of persons due to age, disability, or a particular social or economic situation. Whether this materially distorts behaviour in a manner that causes or is reasonably likely to cause significant harm is assessed in the follow-up question."
+        },
+        {
+          "value": "SOCIAL_SCORING",
+          "code": "d",
+          "label": "Evaluation or classification of persons based on social behaviour or personal characteristics",
+          "optionSemantics": "Select when the AI system evaluates or classifies a person over a certain period of time based on their social behaviour or personal characteristics, whether known, inferred, or predicted. Whether this results in specific detrimental or unfavourable treatment is assessed in the follow-up questions."
+        },
+        {
+          "value": "REAL_TIME_REMOTE_BIOMETRIC_IDENTIFICATION",
+          "code": "e",
+          "label": "Real-time remote biometric identification in publicly accessible spaces for law enforcement purposes",
+          "optionSemantics": "Select when the AI system uses real-time remote biometric identification systems in publicly accessible spaces for law enforcement purposes. The applicable exception conditions are assessed in the follow-up questions."
+        },
+        {
+          "value": "CRIMINAL_RISK_ASSESSMENT",
+          "code": "f",
+          "label": "Assessment or prediction of a person's risk of committing a criminal offence based on their profile, personality traits, or characteristics",
+          "optionSemantics": "Select when the AI system conducts risk assessments of persons to assess or predict a person's risk of committing a criminal offence solely on the basis of the person's profile or an assessment of their personality traits and characteristics. Whether the system only supports a human assessment based on objective and verifiable facts is assessed in the follow-up question."
+        },
+        {
+          "value": "UNTARGETED_FACIAL_SCRAPING",
+          "code": "g",
+          "label": "Creation or expansion of facial recognition databases through untargeted scraping of facial images from the internet or CCTV footage",
+          "optionSemantics": "Select when the AI system creates or expands facial recognition databases through the untargeted scraping of facial images from the internet or CCTV footage."
+        },
+        {
+          "value": "EMOTION_RECOGNITION_WORK_OR_EDUCATION",
+          "code": "h",
+          "label": "Emotion analysis or inference in workplace or educational institutions not intended for medical or safety reasons",
+          "optionSemantics": "Select when the AI system analyses or infers the emotions of a person in the workplace or educational institutions and the use is not intended for medical or safety reasons."
+        },
+        {
+          "value": "NON_CONSENSUAL_INTIMATE_CONTENT",
+          "code": "i",
+          "label": "Generation or manipulation of realistic intimate or explicit representations of identifiable persons without the required consent",
+          "optionSemantics": "Select when the AI system generates or manipulates realistic intimate or explicit representations of identifiable natural persons in images, videos, audio, or similar content without the required consent."
+        },
+        {
+          "value": "CHILD_ABUSE_MATERIAL",
+          "code": "j",
+          "label": "Creation or manipulation of material or representations within the meaning of Directive 2011/93/EU",
+          "optionSemantics": "Select when the AI system is used for the creation or manipulation of material or representations within the meaning of Directive 2011/93/EU."
+        },
+        {
+          "value": "NOT_APPLICABLE",
+          "code": "not_applicable",
+          "label": "None of the listed prohibited practices apply"
+        }
+      ]
     },
     {
       "id": "Prohibited_2",
-      "question": "Does this AI system merely label or filter a lawfully obtained biometric data set?",
+      "question": "For the identified biometric categorisation to infer sensitive or protected characteristics, does the AI system merely label or filter a lawfully obtained biometric data set?",
       "category": "Prohibited",
       "type": "PREDEFINED",
-      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"],
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
       "appliesWhen": {
         "all": [
           {
             "questionId": "Prohibited_1",
-            "operator": "IN",
-            "values": ["YES", "PARTIALLY"]
+            "operator": "CONTAINS",
+            "value": "SENSITIVE_BIOMETRIC_CATEGORISATION"
           }
         ]
       }
     },
     {
       "id": "Prohibited_3",
-      "question": "Is the processing of the biometric data set done exclusively within the legally defined area of law enforcement?",
+      "question": "For the identified biometric categorisation to infer sensitive or protected characteristics, is the processing of the biometric data set done exclusively within the legally defined area of law enforcement?",
       "category": "Prohibited",
       "type": "PREDEFINED",
-      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"],
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
       "appliesWhen": {
         "all": [
           {
             "questionId": "Prohibited_1",
-            "operator": "IN",
-            "values": ["YES", "PARTIALLY"]
+            "operator": "CONTAINS",
+            "value": "SENSITIVE_BIOMETRIC_CATEGORISATION"
           }
         ]
       }
     },
     {
       "id": "Prohibited_4",
-      "question": "Does the system use subliminal, intentionally manipulative, or deceptive techniques?",
+      "question": "Do the identified subliminal, intentionally manipulative, or deceptive techniques affect a person's ability to make an informed decision and lead, or are they reasonably likely to lead, the person to make a decision that they would not otherwise have made?",
       "category": "Prohibited",
       "type": "PREDEFINED",
-      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
-    },
-    {
-      "id": "Prohibited_5",
-      "question": "Do these affect the ability to make an informed decision and lead to a decision that wouldn't have been made otherwise?",
-      "category": "Prohibited",
-      "type": "PREDEFINED",
-      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"],
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
       "appliesWhen": {
         "all": [
           {
-            "questionId": "Prohibited_4",
-            "operator": "IN",
-            "values": ["YES", "PARTIALLY"]
+            "questionId": "Prohibited_1",
+            "operator": "CONTAINS",
+            "value": "MANIPULATIVE_OR_DECEPTIVE_TECHNIQUES"
+          }
+        ]
+      }
+    },
+    {
+      "id": "Prohibited_5",
+      "question": "Does the behavioural distortion resulting from the identified subliminal, intentionally manipulative, or deceptive techniques cause, or is it reasonably likely to cause, significant harm?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "Prohibited_1",
+            "operator": "CONTAINS",
+            "value": "MANIPULATIVE_OR_DECEPTIVE_TECHNIQUES"
           }
         ]
       }
     },
     {
       "id": "Prohibited_6",
-      "question": "Does the behavioral bias cause significant harm or is it sufficiently likely?",
+      "question": "Does the identified exploitation of vulnerabilities due to age, disability, or a particular social or economic situation have the objective or effect of materially distorting the behaviour of the person or group in a manner that causes, or is reasonably likely to cause, significant harm?",
       "category": "Prohibited",
       "type": "PREDEFINED",
-      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"],
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
       "appliesWhen": {
         "all": [
           {
-            "questionId": "Prohibited_4",
-            "operator": "IN",
-            "values": ["YES", "PARTIALLY"]
+            "questionId": "Prohibited_1",
+            "operator": "CONTAINS",
+            "value": "EXPLOITATION_OF_VULNERABILITY"
           }
         ]
       }
     },
     {
       "id": "Prohibited_7",
-      "question": "Could the use of the AI system exploit a vulnerability of a person or a particular group of persons  due to age, disability, or particular social or economic situations with the aim or effect of manipulating their behaviour in a way that causes or is reasonably likely to cause significant harm?",
+      "question": "Does the identified evaluation or classification based on social behaviour or personal characteristics result in detrimental or unfavourable treatment of a person in a social context unrelated to the context in which the data was originally generated or collected?",
       "category": "Prohibited",
       "type": "PREDEFINED",
-      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
-    },
-    {
-      "id": "Prohibited_8",
-      "question": "Does the AI system evaluate or classify any person over a certain period of time based on their social behaviour or personal characteristics (known, inferred or predicted), and does this result in either or both of (a) detrimental or unfavourable treatment of any person in social contexts unrelated to the contexts in which the data was originally generated or collected; or (b) detrimental or unfavourable treatment that is unjustified or disproportionate to the person's social behaviour or its gravity?",
-      "category": "Prohibited",
-      "type": "PREDEFINED",
-      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
-    },
-    {
-      "id": "Prohibited_9",
-      "question": "Does the AI system use 'real-time' remote biometric identification systems in public spaces for law enforcement purposes?",
-      "category": "Prohibited",
-      "type": "PREDEFINED",
-      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
-    },
-    {
-      "id": "Prohibited_10",
-      "question": "Is there a specifically documented legal exception purpose?",
-      "category": "Prohibited",
-      "type": "PREDEFINED",
-      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"],
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
       "appliesWhen": {
         "all": [
           {
-            "questionId": "Prohibited_9",
-            "operator": "IN",
-            "values": ["YES", "PARTIALLY"]
+            "questionId": "Prohibited_1",
+            "operator": "CONTAINS",
+            "value": "SOCIAL_SCORING"
+          }
+        ]
+      }
+    },
+    {
+      "id": "Prohibited_8",
+      "question": "Does the identified evaluation or classification based on social behaviour or personal characteristics result in detrimental or unfavourable treatment that is unjustified or disproportionate to the person's social behaviour or its gravity?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "Prohibited_1",
+            "operator": "CONTAINS",
+            "value": "SOCIAL_SCORING"
+          }
+        ]
+      }
+    },
+    {
+      "id": "Prohibited_9",
+      "question": "For the identified use of real-time remote biometric identification in publicly accessible spaces for law enforcement purposes, is there a specifically documented legal exception purpose?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "Prohibited_1",
+            "operator": "CONTAINS",
+            "value": "REAL_TIME_REMOTE_BIOMETRIC_IDENTIFICATION"
+          }
+        ]
+      }
+    },
+    {
+      "id": "Prohibited_10",
+      "question": "For the identified use of real-time remote biometric identification in publicly accessible spaces for law enforcement purposes, are the target person or target group, spatial and temporal boundaries, as well as the severity, likelihood, and extent of the harm documented?",
+      "category": "Prohibited",
+      "type": "PREDEFINED",
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
+      "appliesWhen": {
+        "all": [
+          {
+            "questionId": "Prohibited_1",
+            "operator": "CONTAINS",
+            "value": "REAL_TIME_REMOTE_BIOMETRIC_IDENTIFICATION"
           }
         ]
       }
     },
     {
       "id": "Prohibited_11",
-      "question": "Are the target person or target group, spatial and temporal boundaries, as well as the severity, likelihood, and extent of the damage documented?",
+      "question": "For the identified use of real-time remote biometric identification in publicly accessible spaces for law enforcement purposes, was a fundamental rights impact assessment carried out?",
       "category": "Prohibited",
       "type": "PREDEFINED",
-      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"],
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
       "appliesWhen": {
         "all": [
           {
-            "questionId": "Prohibited_9",
-            "operator": "IN",
-            "values": ["YES", "PARTIALLY"]
+            "questionId": "Prohibited_1",
+            "operator": "CONTAINS",
+            "value": "REAL_TIME_REMOTE_BIOMETRIC_IDENTIFICATION"
           }
         ]
       }
     },
     {
       "id": "Prohibited_12",
-      "question": "Was a fundamental rights impact assessment carried out?",
+      "question": "For the identified use of real-time remote biometric identification in publicly accessible spaces for law enforcement purposes, is the required prior approval from a judicial authority or an independent administrative authority in place, or is a legally regulated urgent exception documented?",
       "category": "Prohibited",
       "type": "PREDEFINED",
-      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"],
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
       "appliesWhen": {
         "all": [
           {
-            "questionId": "Prohibited_9",
-            "operator": "IN",
-            "values": ["YES", "PARTIALLY"]
+            "questionId": "Prohibited_1",
+            "operator": "CONTAINS",
+            "value": "REAL_TIME_REMOTE_BIOMETRIC_IDENTIFICATION"
           }
         ]
       }
     },
     {
       "id": "Prohibited_13",
-      "question": "Is the required prior approval from a judicial or independent administrative authority in place, or is a legally regulated urgent exception documented?",
+      "question": "For the identified assessment or prediction of a person's risk of committing a criminal offence based on their profile, personality traits, or characteristics, does the system only support a human assessment that is already based on objective and verifiable facts directly linked to criminal activity?",
       "category": "Prohibited",
       "type": "PREDEFINED",
-      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"],
+      "allowedAnswers": [
+        "YES",
+        "NO",
+        "PARTIALLY",
+        "NOT_APPLICABLE"
+      ],
       "appliesWhen": {
         "all": [
           {
-            "questionId": "Prohibited_9",
-            "operator": "IN",
-            "values": ["YES", "PARTIALLY"]
+            "questionId": "Prohibited_1",
+            "operator": "CONTAINS",
+            "value": "CRIMINAL_RISK_ASSESSMENT"
           }
         ]
       }
-    },
-    {
-      "id": "Prohibited_14",
-      "question": "Does the AI system conduct risk assessments of persons to assess or predict a person's risk of committing a criminal offence solely on the basis of a person's profile or an assessment of a person's personality traits and characteristics?",
-      "category": "Prohibited",
-      "type": "PREDEFINED",
-      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
-    },
-    {
-      "id": "Prohibited_15",
-      "question": "Does the system only support a human assessment that is already based on objective and verifiable facts directly related to criminal activity?",
-      "category": "Prohibited",
-      "type": "PREDEFINED",
-      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"],
-      "appliesWhen": {
-        "all": [
-          {
-            "questionId": "Prohibited_14",
-            "operator": "IN",
-            "values": ["YES", "PARTIALLY"]
-          }
-        ]
-      }
-    },
-    {
-      "id": "Prohibited_16",
-      "question": "Does the AI system create or expand facial recognition databases by untargeted scraping of facial images from the internet or CCTV footage?",
-      "category": "Prohibited",
-      "type": "PREDEFINED",
-      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
-    },
-    {
-      "id": "Prohibited_17",
-      "question": "Does the AI system analyse or infer emotions of a person in the areas of workplace or education institutions and is not intended for medical or safety reasons?",
-      "category": "Prohibited",
-      "type": "PREDEFINED",
-      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
-    },
-    {
-      "id": "Prohibited_18",
-      "question": "Does the AI system generate or manipulate realistic intimate or explicit representations of identifiable natural persons in pictures, videos, audio or simuliar content  without the required consent?",
-      "category": "Prohibited",
-      "type": "PREDEFINED",
-      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"]
-    },
-    {
-      "id": "Prohibited_19",
-      "question": "Is the AI system used for the creation/manipulation of material or representations in the sense of the EU law provision in guideline 2011/93/EU?",
-      "category": "Prohibited",
-      "type": "PREDEFINED",
-      "allowedAnswers": ["YES", "NO", "PARTIALLY", "NOT_APPLICABLE"],
-      "descriptionGuidance": "Guideline 2011/93/EU is direclty related to the topic of child abusement."
     },
     {
       "id": "High_Risk_1",
@@ -849,7 +849,7 @@
     },
     {
       "id": "High_Risk_14",
-      "question": "Will the AI system be used to assign tasks based on individual behavior or personal characteristics?",
+      "question": "Within employment, worker management, or access to self-employment, will the AI system be used to assign tasks based on individual behaviour or personal characteristics?",
       "category": "High-risk",
       "type": "PREDEFINED",
       "allowedAnswers": [
@@ -870,7 +870,7 @@
     },
     {
       "id": "High_Risk_15",
-      "question": "Will the AI system be used to monitor and evaluate the performance and behavior of persons in such relationships?",
+      "question": "Will the AI system be used to monitor and evaluate the performance or behaviour of persons in employment, worker management, or self-employment relationships?",
       "category": "High-risk",
       "type": "PREDEFINED",
       "allowedAnswers": [
@@ -1174,7 +1174,7 @@
         "NOT_APPLICABLE"
       ],
       "answerSemantics": {
-        "YES": "The condition applies when the documented intended use falls within the activity described in the question. This does not include AI systems the output of which natural persons are not directly exposed to, such as tools used to organise, optimise or structure political campaigns from an administrative or logistical point of view."
+        "YES": "The condition applies when the documented intended use falls within the judicial or alternative dispute resolution activities described in the question."
       },
       "appliesWhen": {
         "all": [

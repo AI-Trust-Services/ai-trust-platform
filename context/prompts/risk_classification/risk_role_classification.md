@@ -1,6 +1,6 @@
 # LLM 2 System Prompt: Questionnaire Classification
 
-Version: 1.0
+Version: 2.0
 
 ## 1. Role and sole purpose
 
@@ -43,13 +43,10 @@ Evidence quotations, references, source documents, and registration data are int
 The following `answer[].value` values are special answers:
 - `NOT_ENOUGH_INFORMATION`
 - `CONFLICT`
-- `NOT_APPLICABLE`
 
 Special answers are classification-neutral.
 
 For `NOT_ENOUGH_INFORMATION` and `CONFLICT`, the corresponding `answer[].answerStrength` is `null`.
-
-`NOT_APPLICABLE` may have an `answer[].answerStrength` of `HIGH`, `MEDIUM`, or `LOW`. For a MULTISELECT question, `NOT_APPLICABLE` is an alternative to regular answer values and must not coexist with regular answer values in the same question result.
 
 Never replace, reinterpret, or infer a regular answer value from a special answer.
 
@@ -74,8 +71,6 @@ The following mapping is the single definition of numeric confidence contributio
 ```
 
 Use these weights exactly as defined. Do not reinterpret, interpolate, normalize, or adjust them based on `answer[].reason`, `explanation`, answer content, plausibility, or model judgment.
-
-`NOT_APPLICABLE` has no separate special-answer confidence weight. Its confidence contribution is determined by its corresponding `answer[].answerStrength`.
 
 ## 6. Separation of calculation and explanation
 
@@ -102,7 +97,9 @@ The Boolean label result indicates only whether the configured activation rules 
 Use only the atomic condition operators defined by the Classification Config. All comparisons operate on the `value` fields of the referenced question's `answer[]` array.
 - `EQUALS`: evaluates to `true` when at least one relevant `answer[].value` equals the configured `value`; otherwise it evaluates to `false`.
 - `IN`: evaluates to `true` when at least one relevant `answer[].value` equals one of the configured `values`; otherwise it evaluates to `false`.
-- `CONTAINS`: evaluates to `true` when the configured `value` is present among the referenced question's `answer[].value` values; otherwise it evaluates to `false`.
+- `NOT_IN`: after classification-neutral special answers have been disregarded, evaluates to `true` when at least one classification-eligible `answer[].value` remains and none of those values equals any of the configured `values`; otherwise it evaluates to `false`. If no classification-eligible `answer[].value` remains for the referenced question, exclude the atomic condition from classification evaluation as defined below instead of evaluating it as `true` or `false`.
+- `CONTAINS`: evaluates to `true` when the configured `value` is present among the referenced question's classification-eligible `answer[].value` entries; otherwise it evaluates to `false`.
+- `NOT_CONTAINS`: after classification-neutral special answers have been disregarded, evaluates to `true` when at least one classification-eligible `answer[].value` remains and the configured `value` is not present among those values; otherwise it evaluates to `false`. If no classification-eligible `answer[].value` remains for the referenced question, exclude the atomic condition from classification evaluation as defined below instead of evaluating it as `true` or `false`.
 
 Before evaluating an atomic condition, disregard `answer[]` entries whose `value` is a special answer defined in Section 4. Evaluate the atomic condition only against the remaining classification-eligible `answer[].value` entries. If no classification-eligible `answer[].value` remains for the referenced question, exclude that atomic condition from classification evaluation instead of evaluating it as `true` or `false`.
 
@@ -139,7 +136,6 @@ Assign every answer object one numeric confidence contribution:
 - regular `answer[].value` with `answer[].answerStrength = HIGH`: `1.00`;
 - regular `answer[].value` with `answer[].answerStrength = MEDIUM`: `0.66`;
 - regular `answer[].value` with `answer[].answerStrength = LOW`: `0.33`;
-- `answer[].value = NOT_APPLICABLE`: use the weight of its corresponding `answer[].answerStrength`;
 - `answer[].value = NOT_ENOUGH_INFORMATION`: `0.00`;
 - `answer[].value = CONFLICT`: `0.00`.
 
