@@ -1,10 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { Outlet, useNavigate, useParams, useMatch } from "react-router";
 import { Loader2, Save } from "lucide-react";
 import type { AssessmentState } from "../../types";
 import { api } from "../../api/client";
 import { usePermissions } from "../../hooks/usePermissions";
+import { isGated } from "../../config/aiQuestionnaire";
 import { AssessmentSidebar, ORDERED_QUESTION_KEYS } from "./AssessmentSidebar";
 import { ComplianceAdvisor } from "./ComplianceAdvisor";
 import { ASSESSMENT_SECTIONS } from "./AssessmentSidebar";
@@ -163,10 +164,21 @@ export default function AssessmentApp() {
     ? `/systems/${id}/assessment/view/${viewAssessmentId}`
     : `/systems/${id}/assessment`;
 
-  // The submit gate is OWNER-confirmed on every question (backend-authoritative).
+  // Flat map of question_key → raw answer string (or null).
+  // Used by isGated() in this component and passed to the sidebar.
+  const currentAnswers = useMemo(
+    () =>
+      Object.fromEntries(
+        (state?.questions ?? []).map((q) => [q.question_key, q.answer ?? null]),
+      ),
+    [state?.questions],
+  );
+
+  // The submit gate is OWNER-confirmed on every non-gated question.
+  // Gated questions can never be confirmed so they are excluded from the check.
   const allConfirmed =
     !!state &&
-    ORDERED_QUESTION_KEYS.every(
+    ORDERED_QUESTION_KEYS.filter((k) => !isGated(k, currentAnswers)).every(
       (k) => state.questions.find((q) => q.question_key === k)?.owner_confirmed,
     );
 
@@ -221,6 +233,7 @@ export default function AssessmentApp() {
             finalizeEnabled={allConfirmed}
             locked={!state.editable}
             basePath={basePath}
+            currentAnswers={currentAnswers}
           />
           {/* When the advisor is expanded it covers the whole middle region
               (everything right of the question-list sidebar), so hide main. */}

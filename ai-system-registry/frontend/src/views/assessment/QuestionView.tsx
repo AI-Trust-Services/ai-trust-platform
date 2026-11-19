@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { ChevronLeft, Loader2, MoreVertical, Users, SignalHigh, SignalMedium, SignalLow, Trash2 } from "lucide-react";
+import { ChevronLeft, Loader2, Lock, MoreVertical, Users, SignalHigh, SignalMedium, SignalLow, Trash2 } from "lucide-react";
 import type { ConfidenceLevel, QuestionComment, QuestionState } from "../../types";
 import { api } from "../../api/client";
 import { usePermissions } from "../../hooks/usePermissions";
@@ -11,6 +11,7 @@ import {
   QUESTION_DEF_BY_ID,
   isPredefined,
   isMultiselect,
+  isGated,
 } from "../../config/aiQuestionnaire";
 import {
   Dialog,
@@ -241,6 +242,43 @@ export default function QuestionView() {
 
   if (!def || !questionKey) {
     return <div className="p-8 text-sm text-muted-foreground">Unknown question.</div>;
+  }
+
+  // Build a flat answers map from the loaded assessment state so isGated() can
+  // evaluate the full dependency chain without additional API calls.
+  const currentAnswers: Record<string, string | null> = Object.fromEntries(
+    state.questions.map((q) => [q.question_key, q.answer ?? null]),
+  );
+
+  if (isGated(questionKey, currentAnswers)) {
+    // Find the gate question label for a helpful explanation.
+    const gateNode = def.appliesWhen;
+    const gateIds: string[] = [];
+    if (gateNode) {
+      const collect = (node: typeof gateNode) => {
+        for (const c of [...(node?.all ?? []), ...(node?.any ?? [])]) {
+          if ("questionId" in c) gateIds.push(c.questionId);
+        }
+      };
+      collect(gateNode);
+    }
+    const uniqueGateIds = [...new Set(gateIds)];
+    const gateLabels = uniqueGateIds
+      .map((gid) => QUESTION_DEF_BY_ID[gid]?.question ?? gid)
+      .join(", ");
+
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 p-12 text-center">
+        <Lock className="size-8 text-muted-foreground/40" />
+        <div className="max-w-md space-y-2">
+          <h2 className="text-base font-semibold text-foreground">{def.question}</h2>
+          <p className="text-sm text-muted-foreground">
+            This question is locked. It becomes available based on your answer to:{" "}
+            <span className="font-medium text-foreground">{gateLabels || "a preceding question"}</span>.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   // MULTISELECT: the stored answer is a JSON string array.

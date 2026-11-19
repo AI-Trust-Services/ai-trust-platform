@@ -44,6 +44,7 @@ from app.classifier import classify_ai_questionnaire
 from app.dossier import create_dossier_in_session, write_ai_output_in_session
 from app.ids import new_id
 from app.llm import LLMParseError
+from app.questionnaire_gating import get_all_gated_question_ids, is_gated
 from app.questionnaire_required import QUESTION_LABEL
 from app.schemas.assessment import (
     AnswerRequest,
@@ -825,6 +826,19 @@ async def save_answer(
         if not _may_edit(row, state, user):
             raise HTTPException(403, "You are not assigned to this question")
 
+        # Reject answers for questions currently locked by a gate condition.
+        # Build the answers dict from per-cycle states (preferred) with a
+        # fallback to the system-row JSONB for questions not yet in states.
+        _current_answers: dict[str, str | None] = {
+            k: (st.answer if st else None)
+            for k, st in (await _states_by_key(session, assessment.id)).items()
+        }
+        for k, v in (row.questionnaire_answers or {}).items():
+            if k not in _current_answers:
+                _current_answers[k] = str(v) if v is not None else None
+        if is_gated(question_key, _current_answers):
+            raise HTTPException(422, "Question is locked by a dependency condition")
+
         # Capture the previous stored value BEFORE overwriting, so we can detect a
         # genuine change (not just a change from the AI original).
         prev = (state.answer if state and state.answer is not None else None) or (
@@ -1226,7 +1240,16 @@ async def finalize_assessment(
             raise HTTPException(403, "Only the owner may finalize the assessment")
         assessment = await _ensure_assessment(session, row)
         states = await _states_by_key(session, assessment.id)
-        unconfirmed = _owner_unconfirmed(row, states)
+        # Build current answers to evaluate gating — same pattern as save_answer.
+        _current_answers: dict[str, str | None] = {
+            k: (st.answer if st else None) for k, st in states.items()
+        }
+        for k, v in (row.questionnaire_answers or {}).items():
+            if k not in _current_answers:
+                _current_answers[k] = str(v) if v is not None else None
+        gated_ids = get_all_gated_question_ids(_current_answers)
+        # Exclude gated questions — they can never be confirmed and don't need to be.
+        unconfirmed = _owner_unconfirmed(row, {k: v for k, v in states.items() if k not in gated_ids})
         if unconfirmed:
             raise HTTPException(
                 422,
@@ -1259,7 +1282,15 @@ async def submit_assessment(
             raise HTTPException(409, "Assessment is already locked")
         assessment = await _current_assessment(session, system_id)
         states = await _states_by_key(session, assessment.id) if assessment else {}
-        unconfirmed = _owner_unconfirmed(row, states)
+        # Exclude gated questions from the confirmation gate (same logic as finalize).
+        _current_answers_sub: dict[str, str | None] = {
+            k: (st.answer if st else None) for k, st in states.items()
+        }
+        for k, v in (row.questionnaire_answers or {}).items():
+            if k not in _current_answers_sub:
+                _current_answers_sub[k] = str(v) if v is not None else None
+        gated_ids_sub = get_all_gated_question_ids(_current_answers_sub)
+        unconfirmed = _owner_unconfirmed(row, {k: v for k, v in states.items() if k not in gated_ids_sub})
         if unconfirmed:
             raise HTTPException(
                 422,
