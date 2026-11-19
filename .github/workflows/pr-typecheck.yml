@@ -26,6 +26,7 @@ jobs:
             decision-trace-analyzer/frontend
             ai-test-bed/frontend
             monitoring/frontend
+            overview/frontend
             users/frontend
           )
           FAILED=()

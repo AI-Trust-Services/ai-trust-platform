@@ -140,13 +140,13 @@ The build/test instance mutates the graph (ingest + the expert feedback loop). *
 frozen snapshot of that graph read-only** — it never ingests or mutates. Same `cognee-eval-backend`
 image on both sides; the only differences are config.
 
-**Two modes (Helm `cogneeEval.readOnly`):**
-- `readOnly: true` (default) — prod. `Deployment` with an `emptyDir` hydrated at startup by an init container
-  from the pinned `cogneeEval.graphImage`; `COGNEE_READONLY=true` so ingest/feedback are unmounted
+**Two modes (driven by `cogneeEval.graphImage`):**
+- `graphImage` set (digest-pinned `@sha256` ref) — prod/kind frozen-graph. `Deployment` with an `emptyDir` hydrated at startup by an init container
+  from the pinned image; `COGNEE_READONLY=true` so ingest/feedback are unmounted
   (404). The pod is stateless and reconstructs the exact pinned graph on every start. Eval history
   (POST /evaluate) still works but is ephemeral (resets on restart) — it writes a Q&A log row, never
   the graph.
-- `readOnly: false` — build/test. `StatefulSet` + PVC, all routers, full feedback loop.
+- `graphImage` unset — build/test. `StatefulSet` + PVC, all routers, full feedback loop.
 
 **Why a snapshot (not cognee `push`/CogX):** both sides run the same Cognee, so a verbatim copy of
 `/app/.cognee_system` is byte-identical to what experts approved. `push`/CogX re-materialize via a
@@ -168,7 +168,7 @@ semantic interchange format into a *live writable* remote — the opposite of re
    archive sha256), builds the `cognee-eval/graph-image/Dockerfile` (`FROM busybox` — provides the
    `tar` the init container runs), pushes `ghcr.io/<owner>/ai-trust-platform/cognee-graph`, and prints
    the `@sha256` digest to the job summary.
-3. **Pin + deploy**: set `cogneeEval.readOnly: true` and `cogneeEval.graphImage:
+3. **Pin + deploy**: set `cogneeEval.graphImage:
    ghcr.io/<owner>/ai-trust-platform/cognee-graph@sha256:<digest>` (always a digest, never a mutable
    tag) in the prod override, then deploy.
 

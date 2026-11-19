@@ -11,6 +11,7 @@ def new_id(prefix: str) -> str:
     Existing prefixes: ``SYS`` (AISystem), ``SWS`` (SystemWorkflowStep),
     ``MDL`` (ModelCard), ``QAS`` (QuestionAssignment),
     ``QST`` (QuestionState), ``QCM`` (QuestionComment),
+    ``DOS`` (AssessmentDossier), ``DOO`` (AssessmentDossierOutput),
     ``MCM`` (ModelCardMetric), ``MCS`` (ModelCardSource),
     ``MCD`` (ModelCardDataset), ``MCP`` (ModelCardDatasetPreparation),
     ``MCE`` (ModelCardDatasetMeasurement), ``MCF`` (ModelCardFeatureStore),

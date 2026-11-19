@@ -14,13 +14,19 @@ const MFES = [
   { name: "registry", url: "/registry/#/systems", heading: "AI System Registry" },
   { name: "compliance", url: "/compliance/#/obligations", heading: "Obligations" },
   { name: "audit", url: "/audit/", heading: "Audit Trail" },
-  { name: "overview", url: "/overview/", heading: "Compliance Overview" },
+  // The overview MFE serves several hash routes from one bundle. `/overview/` lands on the
+  // personalised Landing Zone (`#/overview`, greeting "Hi <name>,"); the "Compliance Overview"
+  // heading lives on `#/dashboard`. Cover both so a regression in either is caught.
+  { name: "overview landing", url: "/overview/#/overview", heading: /^Hi\b/ },
+  { name: "overview dashboard", url: "/overview/#/dashboard", heading: "Compliance Overview" },
 ] as const;
 
 for (const mfe of MFES) {
   test(`${mfe.name} MFE renders and backend is healthy`, async ({ page }) => {
     await page.goto(mfe.url);
-    await expect(page.getByRole("heading", { name: mfe.heading, exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: mfe.heading, exact: typeof mfe.heading === "string" }),
+    ).toBeVisible();
     await expect(page.getByText("Backend is unavailable", { exact: false })).toHaveCount(0);
   });
 }

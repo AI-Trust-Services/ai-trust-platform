@@ -73,7 +73,11 @@ function ConfidenceIndicator({
 export default function QuestionView() {
   const { id, questionKey } = useParams();
   const navigate = useNavigate();
-  const { state, reload, markSaved, basePath } = useAssessment();
+  const { state, reload, markSaved, basePath, userMap, ensureUserMap } = useAssessment();
+
+  // Trigger the lazy user-map fetch on first QuestionView mount. AssessmentApp
+  // guards with a ref so this is a no-op on every subsequent question navigation.
+  useEffect(() => { ensureUserMap(); }, [ensureUserMap]);
 
   const qState: QuestionState | undefined = useMemo(
     () => state.questions.find((q) => q.question_key === questionKey),
@@ -87,7 +91,10 @@ export default function QuestionView() {
   const [confModalOpen, setConfModalOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [userMap, setUserMap] = useState<Record<string, { firstName: string; lastName: string }>>({});
+  // Comment pending a delete-confirmation dialog (null = dialog closed). Uses a
+  // shadcn Dialog rather than window.confirm(), which is unreliable in the Luigi
+  // iframe (a sandbox without allow-modals silently returns false).
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const { username: currentUser } = usePermissions();
 
   const idx = questionKey ? ORDERED_QUESTION_KEYS.indexOf(questionKey) : -1;
@@ -95,6 +102,21 @@ export default function QuestionView() {
   const nextKey = idx >= 0 && idx < ORDERED_QUESTION_KEYS.length - 1 ? ORDERED_QUESTION_KEYS[idx + 1] : null;
 
   const changedFromAi = qState?.answer_source === "manual";
+  // Provenance line under the input. `answer_source` is seeded "ai_prefilled" for
+  // EVERY question at /open, so it alone does not mean the AI answered this one —
+  // an unanswered question would otherwise claim "Pre-filled AI answer" (#383).
+  // NOT_ENOUGH_INFORMATION / CONFLICT are the AI explicitly declining to answer;
+  // the control renders blank for them, so say what actually happened.
+  const answerSourceLabel = changedFromAi
+    ? "Manual entry"
+    : qState?.answer === "NOT_ENOUGH_INFORMATION" ||
+        qState?.answer === '["NOT_ENOUGH_INFORMATION"]'
+      ? "AI found no supporting evidence"
+      : qState?.answer === "CONFLICT" || qState?.answer === '["CONFLICT"]'
+        ? "AI found conflicting evidence"
+        : qState?.answer
+          ? "Pre-filled AI answer"
+          : "Not answered by AI";
   // Whether a comment that SATISFIES the backend change-gate exists — i.e. one
   // recorded at/after the last answer change. Backend-computed (mirrors the
   // confirm gate) so a stale pre-change comment doesn't enable a confirm the
@@ -124,18 +146,6 @@ export default function QuestionView() {
       .then(setComments)
       .catch(() => setComments([]));
   }, [id, questionKey, state.assessment_id]);
-
-  // Resolve contributor usernames → display names for the assignee dropdown.
-  useEffect(() => {
-    api
-      .getAllUsers()
-      .then((users) => {
-        const m: Record<string, { firstName: string; lastName: string }> = {};
-        for (const u of users) m[u.username] = { firstName: u.firstName, lastName: u.lastName };
-        setUserMap(m);
-      })
-      .catch(() => setUserMap({}));
-  }, []);
 
   const displayName = (uname: string): string => {
     const u = userMap[uname];
@@ -193,15 +203,17 @@ export default function QuestionView() {
     !!currentUser &&
     (currentUser === c.author_username || currentUser === state.owner_username);
 
-  const removeComment = async (commentId: string) => {
-    if (!id || !questionKey) return;
-    if (!confirm("Delete this comment?")) return;
+  const confirmDeleteComment = async () => {
+    if (!id || !questionKey || !pendingDeleteId) return;
+    const commentId = pendingDeleteId;
     try {
       await api.deleteComment(id, questionKey, commentId);
       setComments((prev) => prev.filter((x) => x.id !== commentId));
       markSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setPendingDeleteId(null);
     }
   };
 
@@ -367,9 +379,7 @@ export default function QuestionView() {
               placeholder="Enter your answer"
             />
           )}
-          <p className="text-xs text-muted-foreground">
-            {qState?.answer_source === "manual" ? "Manual entry" : "Pre-filled AI answer"}
-          </p>
+          <p className="text-xs text-muted-foreground">{answerSourceLabel}</p>
         </div>
 
         {changedFromAi && !hasQualifyingComment && canEdit && (
@@ -417,7 +427,7 @@ export default function QuestionView() {
                   </div>
                   {canDeleteComment(c) && (
                     <button
-                      onClick={() => removeComment(c.id)}
+                      onClick={() => setPendingDeleteId(c.id)}
                       aria-label="Delete comment"
                       className="shrink-0 text-muted-foreground opacity-0 transition hover:text-[var(--danger-fg)] group-hover:opacity-100"
                     >
@@ -504,6 +514,33 @@ export default function QuestionView() {
                 <p className="text-muted-foreground">No references available for this question.</p>
               )}
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => !open && setPendingDeleteId(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete comment</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This comment will be removed. This cannot be undone.
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              onClick={() => setPendingDeleteId(null)}
+              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmDeleteComment}
+              className="rounded-md bg-[var(--danger-fg)] px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
+            >
+              Delete
+            </button>
           </div>
         </DialogContent>
       </Dialog>

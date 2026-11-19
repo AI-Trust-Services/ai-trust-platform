@@ -382,7 +382,19 @@ async def update_assessment(
 async def delete_assessment(assessment_id: str, request: Request) -> dict:
     current_user = request.headers.get("x-forwarded-preferred-username", "unknown")
     async with SessionLocal() as session:
-        row = await _load(session, assessment_id)
+        row = (
+            await session.execute(
+                select(Assessment)
+                .where(Assessment.id == assessment_id)
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if not row:
+            raise HTTPException(404, f"Assessment {assessment_id} not found")
+        if row.status in ("approved", "inactive"):
+            raise HTTPException(
+                409, "Cannot delete an approved or historicized assessment"
+            )
         ai_system_id = row.ai_system_id
         system = (
             await session.execute(select(AISystem).where(AISystem.id == ai_system_id))
