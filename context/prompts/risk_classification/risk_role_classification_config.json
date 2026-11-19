@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0",
   "classificationConfigId": "ai-act-label-classification",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "title": "AI System Risk & Role Classification",
   "defaultLanguage": "en",
   "questionnaireId": "ai-questionnaire",
@@ -427,17 +427,26 @@
                   {
                     "questionId": "High_Risk_3",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_4",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_5",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   }
                 ]
               },
@@ -446,12 +455,18 @@
                   {
                     "questionId": "High_Risk_31",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_32",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "all": [
@@ -470,22 +485,34 @@
                           {
                             "questionId": "High_Risk_33",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_34",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_35",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_36",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           }
                         ]
                       }
@@ -508,19 +535,28 @@
               {
                 "questionId": "High_Risk_6",
                 "operator": "IN",
-                "values": ["YES", "PARTIALLY"]
+                "values": [
+                  "YES",
+                  "PARTIALLY"
+                ]
               },
               {
                 "any": [
                   {
                     "questionId": "High_Risk_31",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_32",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "all": [
@@ -539,22 +575,34 @@
                           {
                             "questionId": "High_Risk_33",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_34",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_35",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_36",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           }
                         ]
                       }
@@ -579,22 +627,34 @@
                   {
                     "questionId": "High_Risk_7",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_8",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_9",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_10",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   }
                 ]
               },
@@ -603,12 +663,18 @@
                   {
                     "questionId": "High_Risk_31",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_32",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "all": [
@@ -627,22 +693,34 @@
                           {
                             "questionId": "High_Risk_33",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_34",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_35",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_36",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           }
                         ]
                       }
@@ -667,27 +745,42 @@
                   {
                     "questionId": "High_Risk_11",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_12",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_13",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_14",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_15",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   }
                 ]
               },
@@ -696,12 +789,18 @@
                   {
                     "questionId": "High_Risk_31",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_32",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "all": [
@@ -720,22 +819,34 @@
                           {
                             "questionId": "High_Risk_33",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_34",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_35",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_36",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           }
                         ]
                       }
@@ -753,29 +864,41 @@
               {
                 "questionId": "High_Risk_2",
                 "operator": "CONTAINS",
-                "value": "ACCESS_TO_ESSENTIAL_PRIVATE_AND_PUBLIC_SERVICES"
+                "value": "ESSENTIAL_PRIVATE_AND_PUBLIC_SERVICES"
               },
               {
                 "any": [
                   {
                     "questionId": "High_Risk_16",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_17",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_18",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_19",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   }
                 ]
               },
@@ -784,12 +907,18 @@
                   {
                     "questionId": "High_Risk_31",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_32",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "all": [
@@ -808,22 +937,34 @@
                           {
                             "questionId": "High_Risk_33",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_34",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_35",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_36",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           }
                         ]
                       }
@@ -848,27 +989,42 @@
                   {
                     "questionId": "High_Risk_20",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_21",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_22",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_23",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_24",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   }
                 ]
               },
@@ -877,12 +1033,18 @@
                   {
                     "questionId": "High_Risk_31",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_32",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "all": [
@@ -901,22 +1063,34 @@
                           {
                             "questionId": "High_Risk_33",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_34",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_35",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_36",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           }
                         ]
                       }
@@ -941,22 +1115,34 @@
                   {
                     "questionId": "High_Risk_25",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_26",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_27",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_28",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   }
                 ]
               },
@@ -965,12 +1151,18 @@
                   {
                     "questionId": "High_Risk_31",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_32",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "all": [
@@ -989,22 +1181,34 @@
                           {
                             "questionId": "High_Risk_33",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_34",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_35",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_36",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           }
                         ]
                       }
@@ -1029,12 +1233,18 @@
                   {
                     "questionId": "High_Risk_29",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_30",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   }
                 ]
               },
@@ -1043,12 +1253,18 @@
                   {
                     "questionId": "High_Risk_31",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "questionId": "High_Risk_32",
                     "operator": "IN",
-                    "values": ["YES", "PARTIALLY"]
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
                   {
                     "all": [
@@ -1067,22 +1283,34 @@
                           {
                             "questionId": "High_Risk_33",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_34",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_35",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           },
                           {
                             "questionId": "High_Risk_36",
                             "operator": "IN",
-                            "values": ["NO", "PARTIALLY"]
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
                           }
                         ]
                       }
@@ -1314,38 +1542,24 @@
                               {
                                 "any": [
                                   {
-                                    "questionId": "High_Risk_31",
-                                    "operator": "NOT_CONTAINS",
-                                    "value": "NO"
+                                    "questionId": "High_Risk_33",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   },
                                   {
-                                    "questionId": "High_Risk_32",
-                                    "operator": "NOT_CONTAINS",
-                                    "value": "NO"
+                                    "questionId": "High_Risk_34",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   },
                                   {
-                                    "any": [
-                                      {
-                                        "questionId": "High_Risk_33",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_34",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_35",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_36",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      }
-                                    ]
+                                    "questionId": "High_Risk_35",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_36",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   }
                                 ]
                               }
@@ -1380,38 +1594,24 @@
                               {
                                 "any": [
                                   {
-                                    "questionId": "High_Risk_31",
-                                    "operator": "NOT_CONTAINS",
-                                    "value": "NO"
+                                    "questionId": "High_Risk_33",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   },
                                   {
-                                    "questionId": "High_Risk_32",
-                                    "operator": "NOT_CONTAINS",
-                                    "value": "NO"
+                                    "questionId": "High_Risk_34",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   },
                                   {
-                                    "any": [
-                                      {
-                                        "questionId": "High_Risk_33",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_34",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_35",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_36",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      }
-                                    ]
+                                    "questionId": "High_Risk_35",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_36",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   }
                                 ]
                               }
@@ -1465,38 +1665,24 @@
                               {
                                 "any": [
                                   {
-                                    "questionId": "High_Risk_31",
-                                    "operator": "NOT_CONTAINS",
-                                    "value": "NO"
+                                    "questionId": "High_Risk_33",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   },
                                   {
-                                    "questionId": "High_Risk_32",
-                                    "operator": "NOT_CONTAINS",
-                                    "value": "NO"
+                                    "questionId": "High_Risk_34",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   },
                                   {
-                                    "any": [
-                                      {
-                                        "questionId": "High_Risk_33",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_34",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_35",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_36",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      }
-                                    ]
+                                    "questionId": "High_Risk_35",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_36",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   }
                                 ]
                               }
@@ -1555,38 +1741,24 @@
                               {
                                 "any": [
                                   {
-                                    "questionId": "High_Risk_31",
-                                    "operator": "NOT_CONTAINS",
-                                    "value": "NO"
+                                    "questionId": "High_Risk_33",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   },
                                   {
-                                    "questionId": "High_Risk_32",
-                                    "operator": "NOT_CONTAINS",
-                                    "value": "NO"
+                                    "questionId": "High_Risk_34",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   },
                                   {
-                                    "any": [
-                                      {
-                                        "questionId": "High_Risk_33",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_34",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_35",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_36",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      }
-                                    ]
+                                    "questionId": "High_Risk_35",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_36",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   }
                                 ]
                               }
@@ -1599,7 +1771,7 @@
                           {
                             "questionId": "High_Risk_2",
                             "operator": "NOT_CONTAINS",
-                            "value": "ACCESS_TO_ESSENTIAL_PRIVATE_AND_PUBLIC_SERVICES"
+                            "value": "ESSENTIAL_PRIVATE_AND_PUBLIC_SERVICES"
                           },
                           {
                             "all": [
@@ -1640,38 +1812,24 @@
                               {
                                 "any": [
                                   {
-                                    "questionId": "High_Risk_31",
-                                    "operator": "NOT_CONTAINS",
-                                    "value": "NO"
+                                    "questionId": "High_Risk_33",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   },
                                   {
-                                    "questionId": "High_Risk_32",
-                                    "operator": "NOT_CONTAINS",
-                                    "value": "NO"
+                                    "questionId": "High_Risk_34",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   },
                                   {
-                                    "any": [
-                                      {
-                                        "questionId": "High_Risk_33",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_34",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_35",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_36",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      }
-                                    ]
+                                    "questionId": "High_Risk_35",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_36",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   }
                                 ]
                               }
@@ -1730,38 +1888,24 @@
                               {
                                 "any": [
                                   {
-                                    "questionId": "High_Risk_31",
-                                    "operator": "NOT_CONTAINS",
-                                    "value": "NO"
+                                    "questionId": "High_Risk_33",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   },
                                   {
-                                    "questionId": "High_Risk_32",
-                                    "operator": "NOT_CONTAINS",
-                                    "value": "NO"
+                                    "questionId": "High_Risk_34",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   },
                                   {
-                                    "any": [
-                                      {
-                                        "questionId": "High_Risk_33",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_34",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_35",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_36",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      }
-                                    ]
+                                    "questionId": "High_Risk_35",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_36",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   }
                                 ]
                               }
@@ -1815,38 +1959,24 @@
                               {
                                 "any": [
                                   {
-                                    "questionId": "High_Risk_31",
-                                    "operator": "NOT_CONTAINS",
-                                    "value": "NO"
+                                    "questionId": "High_Risk_33",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   },
                                   {
-                                    "questionId": "High_Risk_32",
-                                    "operator": "NOT_CONTAINS",
-                                    "value": "NO"
+                                    "questionId": "High_Risk_34",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   },
                                   {
-                                    "any": [
-                                      {
-                                        "questionId": "High_Risk_33",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_34",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_35",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_36",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      }
-                                    ]
+                                    "questionId": "High_Risk_35",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_36",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   }
                                 ]
                               }
@@ -1890,38 +2020,24 @@
                               {
                                 "any": [
                                   {
-                                    "questionId": "High_Risk_31",
-                                    "operator": "NOT_CONTAINS",
-                                    "value": "NO"
+                                    "questionId": "High_Risk_33",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   },
                                   {
-                                    "questionId": "High_Risk_32",
-                                    "operator": "NOT_CONTAINS",
-                                    "value": "NO"
+                                    "questionId": "High_Risk_34",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   },
                                   {
-                                    "any": [
-                                      {
-                                        "questionId": "High_Risk_33",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_34",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_35",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      },
-                                      {
-                                        "questionId": "High_Risk_36",
-                                        "operator": "EQUALS",
-                                        "value": "YES"
-                                      }
-                                    ]
+                                    "questionId": "High_Risk_35",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_36",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
                                   }
                                 ]
                               }
