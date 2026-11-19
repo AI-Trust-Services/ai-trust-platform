@@ -8,7 +8,7 @@ from app.questionnaire_required import VALID_QUESTION_KEYS, QUESTION_LABEL
 
 def test_valid_question_keys_non_empty():
     assert len(VALID_QUESTION_KEYS) > 50, (
-        "Expected ~100 question keys from ai-questionnaire.json"
+        "Expected ~88 question keys from ai-questionnaire.json"
     )
 
 
@@ -18,8 +18,8 @@ def test_valid_question_keys_contains_known_ids():
 
 
 def test_purpose_section_removed():
-    """The intended-purpose questionnaire section was replaced by the single
-    mandatory free-text field on the registration form (branch 400)."""
+    """The intended-purpose questionnaire section was replaced by a single
+    mandatory free-text field on the registration form."""
     purpose_keys = [k for k in VALID_QUESTION_KEYS if k.startswith("Purpose_")]
     assert purpose_keys == [], (
         f"Purpose_* questions must be removed, found {purpose_keys}"
