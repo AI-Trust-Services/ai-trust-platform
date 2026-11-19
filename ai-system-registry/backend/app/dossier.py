@@ -259,16 +259,29 @@ async def write_ai_output_in_session(
 
 
 async def build_co_issued_bundle(
-    session, assessment_id: str, co_decision: dict[str, Any]
+    session,
+    assessment_id: str,
+    co_decision: dict[str, Any],
+    user_confirmed: dict[str, Any],
 ) -> dict[str, Any] | None:
     """Compose the standalone ``co_issued`` bundle written when the CO confirms (#370).
 
     "Final dossier with ALL the information" — reads the frozen
-    inputs/config/prompts and the already-written ``ai`` + ``user_confirmed``
-    output layers, and bundles them with the CO's binding decision so this single
-    row is a self-contained final record. Returns ``None`` (logged) if the dossier
-    is missing. A missing sub-layer (e.g. the pipeline never completed) yields a
+    inputs/config/prompts and the already-written ``ai`` output layer, and bundles
+    them with ``user_confirmed`` and the CO's binding decision so this single row
+    is a self-contained final record. Returns ``None`` (logged) if the dossier is
+    missing. A missing ``ai`` layer (e.g. the pipeline never completed) yields a
     ``null`` for that key rather than blocking the issue.
+
+    ``user_confirmed`` is built by the caller from the **live** ``question_states``
+    at confirm time — i.e. the answers the CO is actually approving — NOT read from
+    the frozen ``user_confirmed`` output layer. This matters after a CO
+    reject→resubmit: the frozen layer is write-once and stays pinned to the owner's
+    FIRST submission, so it would understate a re-submitted answer set. Because
+    co_issued is generated exactly once (at confirm), live state at that instant is
+    the accurate final record. Consequence: in the no-reject happy path this equals
+    the standalone ``user_confirmed`` layer; after a bounce it can legitimately
+    differ (the layer = first submission, the bundle = final approved state).
     """
     dossier = (
         await session.execute(
@@ -286,23 +299,24 @@ async def build_co_issued_bundle(
         )
         return None
     inputs, config_snapshot, prompt_snapshot = dossier
-    layers = dict(
-        (
-            await session.execute(
-                select(AssessmentDossierOutput.layer, AssessmentDossierOutput.payload)
-                .join(
-                    AssessmentDossier,
-                    AssessmentDossier.id == AssessmentDossierOutput.dossier_id,
-                )
-                .where(AssessmentDossier.assessment_id == assessment_id)
+    ai_payload = (
+        await session.execute(
+            select(AssessmentDossierOutput.payload)
+            .join(
+                AssessmentDossier,
+                AssessmentDossier.id == AssessmentDossierOutput.dossier_id,
             )
-        ).all()
-    )
+            .where(
+                AssessmentDossier.assessment_id == assessment_id,
+                AssessmentDossierOutput.layer == "ai",
+            )
+        )
+    ).scalar_one_or_none()
     return {
         "inputs": inputs,
         "config_snapshot": config_snapshot,
         "prompt_snapshot": prompt_snapshot,
-        "ai": layers.get("ai"),
-        "user_confirmed": layers.get("user_confirmed"),
+        "ai": ai_payload,
+        "user_confirmed": user_confirmed,
         "co_issued": co_decision,
     }

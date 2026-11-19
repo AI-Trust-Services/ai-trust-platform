@@ -217,6 +217,27 @@ def _confirmed_answers(states: dict[str, QuestionState]) -> list[dict[str, Any]]
     ]
 
 
+def _user_confirmed_payload(
+    row: AISystem, states: dict[str, QuestionState]
+) -> dict[str, Any]:
+    """The ``user_confirmed`` dossier payload (#370): the per-question confirmed
+    answers + the classification *as-shown* at this moment (the live row values,
+    no LLM re-run). Shared by the ``user_confirmed`` layer (written at /submit) and
+    the ``user_confirmed`` slice embedded in the ``co_issued`` bundle (at /issue),
+    so both describe a submission identically."""
+    return {
+        "answers": _confirmed_answers(states),
+        "classification": {
+            "tier": row.tier,
+            "basis": row.basis,
+            "annex_iii_area": row.annex_iii_area,
+            "org_role": row.org_role,
+            "rationale": row.classification_rationale,
+            "assessment_sources": row.assessment_sources,
+        },
+    }
+
+
 async def _comment_counts(session, assessment_id: str) -> dict[str, int]:
     # SQL aggregate (count per question_key) — avoids loading full comment rows
     # (incl. body text) into memory just to count them.
@@ -1323,17 +1344,7 @@ async def submit_assessment(
                     session,
                     assessment_id,
                     "user_confirmed",
-                    {
-                        "answers": _confirmed_answers(states),
-                        "classification": {
-                            "tier": row.tier,
-                            "basis": row.basis,
-                            "annex_iii_area": row.annex_iii_area,
-                            "org_role": row.org_role,
-                            "rationale": row.classification_rationale,
-                            "assessment_sources": row.assessment_sources,
-                        },
-                    },
+                    _user_confirmed_payload(row, states),
                 )
                 await session.commit()
         except Exception as exc:  # noqa: BLE001
@@ -1469,14 +1480,22 @@ async def issue_classification(
         state = await _build_state(session, row, user)
 
     # #370: write the final, self-contained `co_issued` dossier bundle (frozen
-    # inputs/config/prompts + the `ai` and `user_confirmed` layers + the CO's
-    # binding decision) "as soon as the CO confirms". Best-effort in its own txn:
+    # inputs/config/prompts + the `ai` layer + the live owner-confirmed answers +
+    # the CO's binding decision) "as soon as the CO confirms". The confirmed
+    # answers are read from live question_states (not the frozen user_confirmed
+    # layer, which is write-once and pinned to the FIRST submit) so the final
+    # record is accurate even after a reject→resubmit. Best-effort in its own txn:
     # an append-only audit write must never roll back the binding approve above.
     if assessment_id:
         try:
             async with SessionLocal() as session:
+                row = await _get_system(session, system_id)
+                states = await _states_by_key(session, assessment_id)
                 bundle = await build_co_issued_bundle(
-                    session, assessment_id, co_decision
+                    session,
+                    assessment_id,
+                    co_decision,
+                    _user_confirmed_payload(row, states),
                 )
                 if bundle is not None:
                     await write_output_layer_in_session(

@@ -470,3 +470,73 @@ async def test_issue_writes_co_issued_bundle(client: httpx.AsyncClient):
     assert bundle["co_issued"]["tier"] == "high"
     assert bundle["co_issued"]["transparency"] is True
     assert bundle["co_issued"]["issued_by"] == _CO
+
+
+@pytest.mark.asyncio
+async def test_co_issued_bundle_reflects_resubmitted_answers(client: httpx.AsyncClient):
+    """After a CO reject→resubmit, the co_issued bundle must carry the owner's
+    FINAL answers, not the first submission. The user_confirmed layer is
+    write-once (pinned to submit #1), so the bundle sources its confirmed answers
+    from live question_states at confirm time instead of that frozen layer."""
+    system_id = await _create_system(client, "Resubmit System", "desc")
+    await _open_and_settle(client, system_id)
+    await _confirm_all_and_submit(client, system_id)
+
+    # CO bounces it back.
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/reject",
+        json={"note": "please revise"},
+        headers=_hdr(_CO),
+    )
+    assert r.status_code == 200, r.text
+
+    # Owner changes one answer (a change from the AI pre-fill needs a comment
+    # before it can be re-confirmed), then resubmits.
+    state = (
+        await client.get(
+            f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
+        )
+    ).json()
+    qkey = state["questions"][0]["question_key"]
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/answer",
+        json={"answer": "RESUBMITTED_VALUE"},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/comments",
+        json={"body": "revised per CO"},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code in (200, 201), r.text
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/confirm",
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/submit",
+        json={"note": "resubmitted"},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/issue",
+        json={"tier": "high", "transparency": True, "confirmed": True},
+        headers=_hdr(_CO),
+    )
+    assert r.status_code == 200, r.text
+
+    # The user_confirmed LAYER is pinned to submit #1 (blank answer, write-once).
+    uc = _fetch_output(system_id, "user_confirmed")
+    uc_q0 = next(a for a in uc["answers"] if a["question_key"] == qkey)
+    assert uc_q0["answer"] != "RESUBMITTED_VALUE"
+
+    # The co_issued bundle carries the FINAL, resubmitted answer.
+    bundle = _fetch_output(system_id, "co_issued")
+    b_q0 = next(
+        a for a in bundle["user_confirmed"]["answers"] if a["question_key"] == qkey
+    )
+    assert b_q0["answer"] == "RESUBMITTED_VALUE"
