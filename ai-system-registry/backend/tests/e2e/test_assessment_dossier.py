@@ -85,23 +85,27 @@ def _fetch_dossier(system_id: str) -> dict:
         conn.close()
 
 
-def _fetch_ai_output(system_id: str) -> dict | None:
+def _fetch_output(system_id: str, layer: str) -> dict | None:
     conn = _pg()
     try:
         cur = conn.cursor()
         cur.execute(
             "SELECT o.payload FROM assessment_dossier_outputs o "
             "JOIN assessment_dossiers d ON d.id = o.dossier_id "
-            "WHERE d.ai_system_id = %s AND o.layer = 'ai'",
-            (system_id,),
+            "WHERE d.ai_system_id = %s AND o.layer = %s",
+            (system_id, layer),
         )
         rows = cur.fetchall()
         if not rows:
             return None
-        assert len(rows) == 1, "ai layer must be write-once"
+        assert len(rows) == 1, f"{layer!r} layer must be write-once"
         return rows[0][0]
     finally:
         conn.close()
+
+
+def _fetch_ai_output(system_id: str) -> dict | None:
+    return _fetch_output(system_id, "ai")
 
 
 @pytest.fixture(autouse=True)
@@ -384,3 +388,85 @@ async def test_deleting_assessment_cascades_dossier(client: httpx.AsyncClient):
         )
     finally:
         conn.close()
+
+
+# ── (C) user_confirmed (#370) on /submit + co_issued (#370) on /issue ─────────
+
+_CO = "officer1"
+
+
+async def _confirm_all_and_submit(client: httpx.AsyncClient, system_id: str) -> None:
+    """Owner-confirm every question of the current cycle, then submit to the CO
+    (assigning the CO first, as the compliance 'New Assessment' modal does)."""
+    r = await client.post(
+        f"/v1/systems/{system_id}/workflow/assign",
+        json={"compliance_officer_username": _CO},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    state = (
+        await client.get(
+            f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
+        )
+    ).json()
+    for q in state["questions"]:
+        r = await client.post(
+            f"/v1/systems/{system_id}/assessment/questions/{q['question_key']}/confirm",
+            headers=_hdr(_OWNER),
+        )
+        assert r.status_code == 200, r.text
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/submit",
+        json={"note": "done"},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+
+
+@pytest.mark.asyncio
+async def test_submit_writes_user_confirmed_layer(client: httpx.AsyncClient):
+    """On /submit the dossier gains a 'user_confirmed' layer (per-question
+    confirmed answers + classification as-shown) IN PARALLEL to 'ai' — the AI
+    layer is untouched (#370's hard requirement: never overwrite the AI results)."""
+    system_id = await _create_system(client, "Submit System", "desc")
+    await _open_and_settle(client, system_id)
+    ai_before = _fetch_ai_output(system_id)
+    assert ai_before is not None
+
+    await _confirm_all_and_submit(client, system_id)
+
+    uc = _fetch_output(system_id, "user_confirmed")
+    assert uc is not None, "/submit should append the user_confirmed layer"
+    assert isinstance(uc["answers"], list) and uc["answers"], "per-question answers"
+    assert all(a["confirmed_by"] == _OWNER for a in uc["answers"])
+    # Classification as-shown (the stub pipeline derived a tier at /open).
+    assert uc["classification"]["tier"] is not None
+
+    # The AI layer is still there and unchanged — the two layers coexist.
+    assert _fetch_ai_output(system_id) == ai_before
+
+
+@pytest.mark.asyncio
+async def test_issue_writes_co_issued_bundle(client: httpx.AsyncClient):
+    """When the CO issues, the dossier gains a self-contained 'co_issued' bundle:
+    frozen inputs + the ai + user_confirmed layers + the CO's binding decision."""
+    system_id = await _create_system(client, "Issue System", "desc")
+    await _open_and_settle(client, system_id)
+    await _confirm_all_and_submit(client, system_id)
+
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/issue",
+        json={"tier": "high", "transparency": True, "confirmed": True},
+        headers=_hdr(_CO),
+    )
+    assert r.status_code == 200, r.text
+
+    bundle = _fetch_output(system_id, "co_issued")
+    assert bundle is not None, "/issue should append the co_issued bundle"
+    # Self-contained: inputs + both prior layers + the CO decision.
+    assert bundle["inputs"]["system"]["id"] == system_id
+    assert bundle["ai"] is not None
+    assert bundle["user_confirmed"] is not None
+    assert bundle["co_issued"]["tier"] == "high"
+    assert bundle["co_issued"]["transparency"] is True
+    assert bundle["co_issued"]["issued_by"] == _CO
