@@ -156,21 +156,27 @@ export function AssessmentSidebar({
                           : "Incomplete";
 
                   if (gated) {
-                    // Locked dependent question — non-navigable, no link.
+                    // Locked dependent question — navigable so QuestionView can
+                    // show the placeholder, but styled as non-interactive (muted,
+                    // padlock icon, no hover background change).
                     return (
                       <li key={key}>
-                        <div
-                          className="flex cursor-default items-start gap-2 rounded-md px-3 py-1.5 text-sm text-muted-foreground"
-                          aria-disabled="true"
+                        <Link
+                          ref={activeQuestionKey === key ? activeRef : undefined}
+                          to={`${basePath}/q/${key}`}
+                          className={cn(
+                            "flex items-start gap-2 rounded-md px-3 py-1.5 text-sm",
+                            activeQuestionKey === key && "bg-accent",
+                          )}
                         >
-                          <Lock className="mt-0.5 size-4 shrink-0 text-muted-foreground/50" />
+                          <Lock className="mt-0.5 size-4 shrink-0 text-muted-foreground/40" />
                           <span className="flex min-w-0 flex-1 flex-col">
-                            <span className="line-clamp-2 leading-snug opacity-50">
+                            <span className="line-clamp-2 leading-snug text-muted-foreground/60">
                               {QUESTION_LABELS[key] ?? key}
                             </span>
-                            <span className="text-xs text-muted-foreground/60">{statusText}</span>
+                            <span className="text-xs text-muted-foreground/50">{statusText}</span>
                           </span>
-                        </div>
+                        </Link>
                       </li>
                     );
                   }
