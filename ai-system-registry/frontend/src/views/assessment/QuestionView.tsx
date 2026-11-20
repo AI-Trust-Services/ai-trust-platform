@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { ChevronLeft, Loader2, Lock, MoreVertical, Users, SignalHigh, SignalMedium, SignalLow, Trash2 } from "lucide-react";
 import type { ConfidenceLevel, QuestionComment, QuestionState } from "../../types";
 import { api } from "../../api/client";
@@ -277,9 +277,6 @@ export default function QuestionView() {
       collect(gateNode);
     }
     const uniqueGateIds = [...new Set(gateIds)];
-    const gateLabels = uniqueGateIds
-      .map((gid) => QUESTION_DEF_BY_ID[gid]?.question ?? gid)
-      .join(", ");
 
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 p-12 text-center">
@@ -288,7 +285,21 @@ export default function QuestionView() {
           <h2 className="text-base font-semibold text-foreground">{def.question}</h2>
           <p className="text-sm text-muted-foreground">
             This question is locked. It becomes available based on your answer to:{" "}
-            <span className="font-medium text-foreground">{gateLabels || "a preceding question"}</span>.
+            {uniqueGateIds.length > 0 ? (
+              uniqueGateIds.map((gid, i) => (
+                <span key={gid}>
+                  {i > 0 && ", "}
+                  <Link
+                    to={`${basePath}/q/${gid}`}
+                    className="font-medium text-[#1147E9] hover:underline"
+                  >
+                    {QUESTION_DEF_BY_ID[gid]?.question ?? gid}
+                  </Link>
+                </span>
+              ))
+            ) : (
+              <span className="font-medium text-foreground">a preceding question</span>
+            )}.
           </p>
         </div>
       </div>
