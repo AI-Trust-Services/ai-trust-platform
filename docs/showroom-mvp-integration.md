@@ -8,7 +8,7 @@ The platform runs as a live showroom reference app on Gardener shoot clusters: p
 
 | # | Requirement | Status | ApeiroRA reference |
 |---|---|---|---|
-| 1 | OCM component packaging | ⚠️ **Partial** — 11 service images not in OCM | [SBoD / OCM](https://documentation.apeirora.eu/docs/best-practices/lcm/sbod/) |
+| 1 | OCM component packaging | ✅ Implemented (MVP scope) | [SBoD / OCM](https://documentation.apeirora.eu/docs/best-practices/lcm/sbod/) |
 | 2 | Gardener + Flux deploy pipeline | ✅ Implemented | [Showroom scenarios](https://documentation.apeirora.eu/docs/showroom/scenarios) |
 | 3 | Platform Mesh tenancy model | ✅ App; partial operator | [Account model](https://documentation.apeirora.eu/docs/best-practices/platform-mesh/account-model) |
 | 4 | Gardener single-host shoot install | ✅ Implemented | [Showroom scenarios](https://documentation.apeirora.eu/docs/showroom/scenarios) |
@@ -27,13 +27,13 @@ The platform runs as a live showroom reference app on Gardener shoot clusters: p
 
 ---
 
-## 1 — OCM Component Packaging · ⚠️ Partial
+## 1 — OCM Component Packaging · ✅ Implemented
 
 **Reference:** [SBoD / OCM best practice](https://documentation.apeirora.eu/docs/best-practices/lcm/sbod/) · [open-component-model](https://github.com/open-component-model)
 
 Every showroom product must be packaged as an **Open Component Model (OCM)** component (`.ocm/component-constructor.yaml`) — one `helmChart` resource plus every built `ociImage`, published to an OCI registry by digest. Strict parity: every image in `docker-bake.hcl` `group "default"` must appear in OCM, and vice versa — a listed-but-unbuilt image aborts `ocm add` with `cannot determine digest`.
 
-**Why partial:** 24 MVP images are in OCM and match the bake list exactly. But **11 service images that exist in the repo are deliberately excluded** (`[MVP-off]`, commented out across `docker-bake.hcl`, `.ocm/component-constructor.yaml`, `shell/nginx.conf`, `values.yaml`): `monitoring-{backend,frontend}`, `alerts-{backend,frontend}`, `decision-trace-analyzer-{backend,frontend}`, `policy-checker-worker`, `otel-rmq-bridge`, `otel-clickhouse-consumer`, `ai-test-bed-{backend,frontend}` — plus the `cognee-eval/graph-image` data artifact (built only by `promote-graph.yml`). So OCM packaging is complete *within the reduced MVP scope* but not for the whole platform.
+**Parity is satisfied:** the `docker-bake.hcl` default group (25 targets) matches `.ocm/component-constructor.yaml` (25 resources) exactly. The 11 services absent from OCM (`monitoring`, `alerts`, `decision-trace-analyzer` ×2 each, `policy-checker-worker`, `otel-rmq-bridge`, `otel-clickhouse-consumer`, `ai-test-bed` ×2) are **intentionally MVP-off** — toggled off consistently across all four layers (`docker-bake.hcl`, `.ocm/component-constructor.yaml`, `values.yaml` `enabled: false`, `shell/nginx.conf` commented locations) and **not deployed in the running app**. They are not omissions; OCM must be extended to include them when each service is re-enabled.
 
 **Local:** `.ocm/component-constructor.yaml`, `k8s/ocm/manifests.yaml`, `CLAUDE.md` → "MVP scope".
 
