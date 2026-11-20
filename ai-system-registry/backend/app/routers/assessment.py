@@ -845,16 +845,14 @@ async def save_answer(
         if not _is_editable(row):
             raise HTTPException(409, "Assessment is locked and cannot be edited")
         assessment = await _ensure_assessment(session, row)
-        state = await _load_state(session, assessment.id, question_key)
+        all_states = await _states_by_key(session, assessment.id)
+        state = all_states.get(question_key)
         if not _may_edit(row, state, user):
             raise HTTPException(403, "You are not assigned to this question")
 
         # Reject answers for questions currently locked by a gate condition.
-        # Build the answers dict from per-cycle states (preferred) with a
-        # fallback to the system-row JSONB for questions not yet in states.
-        _current_answers = _build_answers_dict(
-            await _states_by_key(session, assessment.id), row
-        )
+        # Reuse the already-fetched all_states — no extra DB round-trip.
+        _current_answers = _build_answers_dict(all_states, row)
         if is_gated(question_key, _current_answers):
             raise HTTPException(422, "Question is locked by a dependency condition")
 
