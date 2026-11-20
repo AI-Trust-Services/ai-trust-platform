@@ -12,7 +12,7 @@ The platform runs as a live showroom reference app on Gardener shoot clusters: p
 | 2 | Gardener + Flux deploy pipeline | ✅ Implemented | [Showroom scenarios](https://documentation.apeirora.eu/docs/showroom/scenarios) |
 | 3 | Platform Mesh tenancy model | ✅ App; partial operator | [Account model](https://documentation.apeirora.eu/docs/best-practices/platform-mesh/account-model) |
 | 4 | Gardener single-host shoot install | ✅ Implemented | [Showroom scenarios](https://documentation.apeirora.eu/docs/showroom/scenarios) |
-| 5 | SBoD / OCM integrity (digest-pinned) | ⚠️ Partial — signing gap | [SBoD / OCM](https://documentation.apeirora.eu/docs/best-practices/lcm/sbod/) |
+| 5 | SBoD / OCM integrity (digest-pinned) | ⚠️ Partial — signing/SBOM gap (resolved by #14) | [SBoD / OCM](https://documentation.apeirora.eu/docs/best-practices/lcm/sbod/) |
 | 6 | Authorization via OpenFGA | ✅ Implemented | [Security](https://documentation.apeirora.eu/docs/best-practices/security/) |
 | 7 | Authentication via Keycloak + oauth2-proxy | ✅ Implemented | [Security](https://documentation.apeirora.eu/docs/best-practices/security/) |
 | 8 | Micro-frontend shell (Luigi / OpenMFP) | ✅ Implemented | [Micro-frontends w/ OpenMFP](https://documentation.apeirora.eu/docs/best-practices/micro-frontends/openmfp) |
@@ -65,7 +65,7 @@ The platform runs behind one public HTTPS host via the shared gateway, with Keyc
 
 **Reference:** [SBoD / OCM](https://documentation.apeirora.eu/docs/best-practices/lcm/sbod/) · [ocm-spec](https://github.com/open-component-model/ocm-spec) · [ocm CLI](https://github.com/open-component-model/ocm)
 
-All component resources are referenced **by digest** (not mutable tag); the OCM component version (`0.0.0-<namespace>-<sha>`) is a unique correlation ID, pushed over authenticated HTTPS to `ghcr.io`, with a machine-readable technology-agnostic descriptor. **Gap:** OCM component **signing** (cosign/notary) is not configured — required for the full SBoD integrity guarantee.
+All component resources are referenced **by digest** (not mutable tag); the OCM component version (`0.0.0-<namespace>-<sha>`) is a unique correlation ID, pushed over authenticated HTTPS to `ghcr.io`, with a machine-readable technology-agnostic descriptor. **Gap:** OCM component **signing** (cosign/notary) and **SBOM / provenance attestation** are not configured — required for the full SBoD integrity guarantee. Both are resolved by implementing Requirement 14 (Release Management): the `publish.yml` release pipeline in `apeirora/showroom-msp-simple-cluster` signs images + OCM component via cosign and attaches SBOMs to the GitHub Release. Once Req 14 is in place, Req 5 becomes fully implemented.
 
 **Local:** `.ocm/component-constructor.yaml`, `.github/actions/publish-ocm/`.
 
