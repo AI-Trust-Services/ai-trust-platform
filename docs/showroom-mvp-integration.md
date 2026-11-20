@@ -149,6 +149,64 @@ Per ApeiroRA docs, "not all Apeiro components have adopted operator-based instal
 
 A showroom product is expected to cut **stable, versioned releases**, not only per-commit deploys. The authoritative ApeiroRA reference (`apeirora/showroom-msp-simple-cluster`) defines the release contract below; Platform Mesh RFC 015, OCM, and Konfidence set the surrounding versioning/integrity rules.
 
+### How ApeiroRA showroom products release with OCM — reference analysis
+
+Analysis of `apeirora/showroom-msp-simple-cluster` (the canonical showroom product), `naira-project/naira` (NeoNephos AI dev hub), and `cobaltcore-dev/thalamus` (the LLM inference backend used by this platform via `THALAMUS_BASE_URL`).
+
+#### `apeirora/showroom-msp-simple-cluster` (canonical reference)
+
+Release is triggered by merging a **release-please** PR (GitHub App `apeirora-showroom-bot`). The publish pipeline (`release.yml`) runs 4 sequential jobs:
+
+| Job | What it does |
+|---|---|
+| `publish-images` | Build 8 images (linux/amd64), push as `ghcr.io/apeirora/<image>:X.Y.Z` and `:latest` |
+| `publish-charts` | Push 7 Helm charts as OCI artifacts to `oci://ghcr.io/apeirora/charts`, versioned at `X.Y.Z` |
+| `publish-sbom` | Generate source-tree + runtime SBOMs via **Syft** (CycloneDX + SPDX), attach to the GitHub Release |
+| `publish-ocm` | Build and push the OCM component (see below) |
+
+**OCM publishing steps** (the `publish-ocm` job):
+```bash
+# 1. Build a local CTF (Common Transport Format) archive from the component descriptor
+ocm add componentversions .ocm/component-constructor.yaml VERSION=X.Y.Z
+
+# 2. Push the CTF to the OCI registry, copying all referenced resources by digest
+ocm transfer componentversion --copy-resources --overwrite \
+  .ocm/ctf \
+  oci://ghcr.io/apeirora/ocm
+```
+- Component identity: **`showroom.apeirora.eu/simple-cluster:X.Y.Z`**
+- All `ociImage` resources are referenced by digest in the component descriptor (not mutable tag)
+- **No cosign signing** of images, charts, or OCM component — neither `cosign sign` nor `ocm sign` are called anywhere in the pipeline
+- OCM is published **only at release** (not in regular per-commit CI)
+
+**Configuration files:** `release-please-config.json` (`release-type: go`, `include-component-in-tag: false`), `.release-please-manifest.json` (current version `1.2.4`).
+
+#### `naira-project/naira` (NeoNephos AI Engineering Dev Hub, v0.1.2)
+
+Releases via **release-please** + optional RC cycle, using reusable `naira-github-workflows` (`.github/workflows/reusable-container-build.yml`, `reusable-publish-and-sbom.yml`, `reusable-sbom-generate.yml`, `reusable-release.yml`). 16-image matrix (linux/amd64+arm64).
+
+- **Cosign keyless signing** — every image signed with `cosign sign --yes` via OIDC (Sigstore keyless); SLSA Level 2 provenance attached as OCI attestation
+- **SBOMs** — SPDX + CycloneDX generated and attested with `cosign attest --type spdx/cyclonedx`
+- **No OCM** — no `component-constructor.yaml`, no `ocm` CLI calls anywhere in CI. OCM is not part of naira's release pipeline.
+
+#### `cobaltcore-dev/thalamus` (SAP-affiliated LLM inference, v0.2.0)
+
+Tag-triggered release pipeline using `docker/github-builder` (Cosign + SBOM built-in). Publishes Helm chart as OCI artifact.
+
+- **Cosign image signing** and SBOM generation via `docker/github-builder`
+- **OCM experimental only** — the `website/ipcei-cis-workshop-2026/` directory contains two documentation files (`ocm-packaging.md`, `ocm-model-weights.md`) describing how to package thalamus itself and LLM model weights as OCM resources. These are workshop tutorial docs — **not part of the CI pipeline**. No `ocm add`/`ocm transfer` runs in thalamus's production release workflow.
+
+#### Summary
+
+| Project | Release tool | Image signing | SBOM | OCM in CI |
+|---|---|---|---|---|
+| showroom-msp-simple-cluster | release-please | ❌ none | ✅ Syft (source + runtime) | ✅ `ocm add` + `ocm transfer` at release |
+| naira | release-please + RC | ✅ Cosign keyless + SLSA L2 | ✅ SPDX + CycloneDX (attested) | ❌ none |
+| thalamus | git tag (manual) | ✅ Cosign (docker/github-builder) | ✅ via docker/github-builder | ❌ workshop docs only |
+| **ai-trust-platform** | ❌ none | ❌ none | ❌ none | ⚠️ per-commit prerelease only |
+
+**Key takeaway:** The ApeiroRA showroom OCM pattern is exactly: `ocm add componentversions` to build a local CTF → `ocm transfer --copy-resources` to push to `oci://ghcr.io/<org>/ocm`. Signing is not yet required by the showroom standard (not done in `showroom-msp-simple-cluster`), but Cosign signing is expected by SBoD (Req 14) and is used by naira and thalamus. The `publish-ocm` GitHub Action in this repo already implements the transfer step — the gap is wrapping it in a tag-triggered release flow with a stable `VERSION` (not `0.0.0-<sha>`).
+
 ### What a release requires
 - **Release automation via [release-please](https://github.com/apeirora/showroom-msp-simple-cluster/blob/main/.github/workflows/release-please.yml)** — a standing release PR, `release-please-config.json` + `.release-please-manifest.json`. Merging it creates the `vX.Y.Z` tag **and** the GitHub Release, which triggers the publish pipeline. (Not semantic-release, not goreleaser.)
 - **Conventional Commits drive the version bump** — `fix:` → PATCH, `feat:` → MINOR, `feat!:`/`BREAKING CHANGE:` → MAJOR; squash-merged PR titles become the changelog source. ([versioning](https://github.com/apeirora/showroom-msp-simple-cluster/blob/main/docs/versioning.md))
