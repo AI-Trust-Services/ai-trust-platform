@@ -99,8 +99,22 @@ export default function QuestionView() {
   const { username: currentUser } = usePermissions();
 
   const idx = questionKey ? ORDERED_QUESTION_KEYS.indexOf(questionKey) : -1;
-  const prevKey = idx > 0 ? ORDERED_QUESTION_KEYS[idx - 1] : null;
-  const nextKey = idx >= 0 && idx < ORDERED_QUESTION_KEYS.length - 1 ? ORDERED_QUESTION_KEYS[idx + 1] : null;
+  // Skip gated questions when navigating prev/next so the user never lands on
+  // a locked placeholder after confirming or pressing the navigation buttons.
+  const currentAnswersForNav: Record<string, string | null> = Object.fromEntries(
+    state.questions.map((q) => [q.question_key, q.answer ?? null]),
+  );
+  const prevKey =
+    idx > 0
+      ? [...ORDERED_QUESTION_KEYS]
+          .slice(0, idx)
+          .reverse()
+          .find((k) => !isGated(k, currentAnswersForNav)) ?? null
+      : null;
+  const nextKey =
+    idx >= 0 && idx < ORDERED_QUESTION_KEYS.length - 1
+      ? ORDERED_QUESTION_KEYS.slice(idx + 1).find((k) => !isGated(k, currentAnswersForNav)) ?? null
+      : null;
 
   const changedFromAi = qState?.answer_source === "manual";
   // Provenance line under the input. `answer_source` is seeded "ai_prefilled" for
