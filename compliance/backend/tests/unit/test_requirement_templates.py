@@ -94,6 +94,15 @@ def test_role_matches_only_its_own_org_role():
     assert not _role_allows("deployer", "distributor")
 
 
+def test_role_both_matches_provider_and_deployer():
+    # An org that both develops and uses the system matches either role-scoped
+    # template, so it collects the union of provider + deployer controls.
+    assert _role_allows("provider", "both")
+    assert _role_allows("deployer", "both")
+    # None (role-agnostic retained sets) still applies to "both".
+    assert _role_allows(None, "both")
+
+
 # ---------------------------------------------------------------------------
 # requirements_for — EU High-Risk clusters (counts from the CSV catalogue)
 # ---------------------------------------------------------------------------
@@ -137,6 +146,14 @@ def test_deployer_high_clusters():
     assert len(requirements_for("D-FRIA", "high", "deployer")) == 2
     # A deployer cluster yields nothing for a provider system.
     assert requirements_for("D-OMI", "high", "provider") == []
+
+
+def test_both_collects_provider_and_deployer_requirements():
+    # org_role "both" survives on provider clusters...
+    assert len(requirements_for("P-RM", "high", "both")) == 7
+    # ...and on deployer clusters.
+    assert len(requirements_for("D-OMI", "high", "both")) == 5
+    assert len(requirements_for("D-FRIA", "high", "both")) == 2
 
 
 def test_all_risk_cluster_applies_at_limited_tier():
