@@ -137,6 +137,12 @@ class TestEvaluateAppliesWhen:
         }
         assert evaluate_applies_when(node, {"Q1": "YES", "Q2": "YES"})
 
+    def test_bare_leaf_at_top_level(self):
+        # Defensive branch: a leaf node passed directly (no all/any wrapper).
+        node = {"questionId": "Q1", "operator": "EQUALS", "value": "YES"}
+        assert evaluate_applies_when(node, {"Q1": "YES"})
+        assert not evaluate_applies_when(node, {"Q1": "NO"})
+
 
 # ---------------------------------------------------------------------------
 # is_gated — using real questionnaire data
