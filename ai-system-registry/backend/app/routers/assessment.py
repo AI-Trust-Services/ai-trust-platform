@@ -108,6 +108,21 @@ def _answer_store(row: AISystem) -> dict:
     return dict(row.questionnaire_answers or {})
 
 
+def _build_answers_dict(states: dict[str, Any], row: AISystem) -> dict[str, str | None]:
+    """Merge per-cycle question_states answers with JSONB fallback.
+
+    question_states is the authoritative per-cycle source; questionnaire_answers
+    fills in keys not yet written to this cycle's states.
+    """
+    answers: dict[str, str | None] = {
+        k: (st.answer if st else None) for k, st in states.items()
+    }
+    for k, v in (row.questionnaire_answers or {}).items():
+        if k not in answers:
+            answers[k] = str(v) if v is not None else None
+    return answers
+
+
 def _read_answer(row: AISystem, answers: dict, question_key: str) -> str | None:
     """Read a question's answer from the flat questionnaire_answers JSONB dict
     (keys are the ai-questionnaire.json question ids)."""
@@ -837,13 +852,9 @@ async def save_answer(
         # Reject answers for questions currently locked by a gate condition.
         # Build the answers dict from per-cycle states (preferred) with a
         # fallback to the system-row JSONB for questions not yet in states.
-        _current_answers: dict[str, str | None] = {
-            k: (st.answer if st else None)
-            for k, st in (await _states_by_key(session, assessment.id)).items()
-        }
-        for k, v in (row.questionnaire_answers or {}).items():
-            if k not in _current_answers:
-                _current_answers[k] = str(v) if v is not None else None
+        _current_answers = _build_answers_dict(
+            await _states_by_key(session, assessment.id), row
+        )
         if is_gated(question_key, _current_answers):
             raise HTTPException(422, "Question is locked by a dependency condition")
 
@@ -1249,12 +1260,7 @@ async def finalize_assessment(
         assessment = await _ensure_assessment(session, row)
         states = await _states_by_key(session, assessment.id)
         # Build current answers to evaluate gating — same pattern as save_answer.
-        _current_answers: dict[str, str | None] = {
-            k: (st.answer if st else None) for k, st in states.items()
-        }
-        for k, v in (row.questionnaire_answers or {}).items():
-            if k not in _current_answers:
-                _current_answers[k] = str(v) if v is not None else None
+        _current_answers = _build_answers_dict(states, row)
         gated_ids = get_all_gated_question_ids(_current_answers)
         # Exclude gated questions — they can never be confirmed and don't need to be.
         unconfirmed = _owner_unconfirmed(row, states, skip=frozenset(gated_ids))
@@ -1291,13 +1297,7 @@ async def submit_assessment(
         assessment = await _current_assessment(session, system_id)
         states = await _states_by_key(session, assessment.id) if assessment else {}
         # Exclude gated questions from the confirmation gate (same logic as finalize).
-        _current_answers_sub: dict[str, str | None] = {
-            k: (st.answer if st else None) for k, st in states.items()
-        }
-        for k, v in (row.questionnaire_answers or {}).items():
-            if k not in _current_answers_sub:
-                _current_answers_sub[k] = str(v) if v is not None else None
-        gated_ids_sub = get_all_gated_question_ids(_current_answers_sub)
+        gated_ids_sub = get_all_gated_question_ids(_build_answers_dict(states, row))
         unconfirmed = _owner_unconfirmed(row, states, skip=frozenset(gated_ids_sub))
         if unconfirmed:
             raise HTTPException(
