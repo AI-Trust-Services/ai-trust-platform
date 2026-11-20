@@ -12,16 +12,16 @@ The platform runs as a live showroom reference app on Gardener shoot clusters: p
 | 2 | Gardener + Flux deploy pipeline | ✅ Implemented | [Showroom scenarios](https://documentation.apeirora.eu/docs/showroom/scenarios) |
 | 3 | Platform Mesh tenancy model | ✅ App; partial operator | [Account model](https://documentation.apeirora.eu/docs/best-practices/platform-mesh/account-model) |
 | 4 | Gardener single-host shoot install | ✅ Implemented | [Showroom scenarios](https://documentation.apeirora.eu/docs/showroom/scenarios) |
-| 5 | SBoD / OCM integrity (digest-pinned) | ⚠️ Partial — signing/SBOM gap (resolved by #14) | [SBoD / OCM](https://documentation.apeirora.eu/docs/best-practices/lcm/sbod/) |
-| 6 | Authorization via OpenFGA | ✅ Implemented | [Security](https://documentation.apeirora.eu/docs/best-practices/security/) |
-| 7 | Authentication via Keycloak + oauth2-proxy | ✅ Implemented | [Security](https://documentation.apeirora.eu/docs/best-practices/security/) |
-| 8 | Micro-frontend shell (Luigi / OpenMFP) | ✅ Implemented | [Micro-frontends w/ OpenMFP](https://documentation.apeirora.eu/docs/best-practices/micro-frontends/openmfp) |
-| 9 | CI quality gates | ✅ Implemented | [Konfidence](https://documentation.apeirora.eu/docs/best-practices/lcm/konfidence/) |
-| 10 | REUSE / licensing compliance | ✅ Implemented | [reuse.software](https://reuse.software) |
-| 11 | Observability | ⚠️ Partial — GenAI stack MVP-off | [Observability](https://documentation.apeirora.eu/docs/best-practices/observability/) |
-| 12 | Konfidence / immutable vectors | ⚠️ Partial — SHA-tagged OCM only | [Konfidence](https://documentation.apeirora.eu/docs/best-practices/lcm/konfidence/) |
-| 13 | Operator-based LCM | ⚠️ Partial — operator exists | [LCM config](https://documentation.apeirora.eu/docs/best-practices/lcm/config/) |
-| 14 | Release management (OCM + release-please) | ❌ **Gap** — no release automation / stable semver / signing | [showroom-msp release-flow](https://github.com/apeirora/showroom-msp-simple-cluster/blob/main/docs/release-flow.md) |
+| 5 | Authorization via OpenFGA | ✅ Implemented | [Security](https://documentation.apeirora.eu/docs/best-practices/security/) |
+| 6 | Authentication via Keycloak + oauth2-proxy | ✅ Implemented | [Security](https://documentation.apeirora.eu/docs/best-practices/security/) |
+| 7 | Micro-frontend shell (Luigi / OpenMFP) | ✅ Implemented | [Micro-frontends w/ OpenMFP](https://documentation.apeirora.eu/docs/best-practices/micro-frontends/openmfp) |
+| 8 | CI quality gates | ✅ Implemented | [Konfidence](https://documentation.apeirora.eu/docs/best-practices/lcm/konfidence/) |
+| 9 | REUSE / licensing compliance | ✅ Implemented | [reuse.software](https://reuse.software) |
+| 10 | Observability | ⚠️ Partial — GenAI stack MVP-off | [Observability](https://documentation.apeirora.eu/docs/best-practices/observability/) |
+| 11 | Konfidence / immutable vectors | ⚠️ Partial — SHA-tagged OCM only | [Konfidence](https://documentation.apeirora.eu/docs/best-practices/lcm/konfidence/) |
+| 12 | Operator-based LCM | ⚠️ Partial — operator exists | [LCM config](https://documentation.apeirora.eu/docs/best-practices/lcm/config/) |
+| 13 | Release management (OCM + release-please) | ❌ **Gap** — no release automation / stable semver / signing | [showroom-msp release-flow](https://github.com/apeirora/showroom-msp-simple-cluster/blob/main/docs/release-flow.md) |
+| 14 | SBoD / OCM integrity (digest-pinned) | ⚠️ Partial — signing/SBOM gap (resolved by #13) | [SBoD / OCM](https://documentation.apeirora.eu/docs/best-practices/lcm/sbod/) |
 
 > **ADR note:** `docs/adr/adr-001-tenancy.md` cites "ApeiroRA ADR-004". No upstream ApeiroRA ADR-004 about tenancy exists — Platform Mesh ADRs live at [`platform-mesh/architecture/adr`](https://github.com/platform-mesh/architecture/tree/main/adr) where ADR-004 is "Shared CI Workflow Strategy" (unrelated). The account model is documented at [`apeirora/documentation` account-model.md](https://github.com/apeirora/documentation/blob/main/docs/best-practices/platform-mesh/account-model.md), with a proposed ADR at [`platform-mesh/platform-mesh` adr-01-account-model.md](https://github.com/platform-mesh/platform-mesh/blob/main/contrib/adr/adr-01-account-model.md). The ADR-001 cross-reference should be corrected accordingly.
 
@@ -61,15 +61,7 @@ The platform runs behind one public HTTPS host via the shared gateway, with Keyc
 
 **Local:** `k8s/SHOOT-INSTALL.md`, `k8s/gardener_init/shoot-cluster-init.sh`.
 
-## 5 — SBoD / OCM Integrity · ⚠️ Partial (signing gap)
-
-**Reference:** [SBoD / OCM](https://documentation.apeirora.eu/docs/best-practices/lcm/sbod/) · [ocm-spec](https://github.com/open-component-model/ocm-spec) · [ocm CLI](https://github.com/open-component-model/ocm)
-
-All component resources are referenced **by digest** (not mutable tag); the OCM component version (`0.0.0-<namespace>-<sha>`) is a unique correlation ID, pushed over authenticated HTTPS to `ghcr.io`, with a machine-readable technology-agnostic descriptor. **Gap:** OCM component **signing** (cosign/notary) and **SBOM / provenance attestation** are not configured — required for the full SBoD integrity guarantee. Both are resolved by implementing Requirement 14 (Release Management): the `publish.yml` release pipeline in `apeirora/showroom-msp-simple-cluster` signs images + OCM component via cosign and attaches SBOMs to the GitHub Release. Once Req 14 is in place, Req 5 becomes fully implemented.
-
-**Local:** `.ocm/component-constructor.yaml`, `.github/actions/publish-ocm/`.
-
-## 6 — Authorization via OpenFGA · ✅ Implemented
+## 5 — Authorization via OpenFGA · ✅ Implemented
 
 **Reference:** [ApeiroRA security best practices](https://documentation.apeirora.eu/docs/best-practices/security/) · [openfga.dev](https://openfga.dev) · [openfga/openfga](https://github.com/openfga/openfga)
 
@@ -77,7 +69,7 @@ OpenFGA is the sole source of truth for roles/permissions (`libs/authorization`)
 
 **Local:** `libs/authorization/`, `docs/auth-flow.md`, `CLAUDE.md` → "Authorization — RBAC via OpenFGA".
 
-## 7 — Authentication via Keycloak + oauth2-proxy · ✅ Implemented
+## 6 — Authentication via Keycloak + oauth2-proxy · ✅ Implemented
 
 **Reference:** [ApeiroRA security best practices](https://documentation.apeirora.eu/docs/best-practices/security/) · [keycloak.org](https://keycloak.org) · [oauth2-proxy](https://github.com/oauth2-proxy/oauth2-proxy)
 
@@ -85,7 +77,7 @@ All traffic enters through oauth2-proxy → Keycloak login → JWT in encrypted 
 
 **Local:** `infra/keycloak/`, `docs/auth-flow.md`, `CLAUDE.md` → "Authentication".
 
-## 8 — Micro-Frontend Shell (OpenMFP pattern) · ✅ Implemented
+## 7 — Micro-Frontend Shell (OpenMFP pattern) · ✅ Implemented
 
 **Reference:** [Micro-frontends with OpenMFP](https://documentation.apeirora.eu/docs/best-practices/micro-frontends/openmfp) · [openmfp](https://github.com/openmfp) · [SAP/luigi](https://github.com/SAP/luigi)
 
@@ -93,7 +85,7 @@ A `shell/` serves Luigi config and reverse-proxies all MFE/backend traffic; each
 
 **Local:** `shell/`, `CLAUDE.md` → "Shell", "Frontend stacks".
 
-## 9 — CI Quality Gates · ✅ Implemented
+## 8 — CI Quality Gates · ✅ Implemented
 
 **Reference:** [Konfidence](https://documentation.apeirora.eu/docs/best-practices/lcm/konfidence/) — stage promotion (DEV → TEST → PROD); CI gates are its per-PR expression.
 
@@ -101,7 +93,7 @@ A `shell/` serves Luigi config and reverse-proxies all MFE/backend traffic; each
 
 **Local:** `.github/workflows/`, `docs/tests.md`.
 
-## 10 — REUSE / Licensing Compliance · ✅ Implemented
+## 9 — REUSE / Licensing Compliance · ✅ Implemented
 
 **Reference:** [reuse.software](https://reuse.software) · [apeirora/showroom-msp-simple-cluster](https://github.com/apeirora/showroom-msp-simple-cluster) · [neonephos.org](https://neonephos.org)
 
@@ -109,7 +101,7 @@ Per-file SPDX / `REUSE.toml` coverage, Apache 2.0 `LICENSE`, REUSE status badge 
 
 **Local:** `REUSE.toml`, `LICENSE`, `README.md` (REUSE badge).
 
-## 11 — Observability · ⚠️ Partial (GenAI stack MVP-off)
+## 10 — Observability · ⚠️ Partial (GenAI stack MVP-off)
 
 **Reference:** [Observability best practices](https://documentation.apeirora.eu/docs/best-practices/observability/) · [apeirora/opentelemetry-demo](https://github.com/apeirora/opentelemetry-demo) · [apeirora/audit-log-poc-for-otel](https://github.com/apeirora/audit-log-poc-for-otel)
 
@@ -117,7 +109,7 @@ Per-file SPDX / `REUSE.toml` coverage, Apache 2.0 `LICENSE`, REUSE status badge 
 
 **Local:** `audit/`, `otel-pipeline/`, `CLAUDE.md` → "MVP scope".
 
-## 12 — Konfidence / Immutable Delivery Vectors · ⚠️ Partial
+## 11 — Konfidence / Immutable Delivery Vectors · ⚠️ Partial
 
 **Reference:** [Konfidence overview](https://documentation.apeirora.eu/docs/best-practices/lcm/konfidence/) · [Konfidence core concepts](https://documentation.apeirora.eu/docs/best-practices/lcm/konfidence/core-concepts) · [konfidence.cloud](https://konfidence.cloud)
 
@@ -125,7 +117,7 @@ Konfidence specifies Artifact → Vector → Stage → Landscape immutable deliv
 
 **Local:** `k8s/README.md` → "Version isolation", `.github/workflows/build-push-deploy.yml`.
 
-## 13 — Operator-Based LCM · ⚠️ Partial
+## 12 — Operator-Based LCM · ⚠️ Partial
 
 **Reference:** [LCM config / operator principles](https://documentation.apeirora.eu/docs/best-practices/lcm/config/) · [Controller pattern](https://documentation.apeirora.eu/docs/best-practices/digital-twins/controller) · [ai-trust-platform-operator](https://github.com/AI-Trust-Services/ai-trust-platform-operator) · [apeirora/showroom-msp-simple-cluster](https://github.com/apeirora/showroom-msp-simple-cluster)
 
@@ -151,7 +143,7 @@ Per ApeiroRA docs, "not all Apeiro components have adopted operator-based instal
 
 ---
 
-## 14 — Release Management · ❌ Gap
+## 13 — Release Management · ❌ Gap
 
 **Reference:** [showroom-msp release-flow](https://github.com/apeirora/showroom-msp-simple-cluster/blob/main/docs/release-flow.md) · [showroom-msp versioning](https://github.com/apeirora/showroom-msp-simple-cluster/blob/main/docs/versioning.md) · [Platform Mesh RFC 015 — versioning](https://github.com/platform-mesh/architecture/blob/main/rfc/015-versioning.md) · [OCM spec — model](https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/01-model.md) · [Konfidence](https://documentation.apeirora.eu/docs/best-practices/lcm/konfidence/)
 
@@ -163,7 +155,7 @@ A showroom product is expected to cut **stable, versioned releases**, not only p
 - **One synchronized SemVer** across every image + Helm chart + the **OCM component version** (OCM identity = component name + semver version; [ocm-spec](https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/01-model.md)). Platform Mesh RFC 015 uses the same "one version to rule them all" principle (there as CalVer `vYY.MM.Patch` + release branches).
 - **Auto-generated `CHANGELOG.md`** — `### Features` / `### Bug Fixes` / `### ⚠ BREAKING CHANGES`, scoped `**component:**` prefixes; mirrored into GitHub Release notes.
 - **Release artifacts published at the tagged version** — images to `ghcr.io/<owner>/<image>:X.Y.Z` (+`latest`), charts to `oci://ghcr.io/<owner>/charts` at the matching version, **SBOMs attached** to the GitHub Release, and the **OCM component signed** (cosign/OCM recursive signing per [SBoD](https://documentation.apeirora.eu/docs/best-practices/lcm/sbod/)).
-- **Konfidence alignment** — the released version is one immutable vector promoted DEV → TEST → PROD unchanged (see Requirement 12).
+- **Konfidence alignment** — the released version is one immutable vector promoted DEV → TEST → PROD unchanged (see Requirement 11).
 
 ### Current state (gap)
 The repo runs **continuous deployment, not releases**. Every push to main (`build-push-deploy.yml`) builds images, packages the chart, publishes an OCM component, and deploys to Gardener — all versioned as a **per-commit prerelease `0.0.0-<prefix>-<sha>`**. There is no stable semver channel.
@@ -188,3 +180,13 @@ The repo runs **continuous deployment, not releases**. Every push to main (`buil
 > No ADR/RFC exists in `apeirora/documentation` or the `openmfp` org about releases — the authoritative, worked example is `apeirora/showroom-msp-simple-cluster` (release-please + SemVer + signed, SBOM-attached GitHub Releases).
 
 **Local:** `.github/workflows/build-push-deploy.yml`, `.github/actions/{compute-vars,publish-ocm,package-chart}/`, `CONTRIBUTING.md`, `.github/workflows/pr-title-check.yml`.
+
+---
+
+## 14 — SBoD / OCM Integrity · ⚠️ Partial (signing gap)
+
+**Reference:** [SBoD / OCM](https://documentation.apeirora.eu/docs/best-practices/lcm/sbod/) · [ocm-spec](https://github.com/open-component-model/ocm-spec) · [ocm CLI](https://github.com/open-component-model/ocm)
+
+All component resources are referenced **by digest** (not mutable tag); the OCM component version (`0.0.0-<namespace>-<sha>`) is a unique correlation ID, pushed over authenticated HTTPS to `ghcr.io`, with a machine-readable technology-agnostic descriptor. **Gap:** OCM component **signing** (cosign/notary) and **SBOM / provenance attestation** are not configured — required for the full SBoD integrity guarantee. Both are resolved by implementing Requirement 13 (Release Management): the `publish.yml` release pipeline in `apeirora/showroom-msp-simple-cluster` signs images + OCM component via cosign and attaches SBOMs to the GitHub Release. Once Req 13 is in place, Req 14 becomes fully implemented.
+
+**Local:** `.ocm/component-constructor.yaml`, `.github/actions/publish-ocm/`.
