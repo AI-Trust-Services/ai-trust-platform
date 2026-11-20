@@ -231,6 +231,61 @@ The repo runs **continuous deployment, not releases**. Every push to main (`buil
 
 **To close the gap:** add `release-please` (`.github/workflows/release-please.yml` + config/manifest), compute `VERSION` from the released tag instead of `0.0.0-<sha>`, publish the OCM component / chart / images at that semver, attach SBOMs, and sign the OCM component (cosign).
 
+### Implementation design — what release-please adds
+
+#### Security: published artifacts contain no secrets
+
+A key prerequisite for publishing to a public OCI registry. Audit result:
+
+| Artifact | Secret exposure | Verdict |
+|---|---|---|
+| Images | Build args are `VITE_*` only — all are URL paths (`/api/registry/v1`), no credentials | ✅ Safe |
+| Helm chart | References `ai-trust-env` K8s Secret **by name only** — no values templated in | ✅ Safe |
+| OCM descriptor | OCI image references and digests only — no credentials | ✅ Safe |
+
+The separation model is correct: all credentials (`POSTGRES_PASSWORD`, `KEYCLOAK_CLIENT_SECRET`, `THALAMUS_BEARER_TOKEN`, `OAUTH2_PROXY_COOKIE_SECRET`, etc.) live exclusively in the `ai-trust-env` Kubernetes Secret, created by `bootstrap.sh` from `.env` before `helm install`. They never enter any published artifact. Publishing OCM/Helm/images at a stable release tag introduces no new security risk compared to the current per-commit publishing.
+
+#### What to add
+
+**`release-please-config.json`** — `release-type: simple` (polyglot monorepo, no Go module at root; showroom-msp uses `go` because their root is a Go module):
+```json
+{
+  "release-type": "simple",
+  "include-component-in-tag": false,
+  "changelog-sections": [
+    {"type": "feat", "section": "Features"},
+    {"type": "fix",  "section": "Bug Fixes"},
+    {"type": "docs", "section": "Documentation"}
+  ]
+}
+```
+
+**`.release-please-manifest.json`** — seeds first release as `0.1.0`:
+```json
+{".": "0.1.0"}
+```
+
+**`.github/workflows/release-please.yml`** — the standing release PR workflow (uses `googleapis/release-please-action`).
+
+**`.github/workflows/release.yml`** — tag-triggered (`on: push: tags: ['v*']`), reuses the **three existing actions** with `VERSION` derived from the tag:
+
+```
+Conventional Commit merged to main
+  → release-please updates release PR + CHANGELOG.md
+  → PR merged → creates tag vX.Y.Z + GitHub Release
+  → triggers release.yml
+        ├── build 25 images → ghcr.io/.../ai-trust-platform/<name>:X.Y.Z
+        ├── package-chart   → oci://ghcr.io/.../charts/ai-trust-platform:X.Y.Z
+        ├── publish-ocm     → oci://ghcr.io/.../ocm  (component version X.Y.Z)
+        └── attach SBOMs    → Syft source-tree + runtime, attached to GitHub Release
+```
+
+No new OCM action needed — `publish-ocm/action.yml` already does `ocm add` + `ocm transfer --copy-resources` correctly. No change to `.ocm/component-constructor.yaml` — it already parameterises `VERSION`, `IMAGE_TAG`, `CHART_TAG`. `build-push-deploy.yml` keeps running on every push to main for continuous deployment; releases are an additional stable channel on top.
+
+**`Chart.yaml`** — update `version: 0.1.0` / `appVersion: "0.1.0"` to match the manifest seed (removes placeholder `1.0.0`).
+
+**`k8s/ocm/manifests.yaml`** — the `ComponentVersion` semver constraint currently pins the exact per-commit prerelease. With real semver releases this should use a range (`>=0.1.0`) or an exact pin updated by the deploy action — open deployment policy decision (both supported by existing Flux CRs).
+
 ### ApeiroRA release ADRs / RFCs
 - **[Platform Mesh RFC 015 — Versioning](https://github.com/platform-mesh/architecture/blob/main/rfc/015-versioning.md)** (Implemented) — unified version, CalVer, release-branch + cherry-pick backport model.
 - **[platform-mesh ADR-004 — Shared CI Workflow Strategy](https://github.com/platform-mesh/architecture/blob/main/adr/004-shared-ci-workflow-strategy.md)** — repos own their pipeline and call shared reusable jobs (e.g. [`job-create-version.yml`](https://github.com/platform-mesh/.github/blob/main/.github/workflows/job-create-version.yml), `job-release-chart.yml`).
