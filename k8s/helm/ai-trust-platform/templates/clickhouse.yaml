@@ -30,8 +30,10 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/clickhouse
-        # mirrors compose: clickhouse depends_on minio-init (service_completed_successfully)
-        {{- include "ai-trust.waitForJob" (dict "job" "minio-init" "rev" .Release.Revision "image" .Values.waitImages.kubectl) | nindent 8 }}
+        # Wait for MinIO to be healthy — ClickHouse only needs MinIO reachable for cold
+        # storage, not for minio-init to have completed. Using waitForHttp avoids a
+        # fragility where waitForJob targeted a pruned per-revision Job on pod restarts.
+        {{- include "ai-trust.waitForHttp" (dict "name" "minio" "port" 9000 "path" "/minio/health/live" "image" .Values.waitImages.busybox) | nindent 8 }}
       containers:
         - name: clickhouse
           image: {{ .Values.clickhouse.image }}
