@@ -1,12 +1,91 @@
 {
   "schemaVersion": "1.0",
   "classificationConfigId": "ai-act-label-classification",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "title": "AI System Risk & Role Classification",
   "defaultLanguage": "en",
   "questionnaireId": "ai-questionnaire",
-  "questionnaireVersion": "1.0.0",
+  "questionnaireVersion": "2.0.0",
   "riskLabels": [
+    {
+      "id": "AI_SYSTEM",
+      "activate": true,
+      "definition": "The system, or at least a relevant part or use of the system, is an AI system within the scope of the AI Act.",
+      "rules": [
+        {
+          "id": "AI_ACT_SCOPE",
+          "when": {
+            "all": [
+              {
+                "questionId": "Scope_1",
+                "operator": "IN",
+                "values": [
+                  "YES",
+                  "PARTIALLY"
+                ]
+              },
+              {
+                "questionId": "Scope_2",
+                "operator": "CONTAINS",
+                "value": "NOT_APPLICABLE"
+              },
+              {
+                "questionId": "Scope_3",
+                "operator": "IN",
+                "values": [
+                  "NO",
+                  "PARTIALLY"
+                ]
+              },
+              {
+                "questionId": "Scope_4",
+                "operator": "IN",
+                "values": [
+                  "NO",
+                  "PARTIALLY"
+                ]
+              },
+              {
+                "questionId": "Scope_5",
+                "operator": "IN",
+                "values": [
+                  "NO",
+                  "PARTIALLY"
+                ]
+              },
+              {
+                "questionId": "Scope_6",
+                "operator": "IN",
+                "values": [
+                  "NO",
+                  "PARTIALLY"
+                ]
+              },
+              {
+                "any": [
+                  {
+                    "questionId": "Scope_7",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "Scope_8",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
     {
       "id": "PROHIBITED",
       "activate": true,
@@ -18,11 +97,8 @@
             "all": [
               {
                 "questionId": "Prohibited_1",
-                "operator": "IN",
-                "values": [
-                  "YES",
-                  "PARTIALLY"
-                ]
+                "operator": "CONTAINS",
+                "value": "SENSITIVE_BIOMETRIC_CATEGORISATION"
               },
               {
                 "questionId": "Prohibited_2",
@@ -48,6 +124,11 @@
           "when": {
             "all": [
               {
+                "questionId": "Prohibited_1",
+                "operator": "CONTAINS",
+                "value": "MANIPULATIVE_OR_DECEPTIVE_TECHNIQUES"
+              },
+              {
                 "questionId": "Prohibited_4",
                 "operator": "IN",
                 "values": [
@@ -62,6 +143,18 @@
                   "YES",
                   "PARTIALLY"
                 ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "EXPLOITATION_OF_VULNERABILITY",
+          "when": {
+            "all": [
+              {
+                "questionId": "Prohibited_1",
+                "operator": "CONTAINS",
+                "value": "EXPLOITATION_OF_VULNERABILITY"
               },
               {
                 "questionId": "Prohibited_6",
@@ -75,24 +168,34 @@
           }
         },
         {
-          "id": "EXPLOITATION_OF_VULNERABILITY",
-          "when": {
-            "questionId": "Prohibited_7",
-            "operator": "IN",
-            "values": [
-              "YES",
-              "PARTIALLY"
-            ]
-          }
-        },
-        {
           "id": "SOCIAL_SCORING",
           "when": {
-            "questionId": "Prohibited_8",
-            "operator": "IN",
-            "values": [
-              "YES",
-              "PARTIALLY"
+            "all": [
+              {
+                "questionId": "Prohibited_1",
+                "operator": "CONTAINS",
+                "value": "SOCIAL_SCORING"
+              },
+              {
+                "any": [
+                  {
+                    "questionId": "Prohibited_7",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "Prohibited_8",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  }
+                ]
+              }
             ]
           }
         },
@@ -101,15 +204,20 @@
           "when": {
             "all": [
               {
-                "questionId": "Prohibited_9",
-                "operator": "IN",
-                "values": [
-                  "YES",
-                  "PARTIALLY"
-                ]
+                "questionId": "Prohibited_1",
+                "operator": "CONTAINS",
+                "value": "REAL_TIME_REMOTE_BIOMETRIC_IDENTIFICATION"
               },
               {
                 "any": [
+                  {
+                    "questionId": "Prohibited_9",
+                    "operator": "IN",
+                    "values": [
+                      "NO",
+                      "PARTIALLY"
+                    ]
+                  },
                   {
                     "questionId": "Prohibited_10",
                     "operator": "IN",
@@ -133,14 +241,6 @@
                       "NO",
                       "PARTIALLY"
                     ]
-                  },
-                  {
-                    "questionId": "Prohibited_13",
-                    "operator": "IN",
-                    "values": [
-                      "NO",
-                      "PARTIALLY"
-                    ]
                   }
                 ]
               }
@@ -152,15 +252,12 @@
           "when": {
             "all": [
               {
-                "questionId": "Prohibited_14",
-                "operator": "IN",
-                "values": [
-                  "YES",
-                  "PARTIALLY"
-                ]
+                "questionId": "Prohibited_1",
+                "operator": "CONTAINS",
+                "value": "CRIMINAL_RISK_ASSESSMENT"
               },
               {
-                "questionId": "Prohibited_15",
+                "questionId": "Prohibited_13",
                 "operator": "IN",
                 "values": [
                   "NO",
@@ -173,45 +270,33 @@
         {
           "id": "UNTARGETED_FACIAL_SCRAPING",
           "when": {
-            "questionId": "Prohibited_16",
-            "operator": "IN",
-            "values": [
-              "YES",
-              "PARTIALLY"
-            ]
+            "questionId": "Prohibited_1",
+            "operator": "CONTAINS",
+            "value": "UNTARGETED_FACIAL_SCRAPING"
           }
         },
         {
           "id": "EMOTION_RECOGNITION_WORK_OR_EDUCATION",
           "when": {
-            "questionId": "Prohibited_17",
-            "operator": "IN",
-            "values": [
-              "YES",
-              "PARTIALLY"
-            ]
+            "questionId": "Prohibited_1",
+            "operator": "CONTAINS",
+            "value": "EMOTION_RECOGNITION_WORK_OR_EDUCATION"
           }
         },
         {
           "id": "NON_CONSENSUAL_INTIMATE_CONTENT",
           "when": {
-            "questionId": "Prohibited_18",
-            "operator": "IN",
-            "values": [
-              "YES",
-              "PARTIALLY"
-            ]
+            "questionId": "Prohibited_1",
+            "operator": "CONTAINS",
+            "value": "NON_CONSENSUAL_INTIMATE_CONTENT"
           }
         },
         {
           "id": "CHILD_ABUSE_MATERIAL",
           "when": {
-            "questionId": "Prohibited_19",
-            "operator": "IN",
-            "values": [
-              "YES",
-              "PARTIALLY"
-            ]
+            "questionId": "Prohibited_1",
+            "operator": "CONTAINS",
+            "value": "CHILD_ABUSE_MATERIAL"
           }
         }
       ]
@@ -329,9 +414,14 @@
           }
         },
         {
-          "id": "ANNEX_III_USE_CASE",
+          "id": "ANNEX_III_BIOMETRICS",
           "when": {
             "all": [
+              {
+                "questionId": "High_Risk_2",
+                "operator": "CONTAINS",
+                "value": "BIOMETRICS"
+              },
               {
                 "any": [
                   {
@@ -357,15 +447,183 @@
                       "YES",
                       "PARTIALLY"
                     ]
-                  },
+                  }
+                ]
+              },
+              {
+                "any": [
                   {
-                    "questionId": "High_Risk_6",
+                    "questionId": "High_Risk_31",
                     "operator": "IN",
                     "values": [
                       "YES",
                       "PARTIALLY"
                     ]
                   },
+                  {
+                    "questionId": "High_Risk_32",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "all": [
+                      {
+                        "questionId": "High_Risk_31",
+                        "operator": "EQUALS",
+                        "value": "NO"
+                      },
+                      {
+                        "questionId": "High_Risk_32",
+                        "operator": "EQUALS",
+                        "value": "NO"
+                      },
+                      {
+                        "all": [
+                          {
+                            "questionId": "High_Risk_33",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_34",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_35",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_36",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "ANNEX_III_CRITICAL_INFRASTRUCTURE",
+          "when": {
+            "all": [
+              {
+                "questionId": "High_Risk_2",
+                "operator": "CONTAINS",
+                "value": "CRITICAL_INFRASTRUCTURE"
+              },
+              {
+                "questionId": "High_Risk_6",
+                "operator": "IN",
+                "values": [
+                  "YES",
+                  "PARTIALLY"
+                ]
+              },
+              {
+                "any": [
+                  {
+                    "questionId": "High_Risk_31",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "questionId": "High_Risk_32",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "all": [
+                      {
+                        "questionId": "High_Risk_31",
+                        "operator": "EQUALS",
+                        "value": "NO"
+                      },
+                      {
+                        "questionId": "High_Risk_32",
+                        "operator": "EQUALS",
+                        "value": "NO"
+                      },
+                      {
+                        "all": [
+                          {
+                            "questionId": "High_Risk_33",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_34",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_35",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_36",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "ANNEX_III_EDUCATION_AND_VOCATIONAL_TRAINING",
+          "when": {
+            "all": [
+              {
+                "questionId": "High_Risk_2",
+                "operator": "CONTAINS",
+                "value": "EDUCATION_AND_VOCATIONAL_TRAINING"
+              },
+              {
+                "any": [
                   {
                     "questionId": "High_Risk_7",
                     "operator": "IN",
@@ -397,7 +655,93 @@
                       "YES",
                       "PARTIALLY"
                     ]
+                  }
+                ]
+              },
+              {
+                "any": [
+                  {
+                    "questionId": "High_Risk_31",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
+                  {
+                    "questionId": "High_Risk_32",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "all": [
+                      {
+                        "questionId": "High_Risk_31",
+                        "operator": "EQUALS",
+                        "value": "NO"
+                      },
+                      {
+                        "questionId": "High_Risk_32",
+                        "operator": "EQUALS",
+                        "value": "NO"
+                      },
+                      {
+                        "all": [
+                          {
+                            "questionId": "High_Risk_33",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_34",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_35",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_36",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "ANNEX_III_EMPLOYMENT_AND_WORKER_MANAGEMENT",
+          "when": {
+            "all": [
+              {
+                "questionId": "High_Risk_2",
+                "operator": "CONTAINS",
+                "value": "EMPLOYMENT_AND_WORKER_MANAGEMENT"
+              },
+              {
+                "any": [
                   {
                     "questionId": "High_Risk_11",
                     "operator": "IN",
@@ -437,7 +781,93 @@
                       "YES",
                       "PARTIALLY"
                     ]
+                  }
+                ]
+              },
+              {
+                "any": [
+                  {
+                    "questionId": "High_Risk_31",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
+                  {
+                    "questionId": "High_Risk_32",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "all": [
+                      {
+                        "questionId": "High_Risk_31",
+                        "operator": "EQUALS",
+                        "value": "NO"
+                      },
+                      {
+                        "questionId": "High_Risk_32",
+                        "operator": "EQUALS",
+                        "value": "NO"
+                      },
+                      {
+                        "all": [
+                          {
+                            "questionId": "High_Risk_33",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_34",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_35",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_36",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "ANNEX_III_ACCESS_TO_ESSENTIAL_PRIVATE_AND_PUBLIC_SERVICES",
+          "when": {
+            "all": [
+              {
+                "questionId": "High_Risk_2",
+                "operator": "CONTAINS",
+                "value": "ESSENTIAL_PRIVATE_AND_PUBLIC_SERVICES"
+              },
+              {
+                "any": [
                   {
                     "questionId": "High_Risk_16",
                     "operator": "IN",
@@ -469,7 +899,93 @@
                       "YES",
                       "PARTIALLY"
                     ]
+                  }
+                ]
+              },
+              {
+                "any": [
+                  {
+                    "questionId": "High_Risk_31",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
+                  {
+                    "questionId": "High_Risk_32",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "all": [
+                      {
+                        "questionId": "High_Risk_31",
+                        "operator": "EQUALS",
+                        "value": "NO"
+                      },
+                      {
+                        "questionId": "High_Risk_32",
+                        "operator": "EQUALS",
+                        "value": "NO"
+                      },
+                      {
+                        "all": [
+                          {
+                            "questionId": "High_Risk_33",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_34",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_35",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_36",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "ANNEX_III_LAW_ENFORCEMENT",
+          "when": {
+            "all": [
+              {
+                "questionId": "High_Risk_2",
+                "operator": "CONTAINS",
+                "value": "LAW_ENFORCEMENT"
+              },
+              {
+                "any": [
                   {
                     "questionId": "High_Risk_20",
                     "operator": "IN",
@@ -509,7 +1025,93 @@
                       "YES",
                       "PARTIALLY"
                     ]
+                  }
+                ]
+              },
+              {
+                "any": [
+                  {
+                    "questionId": "High_Risk_31",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
+                  {
+                    "questionId": "High_Risk_32",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "all": [
+                      {
+                        "questionId": "High_Risk_31",
+                        "operator": "EQUALS",
+                        "value": "NO"
+                      },
+                      {
+                        "questionId": "High_Risk_32",
+                        "operator": "EQUALS",
+                        "value": "NO"
+                      },
+                      {
+                        "all": [
+                          {
+                            "questionId": "High_Risk_33",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_34",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_35",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_36",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "ANNEX_III_MIGRATION_ASYLUM_AND_BORDER_CONTROL",
+          "when": {
+            "all": [
+              {
+                "questionId": "High_Risk_2",
+                "operator": "CONTAINS",
+                "value": "MIGRATION_ASYLUM_AND_BORDER_CONTROL"
+              },
+              {
+                "any": [
                   {
                     "questionId": "High_Risk_25",
                     "operator": "IN",
@@ -541,7 +1143,93 @@
                       "YES",
                       "PARTIALLY"
                     ]
+                  }
+                ]
+              },
+              {
+                "any": [
+                  {
+                    "questionId": "High_Risk_31",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
                   },
+                  {
+                    "questionId": "High_Risk_32",
+                    "operator": "IN",
+                    "values": [
+                      "YES",
+                      "PARTIALLY"
+                    ]
+                  },
+                  {
+                    "all": [
+                      {
+                        "questionId": "High_Risk_31",
+                        "operator": "EQUALS",
+                        "value": "NO"
+                      },
+                      {
+                        "questionId": "High_Risk_32",
+                        "operator": "EQUALS",
+                        "value": "NO"
+                      },
+                      {
+                        "all": [
+                          {
+                            "questionId": "High_Risk_33",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_34",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_35",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          },
+                          {
+                            "questionId": "High_Risk_36",
+                            "operator": "IN",
+                            "values": [
+                              "NO",
+                              "PARTIALLY"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "ANNEX_III_JUSTICE_AND_DEMOCRATIC_PROCESSES",
+          "when": {
+            "all": [
+              {
+                "questionId": "High_Risk_2",
+                "operator": "CONTAINS",
+                "value": "JUSTICE_AND_DEMOCRATIC_PROCESSES"
+              },
+              {
+                "any": [
                   {
                     "questionId": "High_Risk_29",
                     "operator": "IN",
@@ -622,6 +1310,737 @@
                             "values": [
                               "NO",
                               "PARTIALLY"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "MINIMAL",
+      "activate": true,
+      "definition": "The AI system does not meet any configured prohibited-practice or high-risk condition.",
+      "rules": [
+        {
+          "id": "NO_PROHIBITED_OR_HIGH_RISK_CONDITION",
+          "when": {
+            "all": [
+              {
+                "any": [
+                  {
+                    "questionId": "Prohibited_1",
+                    "operator": "CONTAINS",
+                    "value": "NOT_APPLICABLE"
+                  },
+                  {
+                    "all": [
+                      {
+                        "any": [
+                          {
+                            "questionId": "Prohibited_1",
+                            "operator": "NOT_CONTAINS",
+                            "value": "SENSITIVE_BIOMETRIC_CATEGORISATION"
+                          },
+                          {
+                            "questionId": "Prohibited_2",
+                            "operator": "EQUALS",
+                            "value": "YES"
+                          },
+                          {
+                            "questionId": "Prohibited_3",
+                            "operator": "EQUALS",
+                            "value": "YES"
+                          }
+                        ]
+                      },
+                      {
+                        "any": [
+                          {
+                            "questionId": "Prohibited_1",
+                            "operator": "NOT_CONTAINS",
+                            "value": "MANIPULATIVE_OR_DECEPTIVE_TECHNIQUES"
+                          },
+                          {
+                            "questionId": "Prohibited_4",
+                            "operator": "EQUALS",
+                            "value": "NO"
+                          },
+                          {
+                            "questionId": "Prohibited_5",
+                            "operator": "EQUALS",
+                            "value": "NO"
+                          }
+                        ]
+                      },
+                      {
+                        "any": [
+                          {
+                            "questionId": "Prohibited_1",
+                            "operator": "NOT_CONTAINS",
+                            "value": "EXPLOITATION_OF_VULNERABILITY"
+                          },
+                          {
+                            "questionId": "Prohibited_6",
+                            "operator": "EQUALS",
+                            "value": "NO"
+                          }
+                        ]
+                      },
+                      {
+                        "any": [
+                          {
+                            "questionId": "Prohibited_1",
+                            "operator": "NOT_CONTAINS",
+                            "value": "SOCIAL_SCORING"
+                          },
+                          {
+                            "all": [
+                              {
+                                "questionId": "Prohibited_7",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "Prohibited_8",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "any": [
+                          {
+                            "questionId": "Prohibited_1",
+                            "operator": "NOT_CONTAINS",
+                            "value": "REAL_TIME_REMOTE_BIOMETRIC_IDENTIFICATION"
+                          },
+                          {
+                            "all": [
+                              {
+                                "questionId": "Prohibited_9",
+                                "operator": "EQUALS",
+                                "value": "YES"
+                              },
+                              {
+                                "questionId": "Prohibited_10",
+                                "operator": "EQUALS",
+                                "value": "YES"
+                              },
+                              {
+                                "questionId": "Prohibited_11",
+                                "operator": "EQUALS",
+                                "value": "YES"
+                              },
+                              {
+                                "questionId": "Prohibited_12",
+                                "operator": "EQUALS",
+                                "value": "YES"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "any": [
+                          {
+                            "questionId": "Prohibited_1",
+                            "operator": "NOT_CONTAINS",
+                            "value": "CRIMINAL_RISK_ASSESSMENT"
+                          },
+                          {
+                            "questionId": "Prohibited_13",
+                            "operator": "EQUALS",
+                            "value": "YES"
+                          }
+                        ]
+                      },
+                      {
+                        "questionId": "Prohibited_1",
+                        "operator": "NOT_CONTAINS",
+                        "value": "UNTARGETED_FACIAL_SCRAPING"
+                      },
+                      {
+                        "questionId": "Prohibited_1",
+                        "operator": "NOT_CONTAINS",
+                        "value": "EMOTION_RECOGNITION_WORK_OR_EDUCATION"
+                      },
+                      {
+                        "questionId": "Prohibited_1",
+                        "operator": "NOT_CONTAINS",
+                        "value": "NON_CONSENSUAL_INTIMATE_CONTENT"
+                      },
+                      {
+                        "questionId": "Prohibited_1",
+                        "operator": "NOT_CONTAINS",
+                        "value": "CHILD_ABUSE_MATERIAL"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "questionId": "High_Risk_1",
+                "operator": "CONTAINS",
+                "value": "NOT_APPLICABLE"
+              },
+              {
+                "any": [
+                  {
+                    "questionId": "High_Risk_2",
+                    "operator": "CONTAINS",
+                    "value": "NOT_APPLICABLE"
+                  },
+                  {
+                    "all": [
+                      {
+                        "any": [
+                          {
+                            "questionId": "High_Risk_2",
+                            "operator": "NOT_CONTAINS",
+                            "value": "BIOMETRICS"
+                          },
+                          {
+                            "all": [
+                              {
+                                "questionId": "High_Risk_3",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_4",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_5",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              }
+                            ]
+                          },
+                          {
+                            "all": [
+                              {
+                                "questionId": "High_Risk_31",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_32",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "any": [
+                                  {
+                                    "questionId": "High_Risk_33",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_34",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_35",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_36",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "any": [
+                          {
+                            "questionId": "High_Risk_2",
+                            "operator": "NOT_CONTAINS",
+                            "value": "CRITICAL_INFRASTRUCTURE"
+                          },
+                          {
+                            "questionId": "High_Risk_6",
+                            "operator": "EQUALS",
+                            "value": "NO"
+                          },
+                          {
+                            "all": [
+                              {
+                                "questionId": "High_Risk_31",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_32",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "any": [
+                                  {
+                                    "questionId": "High_Risk_33",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_34",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_35",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_36",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "any": [
+                          {
+                            "questionId": "High_Risk_2",
+                            "operator": "NOT_CONTAINS",
+                            "value": "EDUCATION_AND_VOCATIONAL_TRAINING"
+                          },
+                          {
+                            "all": [
+                              {
+                                "questionId": "High_Risk_7",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_8",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_9",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_10",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              }
+                            ]
+                          },
+                          {
+                            "all": [
+                              {
+                                "questionId": "High_Risk_31",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_32",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "any": [
+                                  {
+                                    "questionId": "High_Risk_33",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_34",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_35",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_36",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "any": [
+                          {
+                            "questionId": "High_Risk_2",
+                            "operator": "NOT_CONTAINS",
+                            "value": "EMPLOYMENT_AND_WORKER_MANAGEMENT"
+                          },
+                          {
+                            "all": [
+                              {
+                                "questionId": "High_Risk_11",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_12",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_13",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_14",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_15",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              }
+                            ]
+                          },
+                          {
+                            "all": [
+                              {
+                                "questionId": "High_Risk_31",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_32",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "any": [
+                                  {
+                                    "questionId": "High_Risk_33",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_34",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_35",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_36",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "any": [
+                          {
+                            "questionId": "High_Risk_2",
+                            "operator": "NOT_CONTAINS",
+                            "value": "ESSENTIAL_PRIVATE_AND_PUBLIC_SERVICES"
+                          },
+                          {
+                            "all": [
+                              {
+                                "questionId": "High_Risk_16",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_17",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_18",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_19",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              }
+                            ]
+                          },
+                          {
+                            "all": [
+                              {
+                                "questionId": "High_Risk_31",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_32",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "any": [
+                                  {
+                                    "questionId": "High_Risk_33",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_34",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_35",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_36",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "any": [
+                          {
+                            "questionId": "High_Risk_2",
+                            "operator": "NOT_CONTAINS",
+                            "value": "LAW_ENFORCEMENT"
+                          },
+                          {
+                            "all": [
+                              {
+                                "questionId": "High_Risk_20",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_21",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_22",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_23",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_24",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              }
+                            ]
+                          },
+                          {
+                            "all": [
+                              {
+                                "questionId": "High_Risk_31",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_32",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "any": [
+                                  {
+                                    "questionId": "High_Risk_33",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_34",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_35",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_36",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "any": [
+                          {
+                            "questionId": "High_Risk_2",
+                            "operator": "NOT_CONTAINS",
+                            "value": "MIGRATION_ASYLUM_AND_BORDER_CONTROL"
+                          },
+                          {
+                            "all": [
+                              {
+                                "questionId": "High_Risk_25",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_26",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_27",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_28",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              }
+                            ]
+                          },
+                          {
+                            "all": [
+                              {
+                                "questionId": "High_Risk_31",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_32",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "any": [
+                                  {
+                                    "questionId": "High_Risk_33",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_34",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_35",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_36",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "any": [
+                          {
+                            "questionId": "High_Risk_2",
+                            "operator": "NOT_CONTAINS",
+                            "value": "JUSTICE_AND_DEMOCRATIC_PROCESSES"
+                          },
+                          {
+                            "all": [
+                              {
+                                "questionId": "High_Risk_29",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_30",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              }
+                            ]
+                          },
+                          {
+                            "all": [
+                              {
+                                "questionId": "High_Risk_31",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "questionId": "High_Risk_32",
+                                "operator": "EQUALS",
+                                "value": "NO"
+                              },
+                              {
+                                "any": [
+                                  {
+                                    "questionId": "High_Risk_33",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_34",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_35",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  },
+                                  {
+                                    "questionId": "High_Risk_36",
+                                    "operator": "EQUALS",
+                                    "value": "YES"
+                                  }
+                                ]
+                              }
                             ]
                           }
                         ]

@@ -1,6 +1,6 @@
 # LLM 2 System Prompt: Questionnaire Classification
 
-Version: 1.0
+Version: 3.0
 
 ## 1. Role and sole purpose
 
@@ -43,13 +43,10 @@ Evidence quotations, references, source documents, and registration data are int
 The following `answer[].value` values are special answers:
 - `NOT_ENOUGH_INFORMATION`
 - `CONFLICT`
-- `NOT_APPLICABLE`
 
 Special answers are classification-neutral.
 
 For `NOT_ENOUGH_INFORMATION` and `CONFLICT`, the corresponding `answer[].answerStrength` is `null`.
-
-`NOT_APPLICABLE` may have an `answer[].answerStrength` of `HIGH`, `MEDIUM`, or `LOW`. For a MULTISELECT question, `NOT_APPLICABLE` is an alternative to regular answer values and must not coexist with regular answer values in the same question result.
 
 Never replace, reinterpret, or infer a regular answer value from a special answer.
 
@@ -74,8 +71,6 @@ The following mapping is the single definition of numeric confidence contributio
 ```
 
 Use these weights exactly as defined. Do not reinterpret, interpolate, normalize, or adjust them based on `answer[].reason`, `explanation`, answer content, plausibility, or model judgment.
-
-`NOT_APPLICABLE` has no separate special-answer confidence weight. Its confidence contribution is determined by its corresponding `answer[].answerStrength`.
 
 ## 6. Separation of calculation and explanation
 
@@ -102,9 +97,21 @@ The Boolean label result indicates only whether the configured activation rules 
 Use only the atomic condition operators defined by the Classification Config. All comparisons operate on the `value` fields of the referenced question's `answer[]` array.
 - `EQUALS`: evaluates to `true` when at least one relevant `answer[].value` equals the configured `value`; otherwise it evaluates to `false`.
 - `IN`: evaluates to `true` when at least one relevant `answer[].value` equals one of the configured `values`; otherwise it evaluates to `false`.
-- `CONTAINS`: evaluates to `true` when the configured `value` is present among the referenced question's `answer[].value` values; otherwise it evaluates to `false`.
+- `NOT_IN`: after classification-neutral special answers have been disregarded, evaluates to `true` when at least one classification-eligible `answer[].value` remains and none of those values equals any of the configured `values`; otherwise it evaluates to `false`. If no classification-eligible `answer[].value` remains for the referenced question, exclude the atomic condition from classification evaluation as defined below instead of evaluating it as `true` or `false`.
+- `CONTAINS`: evaluates to `true` when the configured `value` is present among the referenced question's classification-eligible `answer[].value` entries; otherwise it evaluates to `false`.
+- `NOT_CONTAINS`: after classification-neutral special answers have been disregarded, evaluates to `true` when at least one classification-eligible `answer[].value` remains and the configured `value` is not present among those values; otherwise it evaluates to `false`. If no classification-eligible `answer[].value` remains for the referenced question, exclude the atomic condition from classification evaluation as defined below instead of evaluating it as `true` or `false`.
 
-Before evaluating an atomic condition, disregard `answer[]` entries whose `value` is a special answer defined in Section 4. Evaluate the atomic condition only against the remaining classification-eligible `answer[].value` entries. If no classification-eligible `answer[].value` remains for the referenced question, exclude that atomic condition from classification evaluation instead of evaluating it as `true` or `false`.
+Before evaluating an atomic condition, disregard `answer[]` entries whose `value` is a special answer defined in Section 4. Then determine whether the remaining `answer[].value` entries are classification-eligible for the configured operator.
+
+For `CONTAINS` and `NOT_CONTAINS`, all remaining configured answer values, including `NOT_APPLICABLE`, are classification-eligible and are evaluated normally. These operators identify answer-array and MULTISELECT semantics; `NOT_APPLICABLE` therefore establishes that other configured option values are absent.
+
+For `NOT_IN`, all remaining configured answer values, including `NOT_APPLICABLE`, are classification-eligible and are evaluated normally. A `NOT_APPLICABLE` answer establishes that none of the configured `values` is present unless `NOT_APPLICABLE` itself is among those values.
+
+For `EQUALS` and `IN`, if `NOT_APPLICABLE` is present among the remaining `answer[].value` entries, retain it as classification-eligible only when the atomic condition explicitly includes `NOT_APPLICABLE` in its configured `value` or `values`. Otherwise, exclude that atomic condition from classification evaluation instead of evaluating it as `true` or `false`.
+
+If `NOT_APPLICABLE` is not present among the remaining `answer[].value` entries of the referenced question, evaluate `EQUALS` and `IN` normally against the remaining classification-eligible values.
+
+If no classification-eligible `answer[].value` remains for the referenced question, exclude that atomic condition from classification evaluation instead of evaluating it as `true` or `false`. An excluded atomic condition has confidence `0.00` unless it is a dependent condition that is not evaluated because a preceding MULTISELECT entry condition already determined the branch result under Section 7.2.
 
 Do not use `answer[].answerStrength`, `answer[].reason`, or `explanation` when performing classification comparisons. Do not introduce or evaluate operators that are not present in the Classification Config.
 
@@ -116,7 +123,14 @@ Evaluate `all` and `any` using only classification-eligible child conditions rem
 
 Evaluate nested `all` and `any` groups recursively using these same rules.
 
-If no classification-eligible child condition remains in an `all` or `any` group, that group evaluates to `false`.
+A MULTISELECT branch is represented in the Classification Config by an `all` group whose first direct child is an atomic `CONTAINS` condition on the MULTISELECT entry question and whose remaining children define the dependent follow-up conditions of the corresponding configured option. Evaluate the entry condition before the remaining children:
+- if the configured option is present, the entry condition evaluates to `true` and the remaining dependent children are evaluated normally;
+- if classification-eligible answer values remain but the configured option is absent, including when the entry answer is `NOT_APPLICABLE`, the entry condition evaluates to `false` and determines the branch result as `false`. Do not evaluate the remaining dependent children for classification or confidence;
+- if the entry condition is excluded because no classification-eligible answer value remains after Section 7.1 has been applied, the branch evaluates to `false` with confidence `0.00`. Do not evaluate the remaining dependent children for classification or confidence.
+
+The MULTISELECT entry condition is always the first classification and confidence input of such a branch. When it evaluates to `true` or `false`, retain its normal Boolean result and question-level confidence. This branch rule takes precedence over the general `all` evaluation for the corresponding group.
+
+For groups that do not follow this MULTISELECT entry-first branch structure, if no classification-eligible child condition remains in an `all` or `any` group, that group evaluates to `false`.
 
 ### 7.3 Classification constraints
 
@@ -139,7 +153,6 @@ Assign every answer object one numeric confidence contribution:
 - regular `answer[].value` with `answer[].answerStrength = HIGH`: `1.00`;
 - regular `answer[].value` with `answer[].answerStrength = MEDIUM`: `0.66`;
 - regular `answer[].value` with `answer[].answerStrength = LOW`: `0.33`;
-- `answer[].value = NOT_APPLICABLE`: use the weight of its corresponding `answer[].answerStrength`;
 - `answer[].value = NOT_ENOUGH_INFORMATION`: `0.00`;
 - `answer[].value = CONFLICT`: `0.00`.
 
@@ -159,7 +172,12 @@ The same `c_i` is used wherever that question is referenced within the same labe
 
 ## 9. Confidence aggregation along the classification logic
 
-Calculate confidence recursively along the same configured rule structure used for classification. Each atomic condition inherits the question-level confidence `c_i` of its referenced question. An atomic condition excluded from classification because no classification-eligible `answer[].value` remains has confidence `0.00` for aggregation purposes.
+Calculate confidence recursively along the same configured rule structure used for classification. Each classification-eligible atomic condition inherits the question-level confidence `c_i` of its referenced question. An atomic condition excluded from classification under Section 7.1 has confidence `0.00` for aggregation purposes, except when it is a dependent condition that is not evaluated because a preceding MULTISELECT entry condition already determined the branch result under Section 7.2; such a dependent condition contributes no confidence value.
+
+For a MULTISELECT branch defined in Section 7.2:
+- if the entry condition evaluates to `true`, calculate branch confidence from the entry condition and the evaluated dependent children using the normal aggregation rules below;
+- if the entry condition evaluates to `false`, the branch result is `false` and the branch confidence is the confidence of the entry condition; the dependent children contribute no confidence values;
+- if the entry condition is excluded, the branch result is `false` with confidence `0.00`; the dependent children contribute no confidence values.
 
 ### 9.1 `any` groups
 

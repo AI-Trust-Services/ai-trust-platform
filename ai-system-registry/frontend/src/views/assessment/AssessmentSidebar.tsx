@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Link, useParams } from "react-router";
-import { AlertTriangle, CheckCircle2, Circle, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Circle, Loader2, Lock } from "lucide-react";
 import type { AssessmentState, QuestionState } from "../../types";
-import { AI_SECTIONS, ORDERED_QUESTION_IDS, QUESTION_DEF_BY_ID } from "../../config/aiQuestionnaire";
+import { AI_SECTIONS, ORDERED_QUESTION_IDS, QUESTION_DEF_BY_ID, isGated } from "../../config/aiQuestionnaire";
 import { TierBadge } from "../../components/Badges";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +33,7 @@ export function AssessmentSidebar({
   finalizeEnabled,
   locked = false,
   basePath,
+  currentAnswers,
 }: {
   state: AssessmentState;
   activeQuestionKey?: string;
@@ -40,6 +41,7 @@ export function AssessmentSidebar({
   finalizeEnabled: boolean;
   locked?: boolean;
   basePath: string;
+  currentAnswers: Record<string, string | null>;
 }) {
   const { id } = useParams();
   const stateByKey = useMemo(
@@ -76,9 +78,10 @@ export function AssessmentSidebar({
           </p>
         )}
         {/* Per-question progress: colored by confidence on load (green/amber/red,
-            matching the start-page confidence bar), then green once owner-confirmed. */}
+            matching the start-page confidence bar), then green once owner-confirmed.
+            Gated (locked) questions are excluded — they can never be confirmed. */}
         <div className="mt-3 flex gap-0.5">
-          {ORDERED_QUESTION_KEYS.map((k) => (
+          {ORDERED_QUESTION_KEYS.filter((k) => !isGated(k, currentAnswers)).map((k) => (
             <div
               key={k}
               className={cn("h-1.5 flex-1 rounded-full", segmentColor(stateByKey[k]))}
@@ -113,9 +116,10 @@ export function AssessmentSidebar({
           </Link>
         </div>
         {ASSESSMENT_SECTIONS.map((section) => {
-          const total = section.questionKeys.length;
-          // Completion is OWNER-confirmed (the submit gate), not any confirmation.
-          const complete = section.questionKeys.filter((k) => stateByKey[k]?.owner_confirmed).length;
+          // Exclude gated questions from section counts — they can never be confirmed.
+          const applicable = section.questionKeys.filter((k) => !isGated(k, currentAnswers));
+          const total = applicable.length;
+          const complete = applicable.filter((k) => stateByKey[k]?.owner_confirmed).length;
           return (
             <div key={section.key} className="mb-4">
               <div className="flex items-center justify-between px-3 py-1">
@@ -126,6 +130,7 @@ export function AssessmentSidebar({
               </div>
               <ul>
                 {section.questionKeys.map((key) => {
+                  const gated = isGated(key, currentAnswers);
                   const q = stateByKey[key];
                   const ownerConfirmed = q?.owner_confirmed;
                   // Confirmed by a contributor but not yet by the owner — progress,
@@ -140,13 +145,42 @@ export function AssessmentSidebar({
                   // or the questions the AI never answered stay silently grey while
                   // the header above still counts them (issue #383).
                   const showAttention = needsAttention && !llmPending;
-                  const statusText = ownerConfirmed
-                    ? "Complete"
-                    : contributorOnly
-                      ? "Confirmed by contributor"
-                      : llmPending
-                        ? "Waiting for AI…"
-                        : "Incomplete";
+                  const statusText = gated
+                    ? "Dependent question"
+                    : ownerConfirmed
+                      ? "Complete"
+                      : contributorOnly
+                        ? "Confirmed by contributor"
+                        : llmPending
+                          ? "Waiting for AI…"
+                          : "Incomplete";
+
+                  if (gated) {
+                    // Locked dependent question — navigable so QuestionView can
+                    // show the placeholder, but styled as non-interactive (muted,
+                    // padlock icon, no hover background change).
+                    return (
+                      <li key={key}>
+                        <Link
+                          ref={activeQuestionKey === key ? activeRef : undefined}
+                          to={`${basePath}/q/${key}`}
+                          className={cn(
+                            "flex items-start gap-2 rounded-md px-3 py-1.5 text-sm",
+                            activeQuestionKey === key && "bg-accent",
+                          )}
+                        >
+                          <Lock className="mt-0.5 size-4 shrink-0 text-muted-foreground/40" />
+                          <span className="flex min-w-0 flex-1 flex-col">
+                            <span className="line-clamp-2 leading-snug text-muted-foreground/60">
+                              {QUESTION_LABELS[key] ?? key}
+                            </span>
+                            <span className="text-xs text-muted-foreground/50">{statusText}</span>
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  }
+
                   return (
                     <li key={key}>
                       <Link

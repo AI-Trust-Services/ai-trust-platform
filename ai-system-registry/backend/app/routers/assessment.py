@@ -49,6 +49,7 @@ from app.dossier import (
 )
 from app.ids import new_id
 from app.llm import LLMParseError
+from app.questionnaire_gating import get_all_gated_question_ids, is_gated
 from app.questionnaire_required import QUESTION_LABEL
 from app.schemas.assessment import (
     AnswerRequest,
@@ -110,6 +111,21 @@ def _system_owner(row: AISystem) -> str | None:
 def _answer_store(row: AISystem) -> dict:
     """The full questionnaire_answers dict (never None)."""
     return dict(row.questionnaire_answers or {})
+
+
+def _build_answers_dict(states: dict[str, Any], row: AISystem) -> dict[str, str | None]:
+    """Merge per-cycle question_states answers with JSONB fallback.
+
+    question_states is the authoritative per-cycle source; questionnaire_answers
+    fills in keys not yet written to this cycle's states.
+    """
+    answers: dict[str, str | None] = {
+        k: (st.answer if st else None) for k, st in states.items()
+    }
+    for k, v in (row.questionnaire_answers or {}).items():
+        if k not in answers:
+            answers[k] = str(v) if v is not None else None
+    return answers
 
 
 def _read_answer(row: AISystem, answers: dict, question_key: str) -> str | None:
@@ -340,12 +356,20 @@ def _is_owner_confirmed(row: AISystem, state: QuestionState | None) -> bool:
     return state.confirmed_by == _system_owner(row)
 
 
-def _owner_unconfirmed(row: AISystem, states: dict[str, QuestionState]) -> list[str]:
-    """Question keys NOT yet owner-confirmed — the finalize/submit gate."""
+def _owner_unconfirmed(
+    row: AISystem,
+    states: dict[str, QuestionState],
+    skip: frozenset[str] = frozenset(),
+) -> list[str]:
+    """Question keys NOT yet owner-confirmed — the finalize/submit gate.
+
+    ``skip`` is an optional set of question keys to exclude (e.g. gated-out
+    questions that can never be confirmed and must not block submission).
+    """
     return [
         q
         for q in ASSESSMENT_QUESTION_KEYS
-        if not _is_owner_confirmed(row, states.get(q))
+        if q not in skip and not _is_owner_confirmed(row, states.get(q))
     ]
 
 
@@ -866,9 +890,16 @@ async def save_answer(
         if not _is_editable(row):
             raise HTTPException(409, "Assessment is locked and cannot be edited")
         assessment = await _ensure_assessment(session, row)
-        state = await _load_state(session, assessment.id, question_key)
+        all_states = await _states_by_key(session, assessment.id)
+        state = all_states.get(question_key)
         if not _may_edit(row, state, user):
             raise HTTPException(403, "You are not assigned to this question")
+
+        # Reject answers for questions currently locked by a gate condition.
+        # Reuse the already-fetched all_states — no extra DB round-trip.
+        _current_answers = _build_answers_dict(all_states, row)
+        if is_gated(question_key, _current_answers):
+            raise HTTPException(422, "Question is locked by a dependency condition")
 
         # Capture the previous stored value BEFORE overwriting, so we can detect a
         # genuine change (not just a change from the AI original).
@@ -1271,7 +1302,11 @@ async def finalize_assessment(
             raise HTTPException(403, "Only the owner may finalize the assessment")
         assessment = await _ensure_assessment(session, row)
         states = await _states_by_key(session, assessment.id)
-        unconfirmed = _owner_unconfirmed(row, states)
+        # Build current answers to evaluate gating — same pattern as save_answer.
+        _current_answers = _build_answers_dict(states, row)
+        gated_ids = get_all_gated_question_ids(_current_answers)
+        # Exclude gated questions — they can never be confirmed and don't need to be.
+        unconfirmed = _owner_unconfirmed(row, states, skip=frozenset(gated_ids))
         if unconfirmed:
             raise HTTPException(
                 422,
@@ -1304,7 +1339,9 @@ async def submit_assessment(
             raise HTTPException(409, "Assessment is already locked")
         assessment = await _current_assessment(session, system_id)
         states = await _states_by_key(session, assessment.id) if assessment else {}
-        unconfirmed = _owner_unconfirmed(row, states)
+        # Exclude gated questions from the confirmation gate (same logic as finalize).
+        gated_ids_sub = get_all_gated_question_ids(_build_answers_dict(states, row))
+        unconfirmed = _owner_unconfirmed(row, states, skip=frozenset(gated_ids_sub))
         if unconfirmed:
             raise HTTPException(
                 422,

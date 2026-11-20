@@ -4,6 +4,7 @@ import { useAssessment } from "./AssessmentApp";
 import { ORDERED_QUESTION_KEYS } from "./AssessmentSidebar";
 import { usePermissions } from "../../hooks/usePermissions";
 import { TIER_META } from "../../utils";
+import { isGated } from "../../config/aiQuestionnaire";
 
 const CLASSIFICATION_TABS = [
   { key: "minimal", label: "Minimal or no risk" },
@@ -41,14 +42,17 @@ export default function AssessmentStartPage() {
   // always restarting at question 1. "Open" = editable by me and not yet
   // owner-confirmed (an assignee can only edit their assigned questions, so this
   // lands them on their first open one; the owner lands on the first unconfirmed
-  // question overall). Skip questions still waiting on the AI prefill. Falls back
-  // to the first unconfirmed, then to the very first, so it always goes somewhere.
+  // question overall). Skip questions still waiting on the AI prefill, and skip
+  // questions currently locked by a gate condition. Falls back to the first
+  // unconfirmed non-gated, then to the very first, so it always goes somewhere.
   const byKey = Object.fromEntries(state.questions.map((q) => [q.question_key, q]));
+  const currentAnswers = Object.fromEntries(state.questions.map((q) => [q.question_key, q.answer ?? null]));
   const firstOpenKey =
     ORDERED_QUESTION_KEYS.find(
-      (k) => byKey[k]?.can_edit && !byKey[k]?.owner_confirmed && !byKey[k]?.llm_pending,
+      (k) => byKey[k]?.can_edit && !byKey[k]?.owner_confirmed && !byKey[k]?.llm_pending && !isGated(k, currentAnswers),
     ) ??
-    ORDERED_QUESTION_KEYS.find((k) => !byKey[k]?.owner_confirmed) ??
+    ORDERED_QUESTION_KEYS.find((k) => !byKey[k]?.owner_confirmed && !isGated(k, currentAnswers)) ??
+    ORDERED_QUESTION_KEYS.find((k) => !isGated(k, currentAnswers)) ??
     ORDERED_QUESTION_KEYS[0];
 
   return (
