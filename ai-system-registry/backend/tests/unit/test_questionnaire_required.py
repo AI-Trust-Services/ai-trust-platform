@@ -8,7 +8,7 @@ from app.questionnaire_required import VALID_QUESTION_KEYS, QUESTION_LABEL
 
 def test_valid_question_keys_non_empty():
     assert len(VALID_QUESTION_KEYS) > 50, (
-        "Expected ~88 question keys from ai-questionnaire.json"
+        "Expected ~71 question keys from ai-questionnaire.json"
     )
 
 
