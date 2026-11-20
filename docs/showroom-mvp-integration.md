@@ -129,7 +129,23 @@ Konfidence specifies Artifact → Vector → Stage → Landscape immutable deliv
 
 **Reference:** [LCM config / operator principles](https://documentation.apeirora.eu/docs/best-practices/lcm/config/) · [Controller pattern](https://documentation.apeirora.eu/docs/best-practices/digital-twins/controller) · [ai-trust-platform-operator](https://github.com/AI-Trust-Services/ai-trust-platform-operator) · [apeirora/showroom-msp-simple-cluster](https://github.com/apeirora/showroom-msp-simple-cluster)
 
-`ai-trust-platform-operator` handles multi-tenant provisioning; Helm initContainers + one-shot Jobs handle startup ordering and migrations. **Gap:** no application-level operator managing the platform's own reconciliation loop (upgrade readiness, migration gating, automatic rollback). Per ApeiroRA docs, "not all Apeiro components have adopted operator-based installation yet" — this platform is in that category.
+**[`ai-trust-platform-operator`](https://github.com/AI-Trust-Services/ai-trust-platform-operator)** (Go, `controller-runtime`, v0.8.0 alpha) is a fully implemented Kubernetes operator that handles **multi-tenant managed-service provisioning** via the ApeiroRA Platform Mesh (`Subscription` CRs synced from KCP). It reconciles the full tenant lifecycle:
+
+- Per-tenant Keycloak realm, Postgres schema (`tenant_<org>`), ClickHouse database, MinIO bucket — provisioned via gated one-shot Jobs
+- Per-tenant oauth2-proxy Deployment + Gateway API HTTPRoute + ReferenceGrant
+- Per-tenant OIDC client registration; OpenFGA admin tuple seeding
+- Tenant suspension (oauth2-proxy scaled to 0, data preserved) and soft-delete (finalizer, data-preserving)
+- Duplicate-org guard; continuous reconciliation (5-min requeue for drift correction)
+- **Federation / cross-cluster mode**: Central cluster watches Subscriptions, provisions onto a Payload cluster via `REMOTE_KUBECONFIG`, wires cross-Keycloak SSO brokering
+
+The operator is deployed in namespace `aitrust-msp` alongside the shared platform stack; in federated mode on a Central cluster against a separate Payload cluster. It integrates with KCP Platform Mesh via an `api-syncagent` that mirrors `Subscription` CRs from the KCP provider workspace (`root:providers:ai-trust`).
+
+**Remaining gap — platform-level self-LCM:** the operator manages tenant provisioning but does **not** manage the shared platform stack's own lifecycle:
+- No upgrade controller for rolling the shared app (Keycloak, Postgres, OpenFGA, the platform services) — that is handled by a shell script (`3b-shared-app.sh`), not a reconciler
+- Schema migrations run only at first tenant provisioning; no logic to apply Alembic migrations to existing tenants when the platform version upgrades
+- No rollback gating or health-reconciliation for the shared stack
+
+Per ApeiroRA docs, "not all Apeiro components have adopted operator-based installation and update procedures yet" — the platform-self-LCM aspect remains in this category.
 
 **Local:** `k8s/helm/ai-trust-platform/templates/_helpers.tpl`, `k8s/README.md` → "Per-revision Job names".
 
