@@ -116,9 +116,16 @@ function evaluateNode(node: AppliesWhenNode, answers: Record<string, string | nu
  * answers: Record<questionId, raw answer string or null>
  * For MULTISELECT questions the value is a JSON-serialised string array.
  */
-export function isGated(questionId: string, answers: Record<string, string | null>): boolean {
+export function isGated(
+  questionId: string,
+  answers: Record<string, string | null>,
+  _seen: Set<string> = new Set(),
+): boolean {
+  if (_seen.has(questionId)) return true; // cycle — treat as gated (fail-safe)
   const def = QUESTION_DEF_BY_ID[questionId];
   if (!def?.appliesWhen) return false;
+
+  const seen = new Set(_seen).add(questionId);
 
   // Collect all dependency question IDs referenced in this node.
   function collectDepIds(node: AppliesWhenNode): string[] {
@@ -134,7 +141,7 @@ export function isGated(questionId: string, answers: Record<string, string | nul
   // condition correctly fails downstream.
   const maskedAnswers: Record<string, string | null> = { ...answers };
   for (const depId of collectDepIds(def.appliesWhen)) {
-    if (isGated(depId, answers)) {
+    if (isGated(depId, answers, seen)) {
       maskedAnswers[depId] = null;
     }
   }
