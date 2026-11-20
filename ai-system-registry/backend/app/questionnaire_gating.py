@@ -99,7 +99,11 @@ def evaluate_applies_when(node: dict, answers: dict[str, str | None]) -> bool:
     return _eval_leaf(node, answers)
 
 
-def is_gated(question_id: str, answers: dict[str, str | None]) -> bool:
+def is_gated(
+    question_id: str,
+    answers: dict[str, str | None],
+    _visited: frozenset[str] = frozenset(),
+) -> bool:
     """Return True when *question_id* is currently locked by its gate condition.
 
     A question is gated when:
@@ -109,16 +113,26 @@ def is_gated(question_id: str, answers: dict[str, str | None]) -> bool:
     Recursion: when evaluating a leaf condition, if the referenced
     ``questionId`` is itself gated-out, its answer is treated as ``None``
     regardless of what is stored — so the full chain propagates.
+
+    *_visited* guards against circular ``appliesWhen`` dependencies; a cycle
+    is treated as "not satisfied" (fail-safe — the question stays locked).
     """
+    if question_id in _visited:
+        return True  # Cycle detected — treat as gated (fail-safe).
+
     node = QUESTIONS_WITH_GATE.get(question_id)
     if node is None:
         return False  # No gate — always visible.
+
+    visited = _visited | {question_id}
 
     # Build a masked answers dict: for any dependency question that is itself
     # gated, substitute None so downstream conditions correctly fail.
     masked: dict[str, str | None] = {}
     for dep_id in _collect_dep_ids(node):
-        masked[dep_id] = None if is_gated(dep_id, answers) else answers.get(dep_id)
+        masked[dep_id] = (
+            None if is_gated(dep_id, answers, visited) else answers.get(dep_id)
+        )
 
     return not evaluate_applies_when(node, masked)
 

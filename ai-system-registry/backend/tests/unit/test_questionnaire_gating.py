@@ -3,7 +3,8 @@
 Tests cover:
 - evaluate_applies_when: all three operators (CONTAINS, IN, EQUALS) and both
   combinators (all / any).
-- is_gated: questions with and without gates, recursive chain propagation.
+- is_gated: questions with and without gates, recursive chain propagation,
+  cycle guard (circular appliesWhen never causes RecursionError).
 - get_all_gated_question_ids: returns the correct set for a given answers dict.
 """
 
@@ -217,6 +218,26 @@ class TestIsGated:
             "High_Risk_31": "NO",
         }
         assert not is_gated("High_Risk_32", answers)
+
+    def test_cycle_guard_does_not_raise(self):
+        # Inject a synthetic circular dependency: A gates B, B gates A.
+        # is_gated must return without RecursionError and treat both as gated.
+        import app.questionnaire_gating as qg
+
+        original = dict(qg.QUESTIONS_WITH_GATE)
+        qg.QUESTIONS_WITH_GATE["__CycleA__"] = {
+            "all": [{"questionId": "__CycleB__", "operator": "EQUALS", "value": "YES"}]
+        }
+        qg.QUESTIONS_WITH_GATE["__CycleB__"] = {
+            "all": [{"questionId": "__CycleA__", "operator": "EQUALS", "value": "YES"}]
+        }
+        try:
+            # Must not raise RecursionError; both should be gated (fail-safe).
+            assert is_gated("__CycleA__", {})
+            assert is_gated("__CycleB__", {})
+        finally:
+            qg.QUESTIONS_WITH_GATE.clear()
+            qg.QUESTIONS_WITH_GATE.update(original)
 
 
 # ---------------------------------------------------------------------------
