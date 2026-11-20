@@ -464,7 +464,7 @@ function OverviewTab({
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: system.name,
-    description: system.description,
+    description: system.description ?? "",
     intended_purpose: system.intended_purpose,
     lifecycle: system.lifecycle,
     planned_rollout_date: system.planned_rollout_date ?? "",
@@ -474,7 +474,7 @@ function OverviewTab({
   useEffect(() => {
     setForm({
       name: system.name,
-      description: system.description,
+      description: system.description ?? "",
       intended_purpose: system.intended_purpose,
       lifecycle: system.lifecycle,
       planned_rollout_date: system.planned_rollout_date ?? "",
