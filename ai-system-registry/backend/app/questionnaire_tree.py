@@ -98,6 +98,10 @@ def eval_tree(when: dict, answers_by_qid: dict[str, list[str]]) -> bool:
     if operator in ("EQUALS", "CONTAINS"):
         return configured_value in eligible
 
+    if operator == "IN":
+        values = when.get("values", [])
+        return any(v in values for v in eligible)
+
     raise ValueError(f"Unknown operator '{operator}' in when-tree for questionId '{qid}'")
 
 

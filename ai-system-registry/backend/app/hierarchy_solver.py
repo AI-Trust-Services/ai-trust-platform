@@ -79,6 +79,50 @@ def _validate_overrides(
             raise ValueError(f"Unknown questionId in overrides.answers: '{qid}'")
 
 
+def _pipeline_label(c: dict) -> ResolvedLabel:
+    confidence = c.get("confidence")
+    band = _confidence_band(c["labelId"], confidence) if confidence is not None else None
+    return ResolvedLabel(
+        labelId=c["labelId"],
+        result=c.get("result", False),
+        source="pipeline",
+        confidence=confidence,
+        confidenceBand=band,
+        explanation=c.get("explanation"),
+    )
+
+
+def _user_label(label_id: str, result: bool) -> ResolvedLabel:
+    return ResolvedLabel(
+        labelId=label_id,
+        result=result,
+        source="user",
+        confidence=100,
+        confidenceBand="High",
+        explanation=None,
+    )
+
+
+def _minimal_label(combined: dict[str, ResolvedLabel]) -> ResolvedLabel:
+    # ponytail: min of other risk-label confidences — proxy for "we're as sure as the
+    # weakest counterargument"; upgrade to §8/§9 tree eval if MINIMAL gets its own rules.
+    other_confidences = [
+        combined[rid].confidence
+        for rid in _RISK_HIERARCHY[:-1]
+        if rid in combined and combined[rid].confidence is not None
+    ]
+    confidence = min(other_confidences) if other_confidences else None
+    band = _confidence_band("MINIMAL", confidence) if confidence is not None else None
+    return ResolvedLabel(
+        labelId="MINIMAL",
+        result=True,
+        source="pipeline",
+        confidence=confidence,
+        confidenceBand=band,
+        explanation=None,
+    )
+
+
 def solve(
     pipeline_result: dict,
     overrides: LabelOverrides | None,
@@ -89,6 +133,7 @@ def solve(
     Override precedence (highest first): riskWinner > labels > answers re-eval > pipeline.
     """
     classifications: list[dict] = pipeline_result.get("classifications", [])
+    skipped_label_ids: set[str] = {e["labelId"] for e in pipeline_result.get("skipped_labels", [])}
 
     config = load_questionnaire(DEFAULT_CLASSIFICATION_CONFIG_ID)
     all_labels = config.get("riskLabels", []) + config.get("roleLabels", [])
@@ -99,99 +144,54 @@ def solve(
     if overrides:
         _validate_overrides(overrides, classifications, all_question_ids)
 
-    # classification_map: {labelId → pipeline classification dict}
-    classification_map: dict[str, dict] = {c["labelId"]: dict(c) for c in classifications}
-
-    # Step 1: per-question answer overrides — re-evaluate rule trees deterministically
-    # without an LLM call. Only labels whose result flips are marked _answers_overridden.
+    # Pre-compute answer-override results before the loop so the loop is pure lookup.
+    answer_results: dict[str, bool] = {}
     if overrides and overrides.answers:
         base_answers = _build_answers_map(questionnaire_result) if questionnaire_result else {}
-        effective_answers = {**base_answers, **overrides.answers}
-        label_by_id = {lbl["id"]: lbl for lbl in all_labels}
-        for label_id, classification in classification_map.items():
-            label = label_by_id.get(label_id)
-            if label:
-                new_result = eval_label(label, effective_answers)
-                if new_result != classification["result"]:
-                    classification_map[label_id] = {**classification, "result": new_result, "_answers_overridden": True}
 
-    # Step 2: per-label result overrides — directly force a label's boolean result,
-    # bypassing rule evaluation entirely.
-    if overrides and overrides.labels:
-        for label_id, forced_result in overrides.labels.items():
-            if label_id in classification_map:
-                classification_map[label_id] = {**classification_map[label_id], "result": forced_result, "_user_overridden": True}
+        effective_answers = base_answers | overrides.answers  # overrides win on conflict
+        
+        for lbl in all_labels:
+            answer_results[lbl["id"]] = eval_label(lbl, effective_answers)
 
-    def _build_resolved_label(label_id: str) -> ResolvedLabel:
-        classification = classification_map.get(label_id)
-        user_overridden = classification and (classification.get("_user_overridden") or classification.get("_answers_overridden"))
+    # Build combined: iterate pipeline classifications, then skipped labels revived by overrides.
+    combined: dict[str, ResolvedLabel] = {}
 
-        if label_id == "MINIMAL":
-            # ponytail: min of other risk-label confidences — proxy for "we're as sure as the
-            # weakest counterargument"; upgrade to §8/§9 tree eval if MINIMAL gets its own rules.
-            other_confidences = [
-                c["confidence"]
-                for rid in _RISK_HIERARCHY[:-1]  # PROHIBITED, HIGH_RISK, TRANSPARENCY
-                if (c := classification_map.get(rid)) and c.get("confidence") is not None
-            ]
-            confidence = min(other_confidences) if other_confidences else None
-            band = _confidence_band(label_id, confidence) if confidence is not None else None
-            return ResolvedLabel(
-                labelId=label_id,
-                result=True,
-                source="pipeline",
-                confidence=confidence,
-                confidenceBand=band,
-                explanation=None,
-            )
+    for c in classifications:
+        lid = c["labelId"]
+        if overrides and lid in overrides.labels:  # direct label override
+            combined[lid] = _user_label(lid, overrides.labels[lid])
+        elif lid in answer_results and answer_results[lid] != c.get("result", False):  # answer override flipped result
+            combined[lid] = _user_label(lid, answer_results[lid])
+        else:  # pipeline result unchanged
+            combined[lid] = _pipeline_label(c)
 
-        if classification is None:
-            # Pipeline skipped or failed this label (insufficient data / LLM error).
-            return ResolvedLabel(labelId=label_id, result=False, source="skipped", confidence=None, confidenceBand=None, explanation=None)
+    # Skipped labels: only add if an override revives them.
+    for lid in skipped_label_ids:
+        if lid in combined:
+            continue
+        if overrides and lid in overrides.labels:  # direct label override revives skipped
+            combined[lid] = _user_label(lid, overrides.labels[lid])
+        elif lid in answer_results and answer_results[lid]:  # answer override revives skipped
+            combined[lid] = _user_label(lid, answer_results[lid])
+        # else: stays out of combined — skipped and not revived
 
-        if user_overridden:
-            return ResolvedLabel(
-                labelId=label_id,
-                result=classification["result"],
-                source="user",
-                confidence=100,
-                confidenceBand="High",
-                explanation=None,
-            )
-
-        confidence = classification.get("confidence")
-        band = _confidence_band(label_id, confidence) if confidence is not None else None
-        return ResolvedLabel(
-            labelId=label_id,
-            result=classification["result"],
-            source="pipeline",
-            confidence=confidence,
-            confidenceBand=band,
-            explanation=classification.get("explanation"),
-        )
-
-    # Step 3: resolve risk winner — reads the classification_map already mutated by steps 1+2.
-    # riskWinner override beats everything, incl. labels/answers overrides.
+    # Resolve risk winner.
     if overrides and overrides.risk_winner:
-        risk = ResolvedLabel(
-            labelId=overrides.risk_winner,
-            result=True,
-            source="user",
-            confidence=100,
-            confidenceBand="High",
-            explanation=None,
-        )
+        risk = _user_label(overrides.risk_winner, True)
     else:
         winner_id = "MINIMAL"
-        for label_id in _RISK_HIERARCHY[:-1]:  # skip MINIMAL
-            classification = classification_map.get(label_id)
-            if classification and classification.get("result"):
+        for label_id in _RISK_HIERARCHY[:-1]:
+            if label_id in combined and combined[label_id].result:
                 winner_id = label_id
                 break
-        risk = _build_resolved_label(winner_id)
+        risk = combined.get(winner_id) or _minimal_label(combined)
 
-    # Step 4: all role labels (incl. result:false).
-    role_ids = [lbl["id"] for lbl in config.get("roleLabels", []) if lbl.get("activate", False)]
-    roles = [_build_resolved_label(rid) for rid in role_ids]
+    # Role labels: all active, except skipped ones that were not revived.
+    roles = [
+        combined[lbl["id"]]
+        for lbl in config.get("roleLabels", [])
+        if lbl.get("activate", False) and lbl["id"] in combined
+    ]
 
     return ResolveResponse(risk=risk, roles=roles)
