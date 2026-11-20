@@ -16,8 +16,6 @@ spec:
     metadata:
       labels:
         {{- include "ai-trust.labels" (dict "name" "clickhouse") | nindent 8 }}
-      annotations:
-        ai-trust/test: "dummy-rollout"
     spec:
       serviceAccountName: {{ .Values.serviceAccount.jobWaiter }}
       securityContext:
