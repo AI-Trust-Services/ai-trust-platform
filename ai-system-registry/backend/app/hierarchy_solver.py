@@ -6,11 +6,7 @@ role labels, applying optional user overrides and computing confidence bands.
 
 from __future__ import annotations
 
-import json
 import logging
-from functools import lru_cache
-from pathlib import Path
-from typing import Any
 
 from app.classification_config import DEFAULT_CLASSIFICATION_CONFIG_ID
 from app.llm.templates import load_questionnaire
@@ -23,19 +19,11 @@ logger = logging.getLogger(__name__)
 _RISK_HIERARCHY = ["PROHIBITED", "HIGH_RISK", "TRANSPARENCY", "MINIMAL"]
 _RISK_LABEL_IDS = frozenset(_RISK_HIERARCHY)
 
-_CONFIG_PATH = Path(__file__).parents[1] / "context" / "prompts" / "hierarchy_solver_config.json"
 _DEFAULT_THRESHOLDS = {"high": 90, "medium": 60}
 
 
-@lru_cache(maxsize=1)
-def _load_config() -> dict[str, Any]:
-    # Cached for the process lifetime. A config change requires a pod restart (image rebuild),
-    # since the file is baked into the image at build time.
-    return json.loads(_CONFIG_PATH.read_text())
-
-
 def _confidence_band(label_id: str, confidence: float) -> str:
-    thresholds = _load_config().get("confidence_thresholds", {}).get(label_id)
+    thresholds = load_questionnaire("hierarchy_solver_config").get("confidence_thresholds", {}).get(label_id)
     if thresholds is None:
         logger.warning("hierarchy_solver.missing_threshold_config", extra={"label_id": label_id})
         thresholds = _DEFAULT_THRESHOLDS
