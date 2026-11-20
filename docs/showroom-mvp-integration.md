@@ -21,6 +21,7 @@ The platform runs as a live showroom reference app on Gardener shoot clusters: p
 | 11 | Observability | ⚠️ Partial — GenAI stack MVP-off | [Observability](https://documentation.apeirora.eu/docs/best-practices/observability/) |
 | 12 | Konfidence / immutable vectors | ⚠️ Partial — SHA-tagged OCM only | [Konfidence](https://documentation.apeirora.eu/docs/best-practices/lcm/konfidence/) |
 | 13 | Operator-based LCM | ⚠️ Partial — operator exists | [LCM config](https://documentation.apeirora.eu/docs/best-practices/lcm/config/) |
+| 14 | Release management (OCM + release-please) | ❌ **Gap** — no release automation / stable semver / signing | [showroom-msp release-flow](https://github.com/apeirora/showroom-msp-simple-cluster/blob/main/docs/release-flow.md) |
 
 > **ADR note:** `docs/adr/adr-001-tenancy.md` cites "ApeiroRA ADR-004". No upstream ApeiroRA ADR-004 about tenancy exists — Platform Mesh ADRs live at [`platform-mesh/architecture/adr`](https://github.com/platform-mesh/architecture/tree/main/adr) where ADR-004 is "Shared CI Workflow Strategy" (unrelated). The account model is documented at [`apeirora/documentation` account-model.md](https://github.com/apeirora/documentation/blob/main/docs/best-practices/platform-mesh/account-model.md), with a proposed ADR at [`platform-mesh/platform-mesh` adr-01-account-model.md](https://github.com/platform-mesh/platform-mesh/blob/main/contrib/adr/adr-01-account-model.md). The ADR-001 cross-reference should be corrected accordingly.
 
@@ -131,3 +132,45 @@ Konfidence specifies Artifact → Vector → Stage → Landscape immutable deliv
 `ai-trust-platform-operator` handles multi-tenant provisioning; Helm initContainers + one-shot Jobs handle startup ordering and migrations. **Gap:** no application-level operator managing the platform's own reconciliation loop (upgrade readiness, migration gating, automatic rollback). Per ApeiroRA docs, "not all Apeiro components have adopted operator-based installation yet" — this platform is in that category.
 
 **Local:** `k8s/helm/ai-trust-platform/templates/_helpers.tpl`, `k8s/README.md` → "Per-revision Job names".
+
+---
+
+## 14 — Release Management · ❌ Gap
+
+**Reference:** [showroom-msp release-flow](https://github.com/apeirora/showroom-msp-simple-cluster/blob/main/docs/release-flow.md) · [showroom-msp versioning](https://github.com/apeirora/showroom-msp-simple-cluster/blob/main/docs/versioning.md) · [Platform Mesh RFC 015 — versioning](https://github.com/platform-mesh/architecture/blob/main/rfc/015-versioning.md) · [OCM spec — model](https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/01-model.md) · [Konfidence](https://documentation.apeirora.eu/docs/best-practices/lcm/konfidence/)
+
+A showroom product is expected to cut **stable, versioned releases**, not only per-commit deploys. The authoritative ApeiroRA reference (`apeirora/showroom-msp-simple-cluster`) defines the release contract below; Platform Mesh RFC 015, OCM, and Konfidence set the surrounding versioning/integrity rules.
+
+### What a release requires
+- **Release automation via [release-please](https://github.com/apeirora/showroom-msp-simple-cluster/blob/main/.github/workflows/release-please.yml)** — a standing release PR, `release-please-config.json` + `.release-please-manifest.json`. Merging it creates the `vX.Y.Z` tag **and** the GitHub Release, which triggers the publish pipeline. (Not semantic-release, not goreleaser.)
+- **Conventional Commits drive the version bump** — `fix:` → PATCH, `feat:` → MINOR, `feat!:`/`BREAKING CHANGE:` → MAJOR; squash-merged PR titles become the changelog source. ([versioning](https://github.com/apeirora/showroom-msp-simple-cluster/blob/main/docs/versioning.md))
+- **One synchronized SemVer** across every image + Helm chart + the **OCM component version** (OCM identity = component name + semver version; [ocm-spec](https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/01-model.md)). Platform Mesh RFC 015 uses the same "one version to rule them all" principle (there as CalVer `vYY.MM.Patch` + release branches).
+- **Auto-generated `CHANGELOG.md`** — `### Features` / `### Bug Fixes` / `### ⚠ BREAKING CHANGES`, scoped `**component:**` prefixes; mirrored into GitHub Release notes.
+- **Release artifacts published at the tagged version** — images to `ghcr.io/<owner>/<image>:X.Y.Z` (+`latest`), charts to `oci://ghcr.io/<owner>/charts` at the matching version, **SBOMs attached** to the GitHub Release, and the **OCM component signed** (cosign/OCM recursive signing per [SBoD](https://documentation.apeirora.eu/docs/best-practices/lcm/sbod/)).
+- **Konfidence alignment** — the released version is one immutable vector promoted DEV → TEST → PROD unchanged (see Requirement 12).
+
+### Current state (gap)
+The repo runs **continuous deployment, not releases**. Every push to main (`build-push-deploy.yml`) builds images, packages the chart, publishes an OCM component, and deploys to Gardener — all versioned as a **per-commit prerelease `0.0.0-<prefix>-<sha>`**. There is no stable semver channel.
+
+| Expectation | ai-trust-platform |
+|---|---|
+| Release automation (release-please) | ❌ none — no `release-please-config.json`/manifest, no semantic-release, no goreleaser |
+| Tag-triggered product release (`vX.Y.Z`) | ❌ none — only `cognee-graph-*` data-artifact tags exist |
+| Stable SemVer version | ❌ only `0.0.0-<prefix>-<sha>`; `Chart.yaml` `0.1.0`/appVersion `1.0.0` are overridden placeholders |
+| `CHANGELOG.md` / `RELEASE.md` / release notes | ❌ none |
+| GitHub Releases | ❌ none for the platform |
+| OCM component / image / chart signing | ❌ no cosign, no `ocm sign`, no GPG |
+| SBOM / provenance attestation | ❌ none |
+| Conventional Commits | ✅ enforced on PR titles (`pr-title-check.yml`) + `CONTRIBUTING.md` — the one building block already in place |
+
+**To close the gap:** add `release-please` (`.github/workflows/release-please.yml` + config/manifest), compute `VERSION` from the released tag instead of `0.0.0-<sha>`, publish the OCM component / chart / images at that semver, attach SBOMs, and sign the OCM component (cosign).
+
+### ApeiroRA release ADRs / RFCs
+- **[Platform Mesh RFC 015 — Versioning](https://github.com/platform-mesh/architecture/blob/main/rfc/015-versioning.md)** (Implemented) — unified version, CalVer, release-branch + cherry-pick backport model.
+- **[Crypto Broker ADR 0009 — Release Strategy](https://github.com/open-crypto-broker/crypto-broker-documentation/blob/main/adr/overall/0009-release-strategy.md)** (accepted, current) — "Main Release Branch"; SemVer + Conventional Commits + Git tags.
+- **[Crypto Broker ADR 0006 — Release Strategy](https://github.com/open-crypto-broker/crypto-broker-documentation/blob/main/adr/overall/0006-release-strategy.md)** (superseded by 0009) — original "Single Release Branch"; established the SemVer + Conventional Commits + mandatory Git-tag prerequisites.
+- **[platform-mesh ADR-004 — Shared CI Workflow Strategy](https://github.com/platform-mesh/architecture/blob/main/adr/004-shared-ci-workflow-strategy.md)** — repos own their pipeline and call shared reusable jobs (e.g. [`job-create-version.yml`](https://github.com/platform-mesh/.github/blob/main/.github/workflows/job-create-version.yml), `job-release-chart.yml`).
+
+> No ADR/RFC exists in `apeirora/documentation` or the `openmfp` org about releases — the authoritative, worked example is `apeirora/showroom-msp-simple-cluster` (release-please + SemVer + signed, SBOM-attached GitHub Releases).
+
+**Local:** `.github/workflows/build-push-deploy.yml`, `.github/actions/{compute-vars,publish-ocm,package-chart}/`, `CONTRIBUTING.md`, `.github/workflows/pr-title-check.yml`.
