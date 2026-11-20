@@ -294,6 +294,17 @@ async def test_update_system_404_on_missing(client: httpx.AsyncClient):
     assert r.status_code == 404
 
 
+async def test_update_system_rejects_null_notnull_fields(client: httpx.AsyncClient):
+    # description and intended_purpose back NOT NULL columns; an explicit null must be
+    # a clean 422 (via _REQUIRED_FIELDS), not a 500 IntegrityError at commit.
+    system_id = (await _create_system(client))["system"]["id"]
+    for field in ("description", "intended_purpose"):
+        r = await client.put(
+            f"/v1/systems/{system_id}", json={field: None}, headers=_HEADERS
+        )
+        assert r.status_code == 422, f"{field}: expected 422, got {r.status_code}"
+
+
 # ---------------------------------------------------------------------------
 # DELETE /systems/{id}
 # ---------------------------------------------------------------------------
