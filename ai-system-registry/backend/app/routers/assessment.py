@@ -296,12 +296,20 @@ def _is_owner_confirmed(row: AISystem, state: QuestionState | None) -> bool:
     return state.confirmed_by == _system_owner(row)
 
 
-def _owner_unconfirmed(row: AISystem, states: dict[str, QuestionState]) -> list[str]:
-    """Question keys NOT yet owner-confirmed — the finalize/submit gate."""
+def _owner_unconfirmed(
+    row: AISystem,
+    states: dict[str, QuestionState],
+    skip: frozenset[str] = frozenset(),
+) -> list[str]:
+    """Question keys NOT yet owner-confirmed — the finalize/submit gate.
+
+    ``skip`` is an optional set of question keys to exclude (e.g. gated-out
+    questions that can never be confirmed and must not block submission).
+    """
     return [
         q
         for q in ASSESSMENT_QUESTION_KEYS
-        if not _is_owner_confirmed(row, states.get(q))
+        if q not in skip and not _is_owner_confirmed(row, states.get(q))
     ]
 
 
@@ -1249,7 +1257,7 @@ async def finalize_assessment(
                 _current_answers[k] = str(v) if v is not None else None
         gated_ids = get_all_gated_question_ids(_current_answers)
         # Exclude gated questions — they can never be confirmed and don't need to be.
-        unconfirmed = _owner_unconfirmed(row, {k: v for k, v in states.items() if k not in gated_ids})
+        unconfirmed = _owner_unconfirmed(row, states, skip=frozenset(gated_ids))
         if unconfirmed:
             raise HTTPException(
                 422,
@@ -1290,7 +1298,7 @@ async def submit_assessment(
             if k not in _current_answers_sub:
                 _current_answers_sub[k] = str(v) if v is not None else None
         gated_ids_sub = get_all_gated_question_ids(_current_answers_sub)
-        unconfirmed = _owner_unconfirmed(row, {k: v for k, v in states.items() if k not in gated_ids_sub})
+        unconfirmed = _owner_unconfirmed(row, states, skip=frozenset(gated_ids_sub))
         if unconfirmed:
             raise HTTPException(
                 422,
