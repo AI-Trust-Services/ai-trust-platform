@@ -83,7 +83,9 @@ async def _assert_valid_contributors(usernames: list[str]) -> None:
 _IMMUTABLE_FIELDS = frozenset({"tier", "basis", "annex_iii_area"})
 
 # Fields backed by NOT NULL columns — an explicit null in an update is a 422, not a 500.
-_REQUIRED_FIELDS = frozenset({"name", "lifecycle", "org_role"})
+_REQUIRED_FIELDS = frozenset(
+    {"name", "lifecycle", "org_role", "description", "intended_purpose"}
+)
 
 # Supporting documents accepted for full-manual registration (extension allowlist).
 _ALLOWED_DOC_EXTENSIONS = frozenset(

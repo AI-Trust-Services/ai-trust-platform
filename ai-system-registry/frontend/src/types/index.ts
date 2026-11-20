@@ -472,6 +472,7 @@ export interface AISystemFormData {
 // the creator, so it is not sent here. contributors is a roster of usernames.
 export interface RegisterSystemInput {
   name: string;
+  description?: string;
   intended_purpose: string;
   lifecycle?: LifecycleKey;
   planned_rollout_date?: string | null;
