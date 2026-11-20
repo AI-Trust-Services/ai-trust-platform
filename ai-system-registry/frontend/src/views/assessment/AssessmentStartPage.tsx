@@ -52,6 +52,7 @@ export default function AssessmentStartPage() {
       (k) => byKey[k]?.can_edit && !byKey[k]?.owner_confirmed && !byKey[k]?.llm_pending && !isGated(k, currentAnswers),
     ) ??
     ORDERED_QUESTION_KEYS.find((k) => !byKey[k]?.owner_confirmed && !isGated(k, currentAnswers)) ??
+    ORDERED_QUESTION_KEYS.find((k) => !isGated(k, currentAnswers)) ??
     ORDERED_QUESTION_KEYS[0];
 
   return (
