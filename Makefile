@@ -61,7 +61,6 @@ bootstrap:
 build:
 	bash k8s/scripts/build-and-load-images.sh
 
-APP_PUBLIC_URL     = $(shell grep -E '^APP_PUBLIC_URL=' .env 2>/dev/null | tail -1 | cut -d= -f2-)
 COGNEE_GRAPH_TAG   = $(shell grep -E '^COGNEE_GRAPH_TAG=' .env 2>/dev/null | tail -1 | cut -d= -f2-)
 COGNEE_GRAPH_REPO := ghcr.io/ai-trust-services/ai-trust-platform/cognee-graph
 COGNEE_GRAPH_IMAGE = $(if $(COGNEE_GRAPH_TAG),$(shell \
@@ -80,12 +79,10 @@ install:
 		kubectl delete job -n $(NAMESPACE) -l app.kubernetes.io/instance=$(RELEASE) --ignore-not-found; \
 	fi
 	helm upgrade --install $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml \
-		$(if $(APP_PUBLIC_URL),--set appPublicUrl=$(APP_PUBLIC_URL)) \
 		$(if $(COGNEE_GRAPH_IMAGE),--set cogneeEval.graphImage=$(COGNEE_GRAPH_IMAGE))
 
 upgrade:
 	helm upgrade $(RELEASE) $(CHART) -n $(NAMESPACE) -f $(CHART)/values-kind.yaml \
-		$(if $(APP_PUBLIC_URL),--set appPublicUrl=$(APP_PUBLIC_URL)) \
 		$(if $(COGNEE_GRAPH_IMAGE),--set cogneeEval.graphImage=$(COGNEE_GRAPH_IMAGE))
 
 # After `make build && make upgrade`, pods that weren't restarted by Helm (because
