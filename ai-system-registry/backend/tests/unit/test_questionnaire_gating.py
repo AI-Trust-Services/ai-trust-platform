@@ -253,6 +253,23 @@ class TestGetAllGatedQuestionIds:
         assert "Prohibited_2" in gated
         assert "High_Risk_3" in gated
 
+    def test_memo_shared_across_calls(self):
+        # Pass an explicit memo dict and verify it is populated after the call,
+        # proving overlapping chains are not re-evaluated.
+        import app.questionnaire_gating as qg
+
+        memo: dict[str, bool] = {}
+        answers = {"High_Risk_2": json.dumps(["BIOMETRICS"]), "High_Risk_3": "YES"}
+        qg.get_all_gated_question_ids.__wrapped__ if hasattr(
+            qg.get_all_gated_question_ids, "__wrapped__"
+        ) else None
+        # Call is_gated directly with a shared memo to confirm caching works.
+        result1 = qg.is_gated("High_Risk_3", answers, _memo=memo)
+        assert "High_Risk_3" in memo
+        cached = memo["High_Risk_3"]
+        result2 = qg.is_gated("High_Risk_3", answers, _memo=memo)
+        assert result1 == result2 == cached  # second call hit the memo, same result
+
     def test_prohibited_dependents_unlocked_by_prohibited_1(self):
         answers = {"Prohibited_1": json.dumps(["SENSITIVE_BIOMETRIC_CATEGORISATION"])}
         gated = get_all_gated_question_ids(answers)

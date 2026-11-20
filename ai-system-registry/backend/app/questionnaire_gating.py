@@ -103,6 +103,7 @@ def is_gated(
     question_id: str,
     answers: dict[str, str | None],
     _visited: frozenset[str] = frozenset(),
+    _memo: dict[str, bool] | None = None,
 ) -> bool:
     """Return True when *question_id* is currently locked by its gate condition.
 
@@ -115,13 +116,21 @@ def is_gated(
     regardless of what is stored — so the full chain propagates.
 
     *_visited* guards against circular ``appliesWhen`` dependencies; a cycle
-    is treated as "not satisfied" (fail-safe — the question stays locked).
+    is treated as gated (fail-safe — the question stays locked).
+
+    *_memo* is an optional shared dict for memoizing results across calls with
+    the same *answers* snapshot (e.g. inside ``get_all_gated_question_ids``).
     """
     if question_id in _visited:
         return True  # Cycle detected — treat as gated (fail-safe).
 
+    if _memo is not None and question_id in _memo:
+        return _memo[question_id]
+
     node = QUESTIONS_WITH_GATE.get(question_id)
     if node is None:
+        if _memo is not None:
+            _memo[question_id] = False
         return False  # No gate — always visible.
 
     visited = _visited | {question_id}
@@ -131,15 +140,23 @@ def is_gated(
     masked: dict[str, str | None] = {}
     for dep_id in _collect_dep_ids(node):
         masked[dep_id] = (
-            None if is_gated(dep_id, answers, visited) else answers.get(dep_id)
+            None if is_gated(dep_id, answers, visited, _memo) else answers.get(dep_id)
         )
 
-    return not evaluate_applies_when(node, masked)
+    result = not evaluate_applies_when(node, masked)
+    if _memo is not None:
+        _memo[question_id] = result
+    return result
 
 
 def get_all_gated_question_ids(answers: dict[str, str | None]) -> set[str]:
-    """Return the set of all question IDs currently gated-out."""
-    return {qid for qid in QUESTIONS_WITH_GATE if is_gated(qid, answers)}
+    """Return the set of all question IDs currently gated-out.
+
+    Uses a shared memo dict so overlapping dependency chains are evaluated
+    only once across the full 47-question scan.
+    """
+    memo: dict[str, bool] = {}
+    return {qid for qid in QUESTIONS_WITH_GATE if is_gated(qid, answers, _memo=memo)}
 
 
 # ---------------------------------------------------------------------------
