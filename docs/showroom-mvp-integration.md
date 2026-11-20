@@ -167,8 +167,6 @@ The repo runs **continuous deployment, not releases**. Every push to main (`buil
 
 ### ApeiroRA release ADRs / RFCs
 - **[Platform Mesh RFC 015 — Versioning](https://github.com/platform-mesh/architecture/blob/main/rfc/015-versioning.md)** (Implemented) — unified version, CalVer, release-branch + cherry-pick backport model.
-- **[Crypto Broker ADR 0009 — Release Strategy](https://github.com/open-crypto-broker/crypto-broker-documentation/blob/main/adr/overall/0009-release-strategy.md)** (accepted, current) — "Main Release Branch"; SemVer + Conventional Commits + Git tags.
-- **[Crypto Broker ADR 0006 — Release Strategy](https://github.com/open-crypto-broker/crypto-broker-documentation/blob/main/adr/overall/0006-release-strategy.md)** (superseded by 0009) — original "Single Release Branch"; established the SemVer + Conventional Commits + mandatory Git-tag prerequisites.
 - **[platform-mesh ADR-004 — Shared CI Workflow Strategy](https://github.com/platform-mesh/architecture/blob/main/adr/004-shared-ci-workflow-strategy.md)** — repos own their pipeline and call shared reusable jobs (e.g. [`job-create-version.yml`](https://github.com/platform-mesh/.github/blob/main/.github/workflows/job-create-version.yml), `job-release-chart.yml`).
 
 > No ADR/RFC exists in `apeirora/documentation` or the `openmfp` org about releases — the authoritative, worked example is `apeirora/showroom-msp-simple-cluster` (release-please + SemVer + signed, SBOM-attached GitHub Releases).
