@@ -32,6 +32,7 @@ from app.questionnaire_loader import find_questionnaire
 # Module-level: load gating config once from ai-questionnaire.json
 # ---------------------------------------------------------------------------
 
+
 def _load_gates() -> dict[str, dict]:
     """Return {question_id: appliesWhen_node} for every gated question."""
     path = find_questionnaire()
@@ -49,6 +50,7 @@ QUESTIONS_WITH_GATE: dict[str, dict] = _load_gates()
 # ---------------------------------------------------------------------------
 # Condition evaluation
 # ---------------------------------------------------------------------------
+
 
 def _eval_leaf(condition: dict, answers: dict[str, str | None]) -> bool:
     """Evaluate a single leaf condition against the current answers."""
@@ -81,12 +83,16 @@ def evaluate_applies_when(node: dict, answers: dict[str, str | None]) -> bool:
     """
     if "all" in node:
         return all(
-            evaluate_applies_when(c, answers) if ("all" in c or "any" in c) else _eval_leaf(c, answers)
+            evaluate_applies_when(c, answers)
+            if ("all" in c or "any" in c)
+            else _eval_leaf(c, answers)
             for c in node["all"]
         )
     if "any" in node:
         return any(
-            evaluate_applies_when(c, answers) if ("all" in c or "any" in c) else _eval_leaf(c, answers)
+            evaluate_applies_when(c, answers)
+            if ("all" in c or "any" in c)
+            else _eval_leaf(c, answers)
             for c in node["any"]
         )
     # Leaf node passed directly (shouldn't happen at top level, but handle safely).
@@ -125,6 +131,7 @@ def get_all_gated_question_ids(answers: dict[str, str | None]) -> set[str]:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _collect_dep_ids(node: dict) -> set[str]:
     """Collect all questionId values referenced in an appliesWhen node."""

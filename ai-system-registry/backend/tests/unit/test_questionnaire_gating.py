@@ -30,29 +30,47 @@ class TestEvaluateAppliesWhen:
     # --- CONTAINS ---
 
     def test_contains_match(self):
-        node = {"all": [{"questionId": "Q1", "operator": "CONTAINS", "value": "OPTION_A"}]}
+        node = {
+            "all": [{"questionId": "Q1", "operator": "CONTAINS", "value": "OPTION_A"}]
+        }
         assert evaluate_applies_when(node, {"Q1": json.dumps(["OPTION_A", "OPTION_B"])})
 
     def test_contains_no_match(self):
-        node = {"all": [{"questionId": "Q1", "operator": "CONTAINS", "value": "OPTION_C"}]}
-        assert not evaluate_applies_when(node, {"Q1": json.dumps(["OPTION_A", "OPTION_B"])})
+        node = {
+            "all": [{"questionId": "Q1", "operator": "CONTAINS", "value": "OPTION_C"}]
+        }
+        assert not evaluate_applies_when(
+            node, {"Q1": json.dumps(["OPTION_A", "OPTION_B"])}
+        )
 
     def test_contains_empty_array(self):
-        node = {"all": [{"questionId": "Q1", "operator": "CONTAINS", "value": "OPTION_A"}]}
+        node = {
+            "all": [{"questionId": "Q1", "operator": "CONTAINS", "value": "OPTION_A"}]
+        }
         assert not evaluate_applies_when(node, {"Q1": "[]"})
 
     def test_contains_null_answer(self):
-        node = {"all": [{"questionId": "Q1", "operator": "CONTAINS", "value": "OPTION_A"}]}
+        node = {
+            "all": [{"questionId": "Q1", "operator": "CONTAINS", "value": "OPTION_A"}]
+        }
         assert not evaluate_applies_when(node, {"Q1": None})
 
     # --- IN ---
 
     def test_in_match(self):
-        node = {"all": [{"questionId": "Q1", "operator": "IN", "values": ["YES", "PARTIALLY"]}]}
+        node = {
+            "all": [
+                {"questionId": "Q1", "operator": "IN", "values": ["YES", "PARTIALLY"]}
+            ]
+        }
         assert evaluate_applies_when(node, {"Q1": "YES"})
 
     def test_in_no_match(self):
-        node = {"all": [{"questionId": "Q1", "operator": "IN", "values": ["YES", "PARTIALLY"]}]}
+        node = {
+            "all": [
+                {"questionId": "Q1", "operator": "IN", "values": ["YES", "PARTIALLY"]}
+            ]
+        }
         assert not evaluate_applies_when(node, {"Q1": "NO"})
 
     def test_in_null_answer(self):
@@ -153,7 +171,9 @@ class TestIsGated:
 
     def test_prohibited_2_unlocked_when_multiple_options_include_correct(self):
         answers = {
-            "Prohibited_1": json.dumps(["SOCIAL_SCORING", "SENSITIVE_BIOMETRIC_CATEGORISATION"])
+            "Prohibited_1": json.dumps(
+                ["SOCIAL_SCORING", "SENSITIVE_BIOMETRIC_CATEGORISATION"]
+            )
         }
         assert not is_gated("Prohibited_2", answers)
 
