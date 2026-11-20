@@ -878,11 +878,17 @@ def _tier_allows(risk_category: str, tier: str) -> bool:
 def _role_allows(role: str | None, org_role: str) -> bool:
     """True if a requirement's role applies to the AI system's org_role.
 
-    EU AI Act templates carry an explicit "provider"/"deployer" role and match only
-    that org_role — there is no fallback (importer/distributor match nothing). A
-    template without a `role` (None) applies to any org_role.
+    EU AI Act templates carry an explicit "provider"/"deployer" role. An org_role
+    of "both" (the org both develops and uses the system) matches either, so it
+    collects the union of the provider + deployer controls. Any other explicit
+    org_role matches only its own role — there is no fallback (importer/distributor
+    match nothing). A template without a `role` (None) applies to any org_role.
     """
-    return role is None or role == org_role
+    if role is None:
+        return True
+    if org_role == "both":
+        return role in ("provider", "deployer")
+    return role == org_role
 
 
 def requirements_for(
