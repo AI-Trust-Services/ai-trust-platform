@@ -53,9 +53,15 @@ export default function AssessmentMethodPage() {
     ])
       .then(([state, system, docs]) => {
         // If this cycle has already been opened (question_states seeded), skip
-        // method selection and go straight to the assessment — unless this is a
-        // "start new" flow (newCycle), which intentionally begins a fresh cycle.
-        if (state.prefilled && !newCycle) {
+        // method selection and go straight to the assessment. The method page is
+        // only for a genuinely NEW cycle: a "start new" flow (newCycle) begins a
+        // fresh cycle ONLY when the current one is approved — /start-new archives
+        // an approved cycle, but merely *continues* an in-progress (non-approved)
+        // one. So when an in-progress cycle exists we always skip straight to it,
+        // even under newCycle, instead of re-showing the selection.
+        const startsFreshCycle =
+          newCycle && state.workflow_status === "approved";
+        if (state.prefilled && !startsFreshCycle) {
           navigate(`/systems/${id}/assessment`, { replace: true });
           return;
         }
