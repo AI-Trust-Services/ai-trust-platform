@@ -14,7 +14,12 @@ from ai_trust_authorization.constants import (
 )
 from ai_trust_logging import get_logger
 from ai_trust_persistence import SessionLocal
-from ai_trust_persistence.models import AISystem, Document, DocumentVersion
+from ai_trust_persistence.models import (
+    AISystem,
+    AssessmentDossier,
+    Document,
+    DocumentVersion,
+)
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -378,6 +383,51 @@ async def document_download_url(
     return DownloadUrlResponse(url=url, expires_hours=1)
 
 
+async def _assert_not_in_dossier(session: AsyncSession, document_id: str) -> None:
+    """Refuse to hard-delete a document pinned by any assessment dossier (#366).
+
+    A dossier freezes ``inputs.documents[].document_id`` as the audit record of
+    which files produced a classification; purging the original would break that
+    record. Replace (upload a new version) is the supported way to update a
+    referenced document — it keeps the pinned version intact. Same shared DB, so
+    this is a plain JSONB containment check.
+
+    Acquires a row lock on the document before checking dossiers so that a
+    concurrent POST /assessment/open that reads this document's chunks and then
+    writes a dossier referencing it is serialised against the delete commit
+    (TOCTOU guard — see #366 review).
+
+    ponytail: brute-force JSONB scan (no GIN index) — dossiers are few; add
+    `ix_assessment_dossiers_inputs` (gin) if this ever shows up in a slow query.
+    """
+    doc = (
+        await session.execute(
+            select(Document).where(Document.id == document_id).with_for_update()
+        )
+    ).scalar_one_or_none()
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    referenced = (
+        await session.execute(
+            select(AssessmentDossier.id)
+            .where(
+                AssessmentDossier.inputs.contains(
+                    {"documents": [{"document_id": document_id}]}
+                )
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if referenced:
+        raise HTTPException(
+            409,
+            "This document is part of an assessment record and cannot be deleted — "
+            "the assessment that used it keeps that exact version for audit. Upload "
+            "a new version (Replace) instead; the record stays pinned to the version "
+            "it was classified on.",
+        )
+
+
 @router.delete(
     "/documents/{document_id}",
     dependencies=[Depends(require_permission(SYSTEMS_WRITE))],
@@ -385,8 +435,13 @@ async def document_download_url(
 async def delete_document(document_id: str) -> dict:
     """Hard delete — the document row is removed; the ON DELETE CASCADE FKs drop every
     version and chunk with it, and the originals are purged from MinIO. Nothing of a
-    deleted document is retained (chunks naturally stop appearing in retrieval)."""
+    deleted document is retained (chunks naturally stop appearing in retrieval).
+
+    Refused with 409 if any assessment dossier references the document (#366) — the
+    audit record pins the version it used, so Replace (new version) is the way to
+    update a referenced document."""
     async with SessionLocal() as session:
+        await _assert_not_in_dossier(session, document_id)
         keys = await _purge_document(session, document_id)
         await session.commit()
     # MinIO has no cascade — delete each version's original after the DB row is gone
@@ -396,6 +451,32 @@ async def delete_document(document_id: str) -> dict:
         await minio_client.delete_file(key)
     logger.info("document.deleted", extra={"document_id": document_id})
     return {"deleted": True, "document_id": document_id}
+
+
+async def _assert_system_not_in_dossier(session: AsyncSession, system_id: str) -> None:
+    """Refuse a bulk doc-purge while the system still has an assessment dossier (#366).
+
+    The same audit guarantee as the single-document guard, applied to the whole
+    system: a dossier pins the documents a run used, so purging all originals out
+    from under it would break the audit record. The legitimate caller deletes the
+    AISystem row first — that cascades its assessments + dossiers (migration 0051)
+    — so by the time this bulk cleanup runs no dossier remains and the guard is a
+    no-op. It only fires on an out-of-band call that would orphan a live record.
+    """
+    referenced = (
+        await session.execute(
+            select(AssessmentDossier.id)
+            .where(AssessmentDossier.ai_system_id == system_id)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if referenced:
+        raise HTTPException(
+            409,
+            "This system has assessment records (dossiers) that pin its documents. "
+            "Delete the system first — that removes its assessment records — before "
+            "purging its documents.",
+        )
 
 
 @router.delete(
@@ -411,6 +492,11 @@ async def delete_system_documents(
     abandoned draft registration) is removed. Idempotent: an unknown or document-less
     system returns a zero count, never 404.
 
+    Refused with 409 if the system still has an assessment dossier (#366) — same guard
+    as the single-document delete. The legitimate flow deletes the system first (which
+    cascades its dossiers), so this only blocks an out-of-band purge that would orphan
+    a live audit record.
+
     Authorized for anyone who may delete the system itself — ``systems:write`` (owners)
     or ``systems:approve`` (compliance officers, who lack ``systems:write``). Checked
     inline rather than via a single ``require_permission`` so the CO-initiated cleanup
@@ -421,6 +507,7 @@ async def delete_system_documents(
     ):
         raise HTTPException(403, "Permission denied")
     async with SessionLocal() as session:
+        await _assert_system_not_in_dossier(session, system_id)
         keys, count = await _purge_system_documents(session, system_id)
         await session.commit()
     for key in keys:

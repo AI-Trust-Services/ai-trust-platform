@@ -1,6 +1,9 @@
 FROM node:24-alpine AS build
 WORKDIR /app
 COPY libs/react-hooks /libs/react-hooks
+# Copy the EU AI Act questionnaire JSON so it can be imported at build time
+# (task "Q<n>" numbering is derived from it — same source the registry uses).
+COPY context/prompts/ai-questionnaire.json /app/context/prompts/ai-questionnaire.json
 COPY overview/frontend/package*.json ./
 RUN npm ci
 COPY overview/frontend/ .

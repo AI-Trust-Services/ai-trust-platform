@@ -30,13 +30,12 @@ import httpx
 from ai_trust_logging import correlation_id_var, get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
-from sqlalchemy import select
-
+from app import minio_client
 from app.llm.client import chat
 from app.llm.parsing import LLMParseError, parse_with_retry
 from app.llm.templates import load_questionnaire, load_template
 from app.llm.validators import validate_questionnaire_batch
-from app import minio_client
+from sqlalchemy import select
 
 logger = get_logger(__name__)
 
@@ -52,6 +51,41 @@ DEFAULT_QUESTIONNAIRE_PROMPT_ID = "questionnaire_answer"
 _RAG_QUERY = "AI system description purpose capabilities deployment risks"
 _RAG_K = 10
 _QUESTIONNAIRE_MAX_TOKENS = int(os.environ.get("QUESTIONNAIRE_MAX_TOKENS", "24000"))
+
+
+def _evidence_fields(row: AISystem) -> dict[str, Any]:
+    """Registry relational fields frozen into the assessment dossier (#366).
+
+    Used in ``app.dossier._build_input_snapshot`` to snapshot the full system
+    row at assessment open, so the dossier captures what the system looked like
+    at that point in time (independent of later edits). Deliberately wider than
+    ``_system_evidence`` — the dossier freezes the full row state, not just the
+    LLM allowlist. ``questionnaire_answers`` is included only when present.
+    """
+    fields: dict[str, Any] = {
+        "name": row.name,
+        "version": row.version,
+        "provider": row.provider,
+        "org_name": row.org_name,
+        "org_role": row.org_role,
+        "description": row.description,
+        "intended_purpose": row.intended_purpose,
+        "department": row.department,
+        "use_case": row.use_case,
+        "people_affected": row.people_affected,
+        "decision_context": row.decision_context,
+        "system_type": row.system_type,
+        "autonomy_level": row.autonomy_level,
+        "lifecycle": row.lifecycle,
+        "deployment_country": row.deployment_country,
+        "is_gpai": row.is_gpai,
+        "is_chatbot": row.is_chatbot,
+        "generates_synthetic_content": row.generates_synthetic_content,
+        "tier": row.tier,
+    }
+    if row.questionnaire_answers:
+        fields["questionnaire_answers"] = row.questionnaire_answers
+    return fields
 
 
 def _system_evidence(row: AISystem) -> str:
@@ -94,6 +128,27 @@ def _system_evidence(row: AISystem) -> str:
     return "\n".join(lines)
 
 
+def _consumed_documents(rag_chunks: list[dict]) -> list[dict]:
+    """Distinct documents the RAG step actually surfaced this run — i.e. what the
+    LLM really saw, pinned by ``version_id`` where available.
+
+    Recorded alongside the AI output (#366) so the dossier captures the *actual*
+    inputs each attempt consumed, which can differ from the /open snapshot (a doc
+    that finished indexing after open, a retry, etc.). Order-preserving dedupe by
+    version/document/filename."""
+    seen: dict[str, dict] = {}
+    for chunk in rag_chunks:
+        src = chunk.get("source") or {}
+        key = src.get("version_id") or src.get("document_id") or src.get("filename")
+        if key and key not in seen:
+            seen[key] = {
+                "document_id": src.get("document_id"),
+                "version_id": src.get("version_id"),
+                "filename": src.get("filename"),
+            }
+    return list(seen.values())
+
+
 async def _retrieve_rag_documents(system_id: str, username: str) -> list[dict]:
     """Retrieve RAG document chunks for the system. Returns empty list on any failure."""
     payload = {
@@ -119,7 +174,7 @@ async def _retrieve_rag_documents(system_id: str, username: str) -> list[dict]:
             return []
         data = resp.json()
         return data.get("results", data) if isinstance(data, dict) else data
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — RAG is best-effort
         logger.warning(
             "questionnaire_pipeline.rag_failed",
             extra={"system_id": system_id, "error": str(exc)},
@@ -302,8 +357,12 @@ async def run_questionnaire_pipeline(
     validation **or callback** raises is logged (``questionnaire_pipeline.
     batch_failed``) and skipped — it does not abort the other batches.
 
-    Returns ``{run_key, presigned_url, result}`` where ``result`` is
-    ``{"results": [...]}`` merged in category order.
+    Returns ``{run_key, presigned_url, result, consumed}`` where ``result`` is
+    ``{"results": [...]}`` merged in category order, and ``consumed`` is
+    ``{"evidence": {...}, "documents": [...]}`` — the relational fields and RAG
+    documents that were actually used for this run (frozen into the dossier's AI
+    output layer by ``_finalize_tier``; may differ from the ``/open`` snapshot if
+    documents changed between open and pipeline completion).
 
     Raises:
         KeyError: system not found (caller maps to 404).
@@ -407,4 +466,12 @@ async def run_questionnaire_pipeline(
         "run_key": run_key,
         "presigned_url": presigned_url,
         "result": result,
+        # The inputs this run actually consumed (#366) — frozen relational evidence
+        # as serialized for the LLM + the documents RAG surfaced, pinned by version.
+        # Attached to the dossier's AI output layer so the record reflects the real
+        # inputs even when they diverge from the /open snapshot.
+        "consumed": {
+            "evidence": _evidence_fields(row),
+            "documents": _consumed_documents(rag_chunks),
+        },
     }

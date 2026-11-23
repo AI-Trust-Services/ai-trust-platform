@@ -15,9 +15,6 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from sqlalchemy import func, select
-
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import (
     SYSTEMS_APPROVE,
@@ -37,7 +34,6 @@ from ai_trust_persistence.models.obligation import Obligation
 from ai_trust_persistence.models.question_comment import QuestionComment
 from ai_trust_persistence.models.question_state import QuestionState
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
-
 from app import email_sender
 from app.assessment_catalogue import (
     ASSESSMENT_QUESTION_KEYS,
@@ -45,8 +41,10 @@ from app.assessment_catalogue import (
 )
 from app.assessment_prefill_pipeline import run_assessment_prefill_pipeline
 from app.classifier import classify_ai_questionnaire
+from app.dossier import create_dossier_in_session, write_ai_output_in_session
 from app.ids import new_id
 from app.llm import LLMParseError
+from app.questionnaire_gating import get_all_gated_question_ids, is_gated
 from app.questionnaire_required import QUESTION_LABEL
 from app.schemas.assessment import (
     AnswerRequest,
@@ -55,15 +53,17 @@ from app.schemas.assessment import (
     CommentCreate,
     CommentResponse,
     ConfidenceCounts,
-    ContributorRef,
     ConfirmResponse,
+    ContributorRef,
+    IssueRequest,
     QuestionStateResponse,
+    RejectRequest,
     SourceDocumentRef,
     SubmitRequest,
-    IssueRequest,
-    RejectRequest,
     _validate_question_key,
 )
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from sqlalchemy import func, select
 
 router = APIRouter(tags=["assessment"])
 logger = get_logger(__name__)
@@ -106,6 +106,21 @@ def _system_owner(row: AISystem) -> str | None:
 def _answer_store(row: AISystem) -> dict:
     """The full questionnaire_answers dict (never None)."""
     return dict(row.questionnaire_answers or {})
+
+
+def _build_answers_dict(states: dict[str, Any], row: AISystem) -> dict[str, str | None]:
+    """Merge per-cycle question_states answers with JSONB fallback.
+
+    question_states is the authoritative per-cycle source; questionnaire_answers
+    fills in keys not yet written to this cycle's states.
+    """
+    answers: dict[str, str | None] = {
+        k: (st.answer if st else None) for k, st in states.items()
+    }
+    for k, v in (row.questionnaire_answers or {}).items():
+        if k not in answers:
+            answers[k] = str(v) if v is not None else None
+    return answers
 
 
 def _read_answer(row: AISystem, answers: dict, question_key: str) -> str | None:
@@ -296,12 +311,20 @@ def _is_owner_confirmed(row: AISystem, state: QuestionState | None) -> bool:
     return state.confirmed_by == _system_owner(row)
 
 
-def _owner_unconfirmed(row: AISystem, states: dict[str, QuestionState]) -> list[str]:
-    """Question keys NOT yet owner-confirmed — the finalize/submit gate."""
+def _owner_unconfirmed(
+    row: AISystem,
+    states: dict[str, QuestionState],
+    skip: frozenset[str] = frozenset(),
+) -> list[str]:
+    """Question keys NOT yet owner-confirmed — the finalize/submit gate.
+
+    ``skip`` is an optional set of question keys to exclude (e.g. gated-out
+    questions that can never be confirmed and must not block submission).
+    """
     return [
         q
         for q in ASSESSMENT_QUESTION_KEYS
-        if not _is_owner_confirmed(row, states.get(q))
+        if q not in skip and not _is_owner_confirmed(row, states.get(q))
     ]
 
 
@@ -445,7 +468,7 @@ async def _run_prefill_background(
             row = await _get_system(session, system_id)
             try:
                 classification, rationale = await classify_ai_questionnaire(row)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.error("assessment.classify_failed", extra={"error": str(exc)})
                 raise
             row.tier = classification.tier
@@ -464,6 +487,39 @@ async def _run_prefill_background(
             logger.info(
                 "assessment.prefill_completed",
                 extra={"system_id": system_id, "tier": row.tier},
+            )
+
+        # #366: freeze the AI output layer (per-question answers + proposed
+        # classification) into the dossier. Separate txn + own error handling so
+        # this append-only, write-once side-effect can never roll back the
+        # classification result committed above.
+        try:
+            async with SessionLocal() as session:
+                await write_ai_output_in_session(
+                    session,
+                    assessment_id,
+                    (questionnaire_output.get("result") or {}).get("results") or [],
+                    {
+                        "tier": classification.tier,
+                        "basis": classification.basis,
+                        "annex_iii_area": classification.annex_iii_area,
+                        "org_role": rationale.get("org_role"),
+                        "rationale": rationale,
+                        "assessment_sources": [
+                            s.model_dump() for s in _sources_from_proposals(proposals)
+                        ],
+                    },
+                    consumed=questionnaire_output.get("consumed"),
+                )
+                await session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "assessment.dossier_ai_output_failed",
+                extra={
+                    "system_id": system_id,
+                    "assessment_id": assessment_id,
+                    "error": str(exc),
+                },
             )
 
     try:
@@ -544,6 +600,26 @@ async def open_assessment(
                     ai_references=None,
                     ai_explanation=None,
                 )
+            )
+        # #366: freeze the assessment dossier (inputs/config/prompts) at start,
+        # atomically with seeding this cycle. Best-effort — a snapshot failure
+        # must not block starting the assessment. The savepoint is what makes it
+        # best-effort: without it a failed snapshot query (or a deferred INSERT
+        # violation surfacing at the outer commit) would abort the whole txn and
+        # still 500 /open. begin_nested() flushes the INSERT here, so any failure
+        # rolls back only the dossier and leaves the seeded question_states intact.
+        try:
+            async with session.begin_nested():
+                await create_dossier_in_session(session, row, assessment.id)
+                await session.flush()
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "assessment.dossier_create_failed",
+                extra={
+                    "system_id": system_id,
+                    "assessment_id": assessment.id,
+                    "error": str(exc),
+                },
             )
         assessment.llm_status = "pending"
         await session.commit()
@@ -769,9 +845,16 @@ async def save_answer(
         if not _is_editable(row):
             raise HTTPException(409, "Assessment is locked and cannot be edited")
         assessment = await _ensure_assessment(session, row)
-        state = await _load_state(session, assessment.id, question_key)
+        all_states = await _states_by_key(session, assessment.id)
+        state = all_states.get(question_key)
         if not _may_edit(row, state, user):
             raise HTTPException(403, "You are not assigned to this question")
+
+        # Reject answers for questions currently locked by a gate condition.
+        # Reuse the already-fetched all_states — no extra DB round-trip.
+        _current_answers = _build_answers_dict(all_states, row)
+        if is_gated(question_key, _current_answers):
+            raise HTTPException(422, "Question is locked by a dependency condition")
 
         # Capture the previous stored value BEFORE overwriting, so we can detect a
         # genuine change (not just a change from the AI original).
@@ -1174,7 +1257,11 @@ async def finalize_assessment(
             raise HTTPException(403, "Only the owner may finalize the assessment")
         assessment = await _ensure_assessment(session, row)
         states = await _states_by_key(session, assessment.id)
-        unconfirmed = _owner_unconfirmed(row, states)
+        # Build current answers to evaluate gating — same pattern as save_answer.
+        _current_answers = _build_answers_dict(states, row)
+        gated_ids = get_all_gated_question_ids(_current_answers)
+        # Exclude gated questions — they can never be confirmed and don't need to be.
+        unconfirmed = _owner_unconfirmed(row, states, skip=frozenset(gated_ids))
         if unconfirmed:
             raise HTTPException(
                 422,
@@ -1207,7 +1294,9 @@ async def submit_assessment(
             raise HTTPException(409, "Assessment is already locked")
         assessment = await _current_assessment(session, system_id)
         states = await _states_by_key(session, assessment.id) if assessment else {}
-        unconfirmed = _owner_unconfirmed(row, states)
+        # Exclude gated questions from the confirmation gate (same logic as finalize).
+        gated_ids_sub = get_all_gated_question_ids(_build_answers_dict(states, row))
+        unconfirmed = _owner_unconfirmed(row, states, skip=frozenset(gated_ids_sub))
         if unconfirmed:
             raise HTTPException(
                 422,

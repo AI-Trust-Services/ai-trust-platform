@@ -29,8 +29,8 @@ export function GetStartedCardsRow({ canRegister }: GetStartedCardsRowProps) {
   return (
     <section className="flex flex-col gap-3">
       <h2 className="text-sm font-semibold text-foreground">Get started</h2>
-      <div className="grid max-w-[1120px] gap-4 md:grid-cols-2">
-        <div className="relative flex min-h-[240px] flex-col justify-center overflow-hidden rounded-2xl border border-border bg-card px-7 py-6">
+      <div className="grid gap-6 md:grid-cols-2">
+        <div className="relative flex min-h-[246px] flex-col justify-center overflow-hidden rounded-2xl border border-border bg-card px-7 py-6">
           <EuStarRing />
           <div className="relative flex flex-col gap-2">
             <h3 className="text-xl font-semibold text-foreground">
@@ -54,7 +54,7 @@ export function GetStartedCardsRow({ canRegister }: GetStartedCardsRowProps) {
           </div>
         </div>
         <div
-          className="relative flex min-h-[240px] flex-col justify-center overflow-hidden rounded-2xl border border-border px-7 py-6"
+          className="relative flex min-h-[246px] flex-col justify-center overflow-hidden rounded-2xl border border-border px-7 py-6"
           style={{
             background:
               "linear-gradient(135deg, #d8d0ff 0%, #c7bbfc 55%, #f1dfb8 100%)",

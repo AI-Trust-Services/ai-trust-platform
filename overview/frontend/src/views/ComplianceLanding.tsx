@@ -68,8 +68,8 @@ export default function ComplianceLanding({
 
   return (
     <main className="min-h-screen bg-[#f6f7fb]">
-      <div className="flex w-full max-w-[1600px] gap-6 px-4 py-8">
-        <div className="flex min-w-0 flex-1 flex-col gap-8">
+      <div className="flex w-full max-w-[1600px] gap-6 px-6 py-8">
+        <div className="flex min-w-0 flex-1 flex-col gap-[26px]">
           <LandingHeader firstName={firstName} />
           <GetStartedCardsRow canRegister={canRegister} />
           <RecentSystemsPanel systems={recentSystems} />
@@ -77,7 +77,7 @@ export default function ComplianceLanding({
             <ReviewQueueTable rows={reviewRows} userMap={userMap} />
           )}
         </div>
-        <aside className="hidden w-[320px] shrink-0 flex-col gap-4 lg:flex">
+        <aside className="hidden w-[365px] shrink-0 flex-col gap-4 lg:flex">
           <ResourcesCard />
           <OrgContactsCard
             complianceOfficer={complianceOfficer}

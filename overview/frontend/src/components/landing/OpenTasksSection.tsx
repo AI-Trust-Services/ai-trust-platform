@@ -14,6 +14,7 @@ import {
   pickLatestAssessmentPerSystem,
 } from "./AssessmentStage";
 import type { OwnerTaskRow } from "./ownerTasks";
+import questionnaireJson from "@questionnaire";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -505,31 +506,17 @@ function formatQuestionLabels(questions: OpenTaskRow[]): string {
   return `${nums.join(", ")}…`;
 }
 
-// Ordered question keys mirror the registry questionnaire. Business questions
-// take Q1–Q10, AI-mode technical questions Q11–Q17. Keeping this list local to
-// the overview MFE is a deliberate duplication of the registry's REQUIRED_* —
-// if a key is missing here it just renders as "Q?", which degrades gracefully.
-const QUESTION_ORDER: readonly string[] = [
-  // Business (REQUIRED_BUSINESS in questionnaire_required.py)
-  "submission_type",
-  "use_case_owner",
-  "use_case_type",
-  "department",
-  "technologies",
-  "use_case_status",
-  "use_case",
-  "planned_modifications",
-  "exception_category",
-  "sector_legislation",
-  // Technical AI (REQUIRED_AI_TECHNICAL)
-  "data_and_inputs",
-  "decision_domain",
-  "automation_and_oversight",
-  "affected_people",
-  "model_nature",
-  "user_interaction",
-  "prohibited_practices",
-];
+// Ordered question keys come straight from the EU AI Act questionnaire
+// (context/prompts/ai-questionnaire.json — the single source the registry
+// assessment UI also builds from, via the same @questionnaire alias). Deriving
+// the order here instead of hardcoding it keeps the task "Q<n>" numbering in
+// sync with the live questionnaire and can't rot when the question set changes.
+// The keys are group-prefixed ({Category}_{n}, e.g. Scope_1, High_Risk_12) and
+// the list is already in group order, so a question's number is its 1-based
+// position in this flat list (Scope_1 = Q1 … Transparency_7 = Q96).
+const QUESTION_ORDER: readonly string[] = (
+  questionnaireJson as { questions: { id: string }[] }
+).questions.map((q) => q.id);
 
 function questionIndex(key: string): number {
   const i = QUESTION_ORDER.indexOf(key);

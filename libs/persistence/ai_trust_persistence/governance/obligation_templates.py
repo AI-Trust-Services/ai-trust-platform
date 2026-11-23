@@ -204,7 +204,8 @@ def obligations_for(
     For the EU AI Act at High/Limited tiers, obligation clusters are emitted only
     when at least one of their controls survives the (tier, org_role) filter — so
     provider systems get the provider set, deployer systems get the deployer set,
-    and unsupported roles (importer/distributor) get an empty list.
+    a "both" system gets the union of the two, and unsupported roles
+    (importer/distributor) get an empty list.
 
     Returns an empty list when no obligations apply. Callers treat an empty result
     as "no obligations to generate".
@@ -213,7 +214,10 @@ def obligations_for(
         if tier in ("high", "limited"):
             result: list[dict] = []
             for c in _EU_CLUSTERS:
-                if c["role"] != org_role:
+                if org_role == "both":
+                    if c["role"] not in ("provider", "deployer"):
+                        continue
+                elif c["role"] != org_role:
                     continue
                 if requirements_for(c["cluster_id"], tier, org_role):
                     result.append(
