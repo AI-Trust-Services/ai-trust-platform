@@ -48,10 +48,9 @@ export default function AssessmentMethodPage() {
     if (!id) return;
     Promise.all([
       api.getAssessmentState(id),
-      api.getSystem(id),
       api.listIndexedDocuments(id).catch(() => [] as IndexedDocument[]),
     ])
-      .then(([state, system, docs]) => {
+      .then(([state, docs]) => {
         // If this cycle has already been opened (question_states seeded), skip
         // method selection and go straight to the assessment. The method page is
         // only for a genuinely NEW cycle: a "start new" flow (newCycle) begins a
@@ -65,8 +64,8 @@ export default function AssessmentMethodPage() {
           navigate(`/systems/${id}/assessment`, { replace: true });
           return;
         }
-        setSystemName(system.name);
-        setCoName(system.compliance_officer_username ?? "");
+        setSystemName(state.system_name);
+        setCoName(state.compliance_officer_username ?? "");
         setIndexedDocs(
           (docs as IndexedDocument[]).filter((d) => d.status === "indexed"),
         );
