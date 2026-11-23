@@ -415,6 +415,21 @@ async def test_generate_obligations_importer_yields_none(client: httpx.AsyncClie
     assert len(obs) == 0
 
 
+async def test_generate_obligations_both_is_union_of_provider_and_deployer(
+    client: httpx.AsyncClient,
+):
+    # An org that both develops and uses the system (org_role="both") must get the
+    # union of the provider + deployer obligation sets — regression guard for the
+    # bug where "both" silently generated nothing at approval (provider 15 +
+    # deployer 10 = 25), and requirements must be generated for them too.
+    system = await create_system(tier="high", org_role="both")
+    ass = await create_assessment(client, system["id"])
+    obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
+    assert len(obs) == 25
+    reqs = (await client.get(f"/v1/requirements?assessment_id={ass['id']}")).json()
+    assert len(reqs) > 0
+
+
 async def test_generated_obligations_carry_cluster_id(
     client: httpx.AsyncClient, db_session
 ):
