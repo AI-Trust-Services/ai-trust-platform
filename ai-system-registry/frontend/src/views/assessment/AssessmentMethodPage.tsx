@@ -215,7 +215,6 @@ export default function AssessmentMethodPage() {
               {/* Manual card — disabled for now (AI-assisted only) */}
               <button
                 disabled
-                aria-disabled
                 className={cn(
                   "flex-1 flex flex-col gap-[14px] h-[452px] items-start p-6 rounded-[14px] text-left transition-all bg-card",
                   "border-[1.5px] border-border shadow-[0px_1px_1px_rgba(16,24,40,0.05)]",
