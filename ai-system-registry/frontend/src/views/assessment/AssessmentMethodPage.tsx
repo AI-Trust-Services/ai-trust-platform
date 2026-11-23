@@ -72,7 +72,10 @@ export default function AssessmentMethodPage() {
         );
         setChecking(false);
       })
-      .catch(() => setChecking(false));
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : "Failed to load assessment");
+        setChecking(false);
+      });
   }, [id, navigate, newCycle]);
 
   async function handleStart() {
