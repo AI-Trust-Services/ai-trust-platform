@@ -138,7 +138,10 @@ def solve(
         base_answers = _build_answers_map(questionnaire_result) if questionnaire_result else {}
 
         effective_answers = base_answers | overrides.answers  # overrides win on conflict
-        
+
+        # Re-evaluate all labels with merged answers;
+        # if new answer trigger a change of risk label or label, below it will be handeled 
+        # with answer_results
         for lbl in all_labels:
             answer_results[lbl["id"]] = eval_label(lbl, effective_answers)
 
@@ -149,7 +152,7 @@ def solve(
         lid = c["labelId"]
         if overrides and lid in overrides.labels:  # direct label override
             combined[lid] = _user_label(lid, overrides.labels[lid])
-        elif lid in answer_results and answer_results[lid] != c.get("result", False):  # answer override flipped result
+        elif lid in answer_results:
             combined[lid] = _user_label(lid, answer_results[lid])
         else:  # pipeline result unchanged
             combined[lid] = _pipeline_label(c)
