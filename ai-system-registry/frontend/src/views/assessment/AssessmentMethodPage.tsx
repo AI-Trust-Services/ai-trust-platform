@@ -206,14 +206,14 @@ export default function AssessmentMethodPage() {
                 </div>
               </button>
 
-              {/* Manual card */}
+              {/* Manual card — disabled for now (AI-assisted only) */}
               <button
-                onClick={() => setSelected("manual")}
+                disabled
+                aria-disabled
                 className={cn(
                   "flex-1 flex flex-col gap-[14px] h-[452px] items-start p-6 rounded-[14px] text-left transition-all bg-card",
-                  selected === "manual"
-                    ? "border-[1.5px] border-[#1147e9] shadow-[0px_4px_12px_0px_rgba(16,24,40,0.08)]"
-                    : "border-[1.5px] border-border shadow-[0px_1px_1px_rgba(16,24,40,0.05)]",
+                  "border-[1.5px] border-border shadow-[0px_1px_1px_rgba(16,24,40,0.05)]",
+                  "cursor-not-allowed opacity-60",
                 )}
               >
                 {/* Top row: icon + stat + radio */}
@@ -231,7 +231,12 @@ export default function AssessmentMethodPage() {
 
                 {/* Heading */}
                 <div className="flex flex-col gap-1 items-start w-full">
-                  <span className="text-lg font-semibold text-foreground">Manual</span>
+                  <div className="flex gap-2 items-center">
+                    <span className="text-lg font-semibold text-foreground">Manual</span>
+                    <span className="rounded-full bg-[var(--muted)] px-[7px] py-px text-xs font-medium text-muted-foreground">
+                      Coming soon
+                    </span>
+                  </div>
                   <p className="text-sm text-muted-foreground">
                     Answer each question yourself, in your own order.
                   </p>
