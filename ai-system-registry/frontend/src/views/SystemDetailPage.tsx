@@ -754,7 +754,7 @@ function AssessmentsTab({
               <Button size="sm" className="ml-auto shrink-0"
                 disabled={!mayWriteAssessments}
                 title={mayWriteAssessments ? undefined : "Requires permission: assessments:write"}
-                onClick={() => navigate(`/systems/${system.id}/assessment`)}>
+                onClick={() => navigate(`/systems/${system.id}/assessment`, { state: { from: `/systems/${system.id}` } })}>
                 Start assessment
               </Button>
             </div>
@@ -1586,7 +1586,7 @@ export default function SystemDetailPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem disabled={!mayWriteAssessments} onSelect={() => navigate(`/systems/${system.id}/assessment`)}>
+                <DropdownMenuItem disabled={!mayWriteAssessments} onSelect={() => navigate(`/systems/${system.id}/assessment`, { state: { from: `/systems/${system.id}` } })}>
                   Start assessment
                 </DropdownMenuItem>
                 <DropdownMenuItem disabled={!mayWrite} onSelect={() => setRolesOpen(true)}>
