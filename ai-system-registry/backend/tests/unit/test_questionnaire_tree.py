@@ -88,6 +88,42 @@ def test_eval_tree_unknown_operator_raises():
         eval_tree(when, {"Q1": ["YES"]})
 
 
+def test_eval_tree_not_contains_match():
+    """Value absent from answers → true."""
+    when = {"questionId": "Q1", "operator": "NOT_CONTAINS", "value": "MACHINERY"}
+    assert eval_tree(when, {"Q1": ["TRANSPORT"]}) is True
+
+
+def test_eval_tree_not_contains_no_match():
+    """Value present in answers → false."""
+    when = {"questionId": "Q1", "operator": "NOT_CONTAINS", "value": "MACHINERY"}
+    assert eval_tree(when, {"Q1": ["MACHINERY", "TRANSPORT"]}) is False
+
+
+def test_eval_tree_not_contains_empty_eligible():
+    """No eligible answers → value is absent → true."""
+    when = {"questionId": "Q1", "operator": "NOT_CONTAINS", "value": "MACHINERY"}
+    assert eval_tree(when, {"Q1": []}) is True
+
+
+def test_eval_tree_not_contains_missing_question():
+    """Unknown question ID → empty eligible → true."""
+    when = {"questionId": "MISSING", "operator": "NOT_CONTAINS", "value": "MACHINERY"}
+    assert eval_tree(when, {}) is True
+
+
+def test_eval_tree_not_contains_special_answers_filtered():
+    """Special-only answers are filtered out; value is then absent → true."""
+    when = {"questionId": "Q1", "operator": "NOT_CONTAINS", "value": "MACHINERY"}
+    assert eval_tree(when, {"Q1": ["NOT_ENOUGH_INFORMATION", "CONFLICT"]}) is True
+
+
+def test_eval_tree_not_contains_special_mixed_with_target_value():
+    """Special answers filtered; the target value still present among eligibles → false."""
+    when = {"questionId": "Q1", "operator": "NOT_CONTAINS", "value": "MACHINERY"}
+    assert eval_tree(when, {"Q1": ["NOT_ENOUGH_INFORMATION", "MACHINERY"]}) is False
+
+
 # ---------------------------------------------------------------------------
 # eval_tree — special answer filtering
 # ---------------------------------------------------------------------------

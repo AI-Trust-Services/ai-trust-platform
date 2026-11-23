@@ -5,9 +5,10 @@ in the LLM-2 system prompt (§4, §7.1, §7.2) so that answer overrides can be
 re-evaluated deterministically in Python without a pipeline re-run.
 
 Operator semantics (§7.1/§7.2):
-- EQUALS  — true when at least one eligible answer value equals the configured value.
-- CONTAINS — true when the configured value is present among eligible answer values.
-  (Same check — both look for the configured value in the answer set.)
+- EQUALS       — true when at least one eligible answer value equals the configured value.
+- CONTAINS     — true when the configured value is present among eligible answer values.
+- NOT_CONTAINS — true when the configured value is NOT present among eligible answer values.
+  (Includes the empty-answer case: no eligible values → value is absent → true.)
 - all — true when ALL remaining eligible children are true; empty group → false.
 - any — true when AT LEAST ONE eligible child is true; empty group → false.
 
@@ -97,6 +98,9 @@ def eval_tree(when: dict, answers_by_qid: dict[str, list[str]]) -> bool:
 
     if operator in ("EQUALS", "CONTAINS"):
         return configured_value in eligible
+
+    if operator == "NOT_CONTAINS":
+        return configured_value not in eligible
 
     if operator == "IN":
         values = when.get("values", [])
