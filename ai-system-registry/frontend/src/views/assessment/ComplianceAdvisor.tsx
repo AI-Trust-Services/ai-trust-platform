@@ -709,11 +709,11 @@ export function ComplianceAdvisor({
         expanded ? "min-w-0 flex-1" : "w-[408px] shrink-0 transition-[width] duration-200",
       )}
     >
-      {/* Vertical tab rail (full height). */}
+      {/* Vertical tab rail (full height). The AI Act Companion (chat) tab is
+          intentionally hidden — only the Context tab is exposed. The chat code
+          below stays in place (unreachable) so it can be re-enabled by restoring
+          the second RailTab. */}
       <nav className="flex w-9 shrink-0 flex-col border-r border-border bg-[#f8fafe]">
-        <RailTab active={tab === "chat"} onClick={() => setTab("chat")}>
-          AI Act Companion
-        </RailTab>
         <RailTab active={tab === "context"} onClick={() => setTab("context")}>
           Context
         </RailTab>
