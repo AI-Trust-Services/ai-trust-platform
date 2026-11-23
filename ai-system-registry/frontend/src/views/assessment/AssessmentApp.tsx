@@ -283,6 +283,7 @@ export default function AssessmentApp() {
             systemId={id}
             section={sectionForQuestion(activeQuestionKey)}
             questionKey={activeQuestionKey}
+            activeAnswer={activeQuestionKey ? currentAnswers[activeQuestionKey] : null}
             expanded={advisorExpanded}
             onExpandedChange={setAdvisorExpanded}
             // The Context tab is role-split: the compliance officer (reviewer,

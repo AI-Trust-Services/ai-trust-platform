@@ -6,6 +6,26 @@ export interface MultiselectOption {
   value: string;
   code: string;
   label: string;
+  /** Per-option descriptive text from the questionnaire (v2). Shown above the
+   *  per-selection context group in the Context tab. */
+  optionSemantics?: string;
+  /** Grouping label for the option (e.g. "Annex I Section A"). */
+  group?: string;
+  /** Owner-facing context for this specific selection. A MULTISELECT lead
+   *  question (e.g. Prohibited_1) consolidates what were individual questions in
+   *  the previous questionnaire; each option carries the context of the question
+   *  it replaced, shown — grouped per selected option — in the Context tab when
+   *  that option is selected. Absent for options with no mapped context. */
+  ownerContext?: string;
+  /** Compliance-officer-facing legal context for this specific selection.
+   *  Same grouping/selection logic as `ownerContext`. */
+  coContext?: string;
+  /** Illustrative examples for this specific selection (same text for both
+   *  roles), shown inside the option's context group. */
+  examples?: string;
+  /** Additional secondary-source examples for this selection, rendered under an
+   *  "Extended examples" sub-heading inside the option's context group. */
+  extendedExamples?: string;
 }
 
 /** A single leaf condition inside an appliesWhen node. */

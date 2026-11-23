@@ -18,7 +18,11 @@ import {
 } from "lucide-react";
 import type { ChatMessage, AdvisorSource } from "../../types";
 import { api } from "../../api/client";
-import { QUESTION_DEF_BY_ID } from "../../config/aiQuestionnaire";
+import {
+  QUESTION_DEF_BY_ID,
+  isMultiselect,
+  type AiQuestionDef,
+} from "../../config/aiQuestionnaire";
 import aiTrustLogo from "../../assets/ai-trust-logo.svg";
 import {
   Collapsible,
@@ -514,6 +518,65 @@ function CoContextBody({
   );
 }
 
+/** Parse a MULTISELECT answer (a JSON-serialised string array) into the list of
+ *  selected option values; `[]` for an empty/blank/invalid answer. */
+function parseSelectedValues(raw?: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** For a MULTISELECT "lead" question (e.g. Prohibited_1) whose options each carry
+ *  the context of the individual question they consolidated, render — grouped per
+ *  SELECTED option — that option's context. Role-split like the single-question
+ *  views: owners see the option's `ownerContext`, the CO its `coContext`. Shown
+ *  below any question-level context. */
+function OptionContextGroups({
+  def,
+  selectedValues,
+  isComplianceOfficer,
+}: {
+  def: AiQuestionDef;
+  selectedValues: string[];
+  isComplianceOfficer: boolean;
+}) {
+  if (!isMultiselect(def)) return null;
+  const selected = def.allowedAnswers.filter((o) => selectedValues.includes(o.value));
+  if (selected.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Select one or more options to see the EU AI Act guidance for each.
+      </p>
+    );
+  }
+  const withContext = selected.filter((o) =>
+    isComplianceOfficer ? o.coContext : o.ownerContext,
+  );
+  if (withContext.length === 0) return null;
+  return (
+    <div className="space-y-5">
+      {withContext.map((o) => {
+        const text = (isComplianceOfficer ? o.coContext : o.ownerContext) as string;
+        return (
+          <div key={o.value} className="space-y-2">
+            <h4 className="text-sm font-semibold leading-snug text-foreground">{o.label}</h4>
+            {isComplianceOfficer ? (
+              <CoContextBody text={text} examples={o.examples} extendedExamples={o.extendedExamples} />
+            ) : (
+              <OwnerContextBody text={text} examples={o.examples} extendedExamples={o.extendedExamples} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+
 /** The right-hand **Assessment Companion** panel. A vertical tab rail switches
  * between the **AI Act Companion** (grounded EU AI Act chat backed by
  * POST /systems/{id}/advisor/ask) and the per-question **Context** tab (the
@@ -522,6 +585,7 @@ export function ComplianceAdvisor({
   systemId,
   section,
   questionKey,
+  activeAnswer,
   expanded,
   onExpandedChange,
   isComplianceOfficer = false,
@@ -529,6 +593,10 @@ export function ComplianceAdvisor({
   systemId?: string;
   section?: string;
   questionKey?: string;
+  // Raw stored answer for the active question. For a MULTISELECT lead question
+  // this is a JSON array of selected option values, used to drive the
+  // per-selection context grouping in the Context tab.
+  activeAnswer?: string | null;
   expanded: boolean;
   onExpandedChange: (v: boolean) => void;
   // The Context tab is role-split: owners/engineers see the owner context,
@@ -549,6 +617,18 @@ export function ComplianceAdvisor({
   // Role-split context: CO sees the legal CO context, everyone else the owner
   // context. `activeContext` drives the context-first tab defaulting below.
   const activeContext = isComplianceOfficer ? def?.coContext : def?.ownerContext;
+
+  // A MULTISELECT "lead" question (e.g. Prohibited_1) whose options carry their
+  // own context: the Context tab shows per-selected-option groups in addition to
+  // (or, when the question itself has no context, instead of) the question-level
+  // context. Only treat it as such when at least one option has context for the
+  // viewing role.
+  const isOptionContextLead =
+    !!def &&
+    isMultiselect(def) &&
+    def.allowedAnswers.some((o) => (isComplianceOfficer ? o.coContext : o.ownerContext));
+  const selectedValues = parseSelectedValues(activeAnswer);
+  const hasContext = !!activeContext || isOptionContextLead;
 
   // Context-first only as the initial default. After that the tab is purely the
   // user's choice and persists across question navigation — we deliberately do
@@ -686,27 +766,39 @@ export function ComplianceAdvisor({
 
         {tab === "context" ? (
           <div className="min-w-0 flex-1 overflow-y-auto px-7 pb-6 pt-2">
-            {activeContext ? (
+            {hasContext ? (
               <>
                 <h3 className="mb-4 text-[18px] font-semibold leading-[26px] text-foreground">
                   This section refers to the EU AI Act regarding…
                 </h3>
-                {isComplianceOfficer ? (
-                  // Key by questionKey so navigating questions remounts the
-                  // renderer and resets every collapsible (sections + Sources)
-                  // back to its collapsed-by-default state.
-                  <CoContextBody
-                    key={questionKey}
-                    text={activeContext}
-                    examples={def?.examples}
-                    extendedExamples={def?.extendedExamples}
-                  />
-                ) : (
-                  <OwnerContextBody
-                    key={questionKey}
-                    text={activeContext}
-                    examples={def?.examples}
-                    extendedExamples={def?.extendedExamples}
+                {/* Question-level context, when the question itself carries it.
+                    Key by questionKey so navigating questions remounts the
+                    renderer and resets every collapsible back to collapsed. */}
+                {activeContext &&
+                  (isComplianceOfficer ? (
+                    <CoContextBody
+                      key={questionKey}
+                      text={activeContext}
+                      examples={def?.examples}
+                      extendedExamples={def?.extendedExamples}
+                    />
+                  ) : (
+                    <OwnerContextBody
+                      key={questionKey}
+                      text={activeContext}
+                      examples={def?.examples}
+                      extendedExamples={def?.extendedExamples}
+                    />
+                  ))}
+                {/* Per-selected-option context for a MULTISELECT lead question.
+                    Keyed by questionKey + the selection so it remounts (and the
+                    collapsibles reset) as the question or the selection changes. */}
+                {isOptionContextLead && def && (
+                  <OptionContextGroups
+                    key={`${questionKey}:${selectedValues.join(",")}`}
+                    def={def}
+                    selectedValues={selectedValues}
+                    isComplianceOfficer={isComplianceOfficer}
                   />
                 )}
               </>
