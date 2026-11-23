@@ -197,7 +197,6 @@ _DISPLAY_ONLY_FIELDS = (
     "coContext",
     "examples",
     "extendedExamples",
-    "descriptionGuidance",
 )
 
 
