@@ -6,6 +6,8 @@ feedback cycle.
 
 **Port:** 8014 · **Helm flag:** `cogneeEval.enabled` · **API docs:** `/api/cognee/docs`
 
+**Architecture, deployment, risk register and accuracy-tracking proposal** → [docs/cognee-architecture.md](../docs/cognee-architecture.md)
+
 ## Storage
 
 All Cognee data (LanceDB vectors, per-dataset Kuzu graphs, SQLite relational) lives under `COGNEE_DATA_PATH`
