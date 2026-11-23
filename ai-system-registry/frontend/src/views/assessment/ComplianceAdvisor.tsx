@@ -163,8 +163,12 @@ function cleanContext(s: string): string {
 
 // An ALL-CAPS line (no lowercase letters) in the owner context is a section
 // heading \u2014 e.g. "RULE", "WHEN THE EXCLUSION DOES NOT APPLY", "REFERENCES".
+// The 120-char cap (vs. a shorter one) lets long legal titles like "BIOMETRIC
+// DATA AND CATEGORISATION: PROHIBITION, DEFINITION AND ANCILLARY FEATURES"
+// register as headings rather than falling into a generic "Details" block; no
+// all-caps body line in the questionnaire is that long.
 function isHeadingLine(t: string): boolean {
-  return t.length >= 2 && t.length <= 70 && /[A-Z]/.test(t) && !/[a-z]/.test(t);
+  return t.length >= 2 && t.length <= 120 && /[A-Z]/.test(t) && !/[a-z]/.test(t);
 }
 
 /** Render a block's body lines: consecutive "-"/"\u2022" lines become a bullet list,
