@@ -164,6 +164,46 @@ async def test_test_rejects_internal_candidate_url(client):
     assert r.json()["success"] is False
 
 
+async def test_scratch_test_of_unsaved_values_does_not_mark_saved_row(client):
+    """Testing typed-but-unsaved candidate values reports a result but must NOT set
+    last_test_status on the saved row — else activation could go live on different,
+    untested config."""
+    await _put(
+        client, base_url="https://saved.example.com/v1", model="saved", api_token="t"
+    )
+    with patch("app.routers.llm_provider._probe", _OK_PROBE):
+        r = await client.post(
+            f"{_BASE}/test",
+            json={
+                "base_url": "https://other.example.com/v1",
+                "model": "other",
+                "api_token": "t2",
+            },
+        )
+    assert r.json()["success"] is True  # the probe ran and passed
+    # ...but the saved row's test status is untouched, so activation stays blocked.
+    cfg = (await client.get(_BASE)).json()
+    assert cfg["last_test_status"] is None
+    assert (await client.post(f"{_BASE}/activate")).status_code == 422
+
+
+async def test_test_of_saved_values_marks_the_row_and_enables_activation(client):
+    """Testing the saved config (empty body, or matching values) records ok and
+    unlocks activation."""
+    await _put(
+        client, base_url="https://saved.example.com/v1", model="saved", api_token="t"
+    )
+    with patch("app.routers.llm_provider._probe", _OK_PROBE):
+        # Explicit matching values also count as "the saved config".
+        r = await client.post(
+            f"{_BASE}/test",
+            json={"base_url": "https://saved.example.com/v1", "model": "saved"},
+        )
+    assert r.json()["success"] is True
+    assert (await client.get(_BASE)).json()["last_test_status"] == "ok"
+    assert (await client.post(f"{_BASE}/activate")).status_code == 200
+
+
 # --- health endpoint (read-only active-provider probe) ---------------------
 
 

@@ -75,8 +75,15 @@ export default function LLMProviderPage() {
     setTesting(true);
     setTestResult(null);
     try {
-      // Test the saved row (Save first). An empty body tests the stored config.
-      const result = await api.testLLMProvider({});
+      // Test the current form values (no save required). base_url/model are sent
+      // as-is; the token is sent only if the user typed a new one — otherwise the
+      // backend falls back to the stored token (shown masked). An empty form field
+      // falls back to the stored row too.
+      const result = await api.testLLMProvider({
+        base_url: form.base_url || null,
+        model: form.model || null,
+        ...(tokenChanged ? { api_token: form.api_token || null } : {}),
+      });
       setTestResult(result);
       // Refresh so last_test_status (which gates Activate) is current.
       apply(await api.getLLMProvider());
@@ -117,9 +124,17 @@ export default function LLMProviderPage() {
 
   const isActive = status?.is_active ?? false;
   const testPassed = status?.last_test_status === "ok";
+  // A complete, saved config that passed its test is one click from activation —
+  // don't nag "nothing configured" in that state.
+  const readyToActivate =
+    !isActive &&
+    testPassed &&
+    Boolean(status?.base_url && status?.model && status?.has_token);
   // Silent-stub state: no custom provider active AND the platform default isn't
-  // a live gateway → AI workflows return placeholder output.
-  const stubWarning = !isActive && status?.platform_default_live === false;
+  // a live gateway → AI workflows return placeholder output. Suppressed once a
+  // tested config is ready to activate.
+  const stubWarning =
+    !isActive && status?.platform_default_live === false && !readyToActivate;
   // Active-but-broken: a provider is active but the live health probe failed
   // (bad model / unreachable / revoked token since activation).
   const activeBroken = isActive && health?.active === true && health.ok === false;
@@ -234,7 +249,7 @@ export default function LLMProviderPage() {
         <div className="border-t border-border pt-6">
           <h3 className="text-sm font-semibold mb-1">Test Connection</h3>
           <p className="text-sm text-muted-foreground mb-3">
-            Save first, then verify the endpoint authenticates and serves the model. A successful test is required before activation.
+            Verify the endpoint authenticates and serves the model. Activation requires a successful test of the <strong>saved</strong> configuration.
           </p>
           <div className="flex items-center gap-3">
             <Button variant="outline" size="sm" disabled={testing || !hasConfig} onClick={handleTest} className="gap-2">

@@ -261,14 +261,22 @@ async def test_llm_provider(
 
     ok, message = await _probe(base_url, api_token, model)
 
-    # Record the outcome against the stored row (if any) so the UI can show it and
-    # activation can require a recent pass. Testing unsaved values doesn't create a
-    # row; it only reports the result.
+    # Only persist the outcome (which gates activation) when the tested values are
+    # the ones actually SAVED. Testing typed-but-unsaved candidate values is a
+    # scratch check for immediate feedback — it reports the result but must not
+    # mark the stored row "ok", or activation could go live on different, untested
+    # config. A test matches the saved row when every provided field equals it (an
+    # omitted field defaults to the stored value, so it matches by definition).
     async with SessionLocal() as session:
         row = await session.scalar(
             select(LLMProviderConfig).where(LLMProviderConfig.id == 1)
         )
-        if row is not None:
+        matches_saved = row is not None and (
+            (body.base_url is None or body.base_url == row.base_url)
+            and (body.model is None or body.model == row.model)
+            and (body.api_token is None or body.api_token == row.api_token)
+        )
+        if row is not None and matches_saved:
             row.last_test_status = "ok" if ok else "failed"
             row.last_test_message = message
             row.last_tested_at = datetime.now(timezone.utc)
