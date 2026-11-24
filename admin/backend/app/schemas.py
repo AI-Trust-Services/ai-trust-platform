@@ -59,6 +59,44 @@ class SmtpTestResponse(BaseModel):
     message: str
 
 
+# --- LLM provider (bring-your-own-LLM, issue #406) -------------------------
+
+
+class LLMProviderResponse(BaseModel):
+    """Current config — the token is NEVER returned, only ``has_token``."""
+
+    base_url: str | None
+    model: str | None
+    has_token: bool
+    is_active: bool
+    last_test_status: str | None
+    last_test_message: str | None
+    last_tested_at: str | None
+    updated_at: str | None
+    updated_by: str | None
+
+
+class LLMProviderUpdate(BaseModel):
+    base_url: str | None = None
+    model: str | None = None
+    # Omit / send empty to preserve the stored token (mirrors SMTP password).
+    api_token: str | None = None
+
+
+class LLMProviderTestRequest(BaseModel):
+    """Test a *candidate* config before activating it. Any field omitted falls
+    back to the stored row, so an admin can re-test the saved config too."""
+
+    base_url: str | None = None
+    model: str | None = None
+    api_token: str | None = None
+
+
+class LLMProviderTestResponse(BaseModel):
+    success: bool
+    message: str
+
+
 class GeneralSettingsResponse(BaseModel):
     platform_name: str
     support_email: str | None

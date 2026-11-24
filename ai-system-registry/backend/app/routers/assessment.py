@@ -510,6 +510,7 @@ async def _run_prefill_background(
                         ],
                     },
                     consumed=questionnaire_output.get("consumed"),
+                    provider=questionnaire_output.get("provider"),
                 )
                 await session.commit()
         except Exception as exc:  # noqa: BLE001

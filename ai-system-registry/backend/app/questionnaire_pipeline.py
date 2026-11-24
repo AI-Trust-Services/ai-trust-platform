@@ -25,13 +25,14 @@ import os
 from datetime import datetime, timezone
 from functools import partial
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from ai_trust_logging import correlation_id_var, get_logger
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
 from app import minio_client
-from app.llm.client import chat
+from app.llm.client import RuntimeConfig, chat, resolve_runtime_config
 from app.llm.parsing import LLMParseError, parse_with_retry
 from app.llm.templates import load_questionnaire, load_template
 from app.llm.validators import validate_questionnaire_batch
@@ -287,6 +288,7 @@ async def _run_batch(
     registration_evidence: str,
     rag_chunks: list[dict],
     batch_idx: int,
+    config: RuntimeConfig | None = None,
 ) -> list[dict]:
     """Run one LLM call for a batch (category slice) of the questionnaire.
 
@@ -294,6 +296,10 @@ async def _run_batch(
     batch's question config (ids, completeness, allowed values, strength rules).
     Raises ``LLMParseError`` on truncation or unparseable/invalid output after
     up to 3 total LLM attempts.
+
+    ``config`` is the provider pinned for the whole run (see
+    ``run_questionnaire_pipeline``); passed straight to ``chat()`` so every batch
+    uses the same provider.
     """
     task = f"questionnaire_answer_batch_{batch_idx}"
     user_message = _build_user_message(batch, registration_evidence, rag_chunks)
@@ -307,6 +313,7 @@ async def _run_batch(
         task=task,
         json_mode=True,
         max_tokens=_QUESTIONNAIRE_MAX_TOKENS,
+        config=config,
     )
 
     if llm_response.get("finish_reason") == "length":
@@ -340,6 +347,7 @@ async def run_questionnaire_pipeline(
     prompt_id: str,
     username: str,
     batch_callback: Any = None,  # async callable(batch_results: list[dict]) -> None
+    config: RuntimeConfig | None = None,
 ) -> dict[str, Any]:
     """Run the questionnaire answer pipeline for a given AI system.
 
@@ -402,11 +410,26 @@ async def run_questionnaire_pipeline(
         extra={"system_id": system_id, "batches": len(batches)},
     )
 
+    # Resolve the LLM provider ONCE for the whole run and pin it across every
+    # batch, so a mid-run admin config change can't split one assessment across
+    # two providers (the dossier records a single model for the run). When the
+    # orchestrator (pipeline 3) already resolved a provider, it is passed in so
+    # the questionnaire and classification steps share one provider.
+    run_config = config or await resolve_runtime_config()
+    logger.info(
+        "questionnaire_pipeline.provider_pinned",
+        extra={
+            "system_id": system_id,
+            "provider": run_config.source,
+            "model": run_config.model,
+        },
+    )
+
     callback_lock = asyncio.Lock()
 
     async def _run_and_callback(idx: int, batch: dict) -> list[dict]:
         results = await _run_batch(
-            batch, system_prompt, registration_evidence, rag_chunks, idx
+            batch, system_prompt, registration_evidence, rag_chunks, idx, run_config
         )
         if batch_callback is not None:
             async with callback_lock:
@@ -473,5 +496,15 @@ async def run_questionnaire_pipeline(
         "consumed": {
             "evidence": _evidence_fields(row),
             "documents": _consumed_documents(rag_chunks),
+        },
+        # The LLM provider pinned for this run — model id + endpoint host, never the
+        # token. Recorded in the dossier for audit/traceability (#406 requirement:
+        # "retain the model identifier with generated results").
+        "provider": {
+            "source": run_config.source,
+            "model": run_config.model,
+            "host": urlparse(run_config.base_url).hostname
+            if run_config.base_url
+            else None,
         },
     }

@@ -1,0 +1,237 @@
+import { useState, useEffect, useCallback } from "react";
+import { Cpu, Plug, Power } from "lucide-react";
+import { api } from "@/api/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
+import type { LLMProvider, LLMProviderUpdate } from "@/types";
+import { useToast } from "@/App";
+
+export default function LLMProviderPage() {
+  const showToast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [activating, setActivating] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const [status, setStatus] = useState<LLMProvider | null>(null);
+  const [form, setForm] = useState<LLMProviderUpdate>({ base_url: "", model: "", api_token: null });
+  const [hasToken, setHasToken] = useState(false);
+  const [tokenChanged, setTokenChanged] = useState(false);
+
+  const apply = useCallback((data: LLMProvider) => {
+    setStatus(data);
+    setForm({ base_url: data.base_url ?? "", model: data.model ?? "", api_token: null });
+    setHasToken(data.has_token);
+    setTokenChanged(false);
+  }, []);
+
+  const load = useCallback(async () => {
+    try {
+      apply(await api.getLLMProvider());
+    } catch {
+      showToast("Failed to load LLM provider config", true);
+    } finally {
+      setLoading(false);
+    }
+  }, [apply, showToast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function handleSave() {
+    setSaving(true);
+    setTestResult(null);
+    try {
+      const payload: LLMProviderUpdate = {
+        base_url: form.base_url || null,
+        model: form.model || null,
+      };
+      if (tokenChanged) payload.api_token = form.api_token || null;
+      apply(await api.updateLLMProvider(payload));
+      showToast("Saved. Run Test Connection, then activate.");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Save failed", true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleTest() {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      // Test the saved row (Save first). An empty body tests the stored config.
+      const result = await api.testLLMProvider({});
+      setTestResult(result);
+      // Refresh so last_test_status (which gates Activate) is current.
+      apply(await api.getLLMProvider());
+    } catch (e) {
+      setTestResult({ success: false, message: e instanceof Error ? e.message : "Test failed" });
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  async function handleActivate() {
+    setActivating(true);
+    try {
+      apply(await api.activateLLMProvider());
+      showToast("Custom LLM provider activated.");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Activation failed", true);
+    } finally {
+      setActivating(false);
+    }
+  }
+
+  async function handleDeactivate() {
+    setActivating(true);
+    try {
+      apply(await api.deactivateLLMProvider());
+      showToast("Restored the platform default LLM.");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to restore default", true);
+    } finally {
+      setActivating(false);
+    }
+  }
+
+  if (loading) {
+    return <div className="p-8 text-sm text-muted-foreground">Loading…</div>;
+  }
+
+  const isActive = status?.is_active ?? false;
+  const testPassed = status?.last_test_status === "ok";
+  const hasConfig = Boolean((form.base_url || status?.base_url) && (form.model || status?.model) && (hasToken || tokenChanged));
+
+  return (
+    <div className="p-8 max-w-3xl">
+      <div className="flex items-center gap-4 mb-8">
+        <span className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-400 to-violet-600 text-white">
+          <Cpu className="size-7" />
+        </span>
+        <div>
+          <h1 className="text-2xl font-semibold">LLM Provider</h1>
+          <p className="text-sm text-muted-foreground">
+            Use your own OpenAI-compatible LLM endpoint for AI-assisted workflows, or keep the platform default.
+          </p>
+        </div>
+      </div>
+
+      {/* Current status banner */}
+      <div className={cn(
+        "rounded-lg border p-4 mb-4 text-sm flex items-center gap-3",
+        isActive
+          ? "border-[var(--success-fg)]/30 bg-[var(--success-fg)]/5"
+          : "border-border bg-muted/40",
+      )}>
+        <Power className={cn("size-5 shrink-0", isActive ? "text-[var(--success-fg)]" : "text-muted-foreground")} />
+        <div>
+          <p className="font-medium">
+            {isActive ? "Custom provider active" : "Platform default (Thalamus) in use"}
+          </p>
+          <p className="text-muted-foreground">
+            {isActive
+              ? `AI workflows use ${status?.base_url} (${status?.model}).`
+              : "Configure and activate a custom endpoint below to override the default."}
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-card p-6 space-y-6">
+        <div>
+          <h2 className="text-base font-semibold mb-1">Endpoint Configuration</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            The endpoint must implement the OpenAI <code>/v1/chat/completions</code> API over HTTPS.
+          </p>
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="base_url">Endpoint URL</Label>
+              <Input
+                id="base_url"
+                placeholder="https://api.your-provider.com/v1"
+                value={form.base_url ?? ""}
+                onChange={(e) => setForm({ ...form, base_url: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="model">Model Identifier</Label>
+              <Input
+                id="model"
+                placeholder="your-model-name"
+                value={form.model ?? ""}
+                onChange={(e) => setForm({ ...form, model: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="api_token">API Token</Label>
+              <Input
+                id="api_token"
+                type="password"
+                placeholder={hasToken && !tokenChanged ? "••••••••" : ""}
+                value={form.api_token ?? ""}
+                onChange={(e) => {
+                  setForm({ ...form, api_token: e.target.value });
+                  setTokenChanged(true);
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                Sent as <code>Authorization: Bearer</code>. Stored securely and never shown again.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-border pt-6">
+          <h3 className="text-sm font-semibold mb-1">Test Connection</h3>
+          <p className="text-sm text-muted-foreground mb-3">
+            Save first, then verify the endpoint authenticates and serves the model. A successful test is required before activation.
+          </p>
+          <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" disabled={testing || !hasConfig} onClick={handleTest} className="gap-2">
+              <Plug className="size-3.5" />
+              {testing ? "Testing…" : "Test Connection"}
+            </Button>
+            {status?.last_tested_at && !testResult && (
+              <span className={cn("text-xs", testPassed ? "text-[var(--success-fg)]" : "text-destructive")}>
+                Last test: {testPassed ? "passed" : "failed"}
+                {status.last_test_message ? ` — ${status.last_test_message}` : ""}
+              </span>
+            )}
+          </div>
+          {testResult && (
+            <p className={cn("mt-2 text-sm", testResult.success ? "text-[var(--success-fg)]" : "text-destructive")}>
+              {testResult.message}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center gap-3">
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? "Saving…" : "Save Changes"}
+        </Button>
+        {!isActive ? (
+          <Button
+            variant="default"
+            disabled={activating || !testPassed}
+            onClick={handleActivate}
+            title={!testPassed ? "Run a successful Test Connection first" : undefined}
+            className="gap-2"
+          >
+            <Power className="size-4" />
+            {activating ? "Activating…" : "Activate"}
+          </Button>
+        ) : (
+          <Button variant="outline" disabled={activating} onClick={handleDeactivate} className="gap-2">
+            <Power className="size-4" />
+            {activating ? "Restoring…" : "Restore Platform Default"}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}

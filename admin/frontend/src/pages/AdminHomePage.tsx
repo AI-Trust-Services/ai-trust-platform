@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Shield, Users, ShieldCheck, Mail, Settings, RefreshCw } from "lucide-react";
+import { Shield, Users, ShieldCheck, Mail, Settings, RefreshCw, Cpu } from "lucide-react";
 import LuigiClient from "@luigi-project/client";
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -166,6 +166,12 @@ export default function AdminHomePage() {
           title="Settings"
           description="General platform configuration and preferences."
           path="admin-settings"
+        />
+        <AdminCard
+          icon={<Cpu className="size-4" />}
+          title="LLM provider"
+          description="Use your own OpenAI-compatible LLM endpoint for AI workflows, or keep the platform default."
+          path="llm-provider"
         />
       </div>
     </div>
