@@ -114,7 +114,10 @@ async def resolve_runtime_config() -> RuntimeConfig:
 # ---------------------------------------------------------------------------
 
 # AsyncOpenAI clients cached per (base_url, token) — each keeps its own pool.
+# Bounded so token rotation / many tenants can't grow it without limit; the LRU
+# eviction drops the oldest client (its pool is closed on GC).
 _clients: dict[tuple[str, str], Any] = {}
+_CLIENTS_MAX = 32
 
 
 def _get_client(base_url: str, api_token: str) -> Any:
@@ -123,6 +126,10 @@ def _get_client(base_url: str, api_token: str) -> Any:
     key = (base_url, api_token)
     client = _clients.get(key)
     if client is None:
+        if len(_clients) >= _CLIENTS_MAX:
+            # Evict the oldest entry (dicts preserve insertion order).
+            oldest = next(iter(_clients))
+            del _clients[oldest]
         client = AsyncOpenAI(base_url=base_url, api_key=api_token or "none")
         _clients[key] = client
     return client

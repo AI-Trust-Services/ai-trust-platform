@@ -111,7 +111,7 @@ async def _probe(base_url: str, api_token: str, model: str) -> tuple[str, str]:
         "max_tokens": 1,
     }
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
             resp = await client.post(url, headers=headers, json=payload)
     except (httpx.ConnectError, httpx.ConnectTimeout):
         return "failed", "Connection failed — check the endpoint URL."

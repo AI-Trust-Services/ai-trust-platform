@@ -65,13 +65,12 @@ def validate_endpoint_url(url: str | None) -> str | None:
     if not url or not url.strip():
         return "Endpoint URL is required."
     parsed = urlparse(url.strip())
-    if parsed.scheme not in ("http", "https"):
-        return "Endpoint URL must use http or https."
+    # https-only — reject any non-https scheme up front, before any host/DNS work.
+    if parsed.scheme != "https":
+        return "Endpoint URL must use https."
     host = parsed.hostname
     if not host:
         return "Endpoint URL has no host."
-    if parsed.scheme != "https":
-        return "Endpoint URL must use https."
 
     # Resolve the host and reject if ANY resolved address is internal. This
     # catches a public-looking hostname that resolves to a private/loopback IP.

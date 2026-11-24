@@ -65,6 +65,9 @@ async def test_put_stores_config_and_masks_token(client):
     # The token itself must never be returned.
     assert "secret-token" not in r.text
     assert "api_token" not in body
+    # updated_at is populated on the first write (server_default), not left null.
+    assert body["updated_at"] is not None
+    assert body["updated_by"]
 
 
 async def test_put_preserves_token_when_omitted(client):

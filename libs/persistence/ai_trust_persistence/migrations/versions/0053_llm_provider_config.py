@@ -25,7 +25,12 @@ def upgrade() -> None:
         sa.Column("last_test_status", sa.String(20), nullable=True),
         sa.Column("last_test_message", sa.Text, nullable=True),
         sa.Column("last_tested_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=True,
+            server_default=sa.func.now(),
+        ),
         sa.Column("updated_by", sa.String(200), nullable=True),
     )
 
