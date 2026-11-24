@@ -240,6 +240,15 @@ export default function AssessmentApp() {
             <span>AI pre-fill failed. Reload the page or start the assessment again to retry.</span>
           </div>
         )}
+        {state.prefill_stub && (
+          <div className="flex shrink-0 items-center gap-2 border-b border-[#fcd34d]/50 bg-[#fffbeb] px-6 py-2 text-sm text-[#92400e]">
+            <span>
+              No live AI model is configured, so the assessment was not analysed — every
+              answer is a placeholder (&ldquo;not enough information&rdquo;) and the
+              classification is not meaningful. Please contact your platform administrator.
+            </span>
+          </div>
+        )}
         <header className="flex h-12 shrink-0 items-center justify-end gap-3 border-b border-border bg-card px-6 text-sm">
           {savedAt && <span className="text-muted-foreground">Changes saved.</span>}
           <button

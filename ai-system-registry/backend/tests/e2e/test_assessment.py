@@ -116,6 +116,10 @@ async def test_open_prefills_from_questionnaire_pipeline(client: httpx.AsyncClie
 
     assert state["prefilled"] is True
     assert len(state["questions"]) > 1
+    # The e2e runs the offline stub, so the completed prefill is flagged as stub
+    # (drives the "no live LLM — contact admin" banner on the assessment screen).
+    assert state["prefill_stub"] is True
+    assert state["prefill_failed"] is False
     by_key = {q["question_key"]: q for q in state["questions"]}
     scope = by_key["Scope_1"]
     assert scope["answer"] == "NOT_ENOUGH_INFORMATION"

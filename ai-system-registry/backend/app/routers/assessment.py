@@ -482,7 +482,12 @@ async def _run_prefill_background(
             ]
             assessment = await _current_assessment(session, system_id)
             if assessment:
-                assessment.llm_status = None
+                # A completed run that ran on the offline stub produced no real
+                # analysis (every answer is NOT_ENOUGH_INFORMATION). Mark it
+                # "stub" instead of clearing so the UI can warn the owner to
+                # contact an admin; a real run clears to None as before.
+                provider = questionnaire_output.get("provider") or {}
+                assessment.llm_status = "stub" if provider.get("stub") else None
             await session.commit()
             logger.info(
                 "assessment.prefill_completed",
@@ -785,6 +790,7 @@ async def _build_state(
         prefilled=bool(states),
         prefill_pending=assessment.llm_status == "pending",
         prefill_failed=assessment.llm_status == "failed",
+        prefill_stub=assessment.llm_status == "stub",
     )
 
 

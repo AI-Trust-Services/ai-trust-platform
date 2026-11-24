@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Cpu, Plug, Power } from "lucide-react";
+import { Cpu, Plug, Power, AlertTriangle } from "lucide-react";
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -104,6 +104,9 @@ export default function LLMProviderPage() {
 
   const isActive = status?.is_active ?? false;
   const testPassed = status?.last_test_status === "ok";
+  // Silent-stub state: no custom provider active AND the platform default isn't
+  // a live gateway → AI workflows return placeholder output.
+  const stubWarning = !isActive && status?.platform_default_live === false;
   const hasConfig = Boolean((form.base_url || status?.base_url) && (form.model || status?.model) && (hasToken || tokenChanged));
 
   return (
@@ -121,24 +124,38 @@ export default function LLMProviderPage() {
       </div>
 
       {/* Current status banner */}
-      <div className={cn(
-        "rounded-lg border p-4 mb-4 text-sm flex items-center gap-3",
-        isActive
-          ? "border-[var(--success-fg)]/30 bg-[var(--success-fg)]/5"
-          : "border-border bg-muted/40",
-      )}>
-        <Power className={cn("size-5 shrink-0", isActive ? "text-[var(--success-fg)]" : "text-muted-foreground")} />
-        <div>
-          <p className="font-medium">
-            {isActive ? "Custom provider active" : "Platform default (Thalamus) in use"}
-          </p>
-          <p className="text-muted-foreground">
-            {isActive
-              ? `AI workflows use ${status?.base_url} (${status?.model}).`
-              : "Configure and activate a custom endpoint below to override the default."}
-          </p>
+      {stubWarning ? (
+        <div className="rounded-lg border border-[#fcd34d]/60 bg-[#fffbeb] p-4 mb-4 text-sm flex items-start gap-3 text-[#92400e]">
+          <AlertTriangle className="size-5 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">No live LLM is configured</p>
+            <p>
+              No custom provider is active and the platform default is not set up, so AI
+              workflows run in offline stub mode and return placeholder output that is not
+              real analysis. Configure and activate a provider below to enable AI features.
+            </p>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className={cn(
+          "rounded-lg border p-4 mb-4 text-sm flex items-center gap-3",
+          isActive
+            ? "border-[var(--success-fg)]/30 bg-[var(--success-fg)]/5"
+            : "border-border bg-muted/40",
+        )}>
+          <Power className={cn("size-5 shrink-0", isActive ? "text-[var(--success-fg)]" : "text-muted-foreground")} />
+          <div>
+            <p className="font-medium">
+              {isActive ? "Custom provider active" : "Platform default (Thalamus) in use"}
+            </p>
+            <p className="text-muted-foreground">
+              {isActive
+                ? `AI workflows use ${status?.base_url} (${status?.model}).`
+                : "Configure and activate a custom endpoint below to override the default."}
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="rounded-lg border border-border bg-card p-6 space-y-6">
         <div>

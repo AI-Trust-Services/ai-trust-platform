@@ -116,6 +116,9 @@ export interface LLMProvider {
   last_tested_at: string | null;
   updated_at: string | null;
   updated_by: string | null;
+  // False when no live LLM is configured (Thalamus stub/unset) and no BYO active:
+  // AI workflows return placeholder output.
+  platform_default_live: boolean;
 }
 
 export interface LLMProviderUpdate {

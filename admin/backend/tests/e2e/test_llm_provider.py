@@ -32,6 +32,19 @@ async def test_get_defaults_to_empty_inactive(client):
     assert body["base_url"] is None
     assert body["has_token"] is False
     assert body["is_active"] is False
+    # platform_default_live reflects THALAMUS_BASE_URL; always present.
+    assert "platform_default_live" in body
+
+
+async def test_platform_default_live_reflects_thalamus_env(client, monkeypatch):
+    # Real gateway → live (no silent-stub warning).
+    monkeypatch.setenv("THALAMUS_BASE_URL", "https://thalamus.example.com/v1")
+    assert (await client.get(_BASE)).json()["platform_default_live"] is True
+    # Stub / unset → not live (admin UI warns when no BYO active).
+    monkeypatch.setenv("THALAMUS_BASE_URL", "stub")
+    assert (await client.get(_BASE)).json()["platform_default_live"] is False
+    monkeypatch.setenv("THALAMUS_BASE_URL", "")
+    assert (await client.get(_BASE)).json()["platform_default_live"] is False
 
 
 async def test_put_stores_config_and_masks_token(client):

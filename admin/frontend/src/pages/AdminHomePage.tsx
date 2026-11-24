@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Shield, Users, ShieldCheck, Mail, Settings, RefreshCw, Cpu } from "lucide-react";
+import { Shield, Users, ShieldCheck, Mail, Settings, RefreshCw, Cpu, AlertTriangle } from "lucide-react";
 import LuigiClient from "@luigi-project/client";
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -76,6 +76,7 @@ export default function AdminHomePage() {
   const showToast = useToast();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<AdminStats | null>(null);
+  const [llmStub, setLlmStub] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,6 +87,13 @@ export default function AdminHomePage() {
       showToast("Failed to load admin statistics", true);
     } finally {
       setLoading(false);
+    }
+    // LLM provider status is best-effort — a failure here must not block the dashboard.
+    try {
+      const llm = await api.getLLMProvider();
+      setLlmStub(!llm.is_active && llm.platform_default_live === false);
+    } catch {
+      setLlmStub(false);
     }
   }, [showToast]);
 
@@ -114,6 +122,20 @@ export default function AdminHomePage() {
           Refresh
         </Button>
       </div>
+
+      {llmStub && (
+        <button
+          onClick={() => navigate("llm-provider")}
+          className="w-full text-left rounded-lg border border-[#fcd34d]/60 bg-[#fffbeb] p-4 mb-6 text-sm flex items-start gap-3 text-[#92400e] hover:bg-[#fef3c7]"
+        >
+          <AlertTriangle className="size-5 shrink-0 mt-0.5" />
+          <span>
+            <span className="font-medium">No live LLM is configured.</span> AI-assisted
+            workflows are returning placeholder output that is not real analysis. Configure
+            and activate a provider on the LLM Provider page.
+          </span>
+        </button>
+      )}
 
       {/* KPI tiles */}
       <div className="flex gap-4 mb-8 flex-wrap">

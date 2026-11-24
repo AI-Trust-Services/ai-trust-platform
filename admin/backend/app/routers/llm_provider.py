@@ -13,6 +13,7 @@ back to the Thalamus env default). There is no silent fallback at request time.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import os
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -40,6 +41,18 @@ router = APIRouter(prefix="/v1/llm-provider", tags=["llm-provider"])
 _RESOURCE = "llm_provider_config"
 
 
+def _platform_default_live() -> bool:
+    """True when the platform-default Thalamus is a real gateway (not stub/unset).
+
+    When False and no BYO provider is active, AI workflows run in offline *stub*
+    mode and return placeholder output — the admin UI warns about this so a real
+    deployment doesn't silently serve non-meaningful AI results. Same env the
+    registry client reads for its own stub decision.
+    """
+    base = os.environ.get("THALAMUS_BASE_URL", "").strip().lower()
+    return base not in ("", "stub")
+
+
 def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt else None
 
@@ -56,6 +69,7 @@ def _to_response(row: LLMProviderConfig | None) -> LLMProviderResponse:
             last_tested_at=None,
             updated_at=None,
             updated_by=None,
+            platform_default_live=_platform_default_live(),
         )
     return LLMProviderResponse(
         base_url=row.base_url,
@@ -67,6 +81,7 @@ def _to_response(row: LLMProviderConfig | None) -> LLMProviderResponse:
         last_tested_at=_iso(row.last_tested_at),
         updated_at=_iso(row.updated_at),
         updated_by=row.updated_by,
+        platform_default_live=_platform_default_live(),
     )
 
 

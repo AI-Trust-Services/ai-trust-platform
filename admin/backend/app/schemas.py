@@ -74,6 +74,9 @@ class LLMProviderResponse(BaseModel):
     last_tested_at: str | None
     updated_at: str | None
     updated_by: str | None
+    # False when the platform-default Thalamus is stub/unset — i.e. with no active
+    # BYO provider, AI workflows return placeholder output (admin UI warns).
+    platform_default_live: bool
 
 
 class LLMProviderUpdate(BaseModel):

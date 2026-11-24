@@ -503,6 +503,7 @@ async def run_questionnaire_pipeline(
         "provider": {
             "source": run_config.source,
             "model": run_config.model,
+            "stub": run_config.stub,
             "host": urlparse(run_config.base_url).hostname
             if run_config.base_url
             else None,
