@@ -74,7 +74,7 @@ function ConfidenceIndicator({
 export default function QuestionView() {
   const { id, questionKey } = useParams();
   const navigate = useNavigate();
-  const { state, reload, markSaved, basePath, userMap, ensureUserMap } = useAssessment();
+  const { state, reload, markSaved, basePath, userMap, ensureUserMap, fetchSolverResult } = useAssessment();
 
   // Trigger the lazy user-map fetch on first QuestionView mount. AssessmentApp
   // guards with a ref so this is a no-op on every subsequent question navigation.
@@ -240,6 +240,7 @@ export default function QuestionView() {
       await api.confirmQuestion(id, questionKey);
       markSaved();
       await reload();
+      fetchSolverResult();
       if (nextKey) navigate(`${basePath}/q/${nextKey}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Confirm failed");
