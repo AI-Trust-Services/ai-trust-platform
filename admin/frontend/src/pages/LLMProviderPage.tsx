@@ -124,17 +124,12 @@ export default function LLMProviderPage() {
 
   const isActive = status?.is_active ?? false;
   const testPassed = status?.last_test_status === "ok";
-  // A complete, saved config that passed its test is one click from activation —
-  // don't nag "nothing configured" in that state.
-  const readyToActivate =
-    !isActive &&
-    testPassed &&
-    Boolean(status?.base_url && status?.model && status?.has_token);
   // Silent-stub state: no custom provider active AND the platform default isn't
-  // a live gateway → AI workflows return placeholder output. Suppressed once a
-  // tested config is ready to activate.
+  // a live gateway → AI workflows return placeholder output. Shown until a
+  // provider is activated (a passing test alone is not enough — the config must
+  // be activated to take effect).
   const stubWarning =
-    !isActive && status?.platform_default_live === false && !readyToActivate;
+    !isActive && status?.platform_default_live === false;
   // Active-but-broken: a provider is active but the live health probe failed
   // (bad model / unreachable / revoked token since activation).
   const activeBroken = isActive && health?.active === true && health.ok === false;
@@ -266,6 +261,9 @@ export default function LLMProviderPage() {
           {testResult && (
             <p className={cn("mt-2 text-sm", testResult.success ? "text-[var(--success-fg)]" : "text-destructive")}>
               {testResult.message}
+              {testResult.success && !isActive && (
+                <span className="font-medium"> Click Activate to start using this provider.</span>
+              )}
             </p>
           )}
         </div>
