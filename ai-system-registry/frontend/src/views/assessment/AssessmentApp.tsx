@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { Outlet, useNavigate, useParams, useMatch } from "react-router";
 import { Loader2, Save } from "lucide-react";
-import type { AssessmentState } from "../../types";
+import type { AssessmentState, ResolveResponse } from "../../types";
 import { api } from "../../api/client";
 import { usePermissions } from "../../hooks/usePermissions";
 import { isGated } from "../../config/aiQuestionnaire";
@@ -24,6 +24,10 @@ interface AssessmentCtx {
   // or `/systems/:id/assessment/view/:assessmentId` for a read-only historical one,
   // so in-app navigation stays pinned to the cycle being viewed.
   basePath: string;
+  // Hierarchy solver result — null until pipeline finishes and ≥1 answer is confirmed.
+  solverResult: ResolveResponse | null;
+  // Trigger a fresh solver call using the current confirmed answers.
+  fetchSolverResult: () => Promise<void>;
 }
 
 const Ctx = createContext<AssessmentCtx | null>(null);
@@ -158,6 +162,38 @@ export default function AssessmentApp() {
 
   const markSaved = useCallback(() => setSavedAt(Date.now()), []);
 
+  // Hierarchy solver — null until pipeline is done and ≥1 answer is confirmed.
+  const [solverResult, setSolverResult] = useState<ResolveResponse | null>(null);
+  // stateRef lets fetchSolverResult read the latest state without being recreated
+  // on every state update (avoids re-triggering effects that depend on it).
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const fetchSolverResult = useCallback(async () => {
+    if (!id) return;
+    const s = stateRef.current;
+    if (!s) return;
+    const answers: Record<string, string[]> = {};
+    for (const q of s.questions) {
+      if (q.owner_confirmed && q.answer) answers[q.question_key] = [q.answer];
+    }
+    if (Object.keys(answers).length === 0) return;
+    try {
+      setSolverResult(await api.resolveClassification(id, { answers }));
+    } catch {
+      // best-effort — panel stays empty on error
+    }
+  }, [id]);
+
+  // Initial solver call once the prefill pipeline finishes and confirmed answers exist.
+  const initialSolverDone = useRef(false);
+  useEffect(() => {
+    if (!state || state.prefill_pending || initialSolverDone.current) return;
+    if (!state.questions.some((q) => q.owner_confirmed && q.answer)) return;
+    initialSolverDone.current = true;
+    fetchSolverResult();
+  }, [state?.prefill_pending, fetchSolverResult]);
+
   // Base path for nested links — pins historical ("View results") navigation to
   // its cycle; the live cycle uses the plain assessment base.
   const basePath = viewAssessmentId
@@ -209,7 +245,7 @@ export default function AssessmentApp() {
   }
 
   return (
-    <Ctx.Provider value={{ state, reload, savedAt, markSaved, userMap, ensureUserMap, basePath }}>
+    <Ctx.Provider value={{ state, reload, savedAt, markSaved, userMap, ensureUserMap, basePath, solverResult, fetchSolverResult }}>
       <div className="flex h-full flex-col">
         {state.prefill_pending && (
           <div className="flex shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--muted)] px-6 py-2 text-sm text-muted-foreground">
