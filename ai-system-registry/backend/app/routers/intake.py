@@ -75,7 +75,7 @@ async def intake_system(
         annex_iii_area=None,
         compliance=0.0,
         workflow_status="draft",
-        org_role=body.org_role or "provider",
+        org_role=body.org_role or "pending",
         registration_mode="ai",
     )
 
