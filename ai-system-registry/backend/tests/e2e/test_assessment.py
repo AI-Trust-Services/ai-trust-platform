@@ -1020,6 +1020,40 @@ async def test_issue_high_tier_generates_obligations_and_requirements(
 
 
 @pytest.mark.asyncio
+async def test_issue_coerces_pending_org_role_to_provider(client: httpx.AsyncClient):
+    """Edge case (#436): if the prefill never resolved an organisation role, it is
+    still "pending" when the CO issues. A *completed* classification must never
+    carry "pending" — the issue handler coerces it to the conservative EU AI Act
+    default (provider) so the row shows a concrete role and still generates its
+    governance chain."""
+    from ai_trust_persistence.database import engine
+    from ai_trust_persistence.models.ai_system import AISystem
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    system_id = await _submit_as_owner(client)
+    # Force the unresolved-role case: reset the live role to "pending" while locked.
+    async with AsyncSession(engine) as s:
+        row = await s.get(AISystem, system_id)
+        row.org_role = "pending"
+        await s.commit()
+
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/issue",
+        json={"tier": "high", "transparency": True, "confirmed": True},
+        headers=_hdr(_CO),
+    )
+    assert r.status_code == 200, r.text
+
+    async with AsyncSession(engine) as s:
+        row = await s.get(AISystem, system_id)
+        assert row.org_role == "provider", (
+            "a completed assessment must not stay 'pending'"
+        )
+    obligations, _ = await _count_governance(system_id)
+    assert obligations > 0, "coerced provider role must still generate obligations"
+
+
+@pytest.mark.asyncio
 async def test_issue_minimal_tier_generates_no_obligations(
     client: httpx.AsyncClient,
 ):
