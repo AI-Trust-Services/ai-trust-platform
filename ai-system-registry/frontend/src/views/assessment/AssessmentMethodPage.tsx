@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { api } from "../../api/client";
 import type { IndexedDocument } from "../../types";
+import { usePermissions } from "../../hooks/usePermissions";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +23,7 @@ export default function AssessmentMethodPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const { can, loading: permsLoading } = usePermissions();
   const navState = location.state as { from?: string; newCycle?: boolean } | null;
   // "Start new assessment" sets newCycle: archive the approved cycle (or reopen
   // the current one) via /start-new, and don't bounce off an already-opened cycle.
@@ -45,7 +47,19 @@ export default function AssessmentMethodPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!id) return;
+    // Wait for permissions to resolve: usePermissions is fail-closed (can() is
+    // false while loading), so acting first could let an approver slip through
+    // before the redirect below fires.
+    if (!id || permsLoading) return;
+    // Approvers (the compliance officer) must never trigger prefill/
+    // reclassification. The CO role holds systems:write, so this route's guard
+    // admits it, but confirming a method here fires POST /open. Mirror
+    // AssessmentApp's role branch: bounce an approver to the read-only
+    // /assessment path (GET /state), never the method page.
+    if (can("systems:approve")) {
+      navigate(`/systems/${id}/assessment`, { replace: true });
+      return;
+    }
     Promise.all([
       api.getAssessmentState(id),
       api.listIndexedDocuments(id).catch(() => [] as IndexedDocument[]),
@@ -75,7 +89,11 @@ export default function AssessmentMethodPage() {
         setError(e instanceof Error ? e.message : "Failed to load assessment");
         setChecking(false);
       });
-  }, [id, navigate, newCycle]);
+    // `can` is excluded intentionally: usePermissions returns a fresh closure
+    // each render, so including it would loop. permsLoading flips once when
+    // perms resolve, which is the only time can()'s result changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, navigate, newCycle, permsLoading]);
 
   async function handleStart() {
     if (!id || starting) return;
