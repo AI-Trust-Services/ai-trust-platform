@@ -13,6 +13,7 @@ back to the Thalamus env default). There is no silent fallback at request time.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import asyncio
 import os
 
 import httpx
@@ -86,13 +87,18 @@ def _to_response(row: LLMProviderConfig | None) -> LLMProviderResponse:
     )
 
 
-async def _probe(base_url: str, api_token: str, model: str) -> tuple[bool, str]:
+async def _probe(base_url: str, api_token: str, model: str) -> tuple[str, str]:
     """Send a minimal chat/completions request to verify auth + model + shape.
 
-    Returns ``(ok, message)``. Distinguishes auth failure, missing model, and an
-    incompatible (non-OpenAI-shaped) response from the actionable error messages
-    the UI shows. Uses httpx directly (no openai SDK dependency in admin) and
-    checks the response is OpenAI-compatible (``choices`` present).
+    Returns ``(status, message)`` where status is one of:
+      - ``"ok"``          — the endpoint authenticated and returned an OpenAI-shaped reply;
+      - ``"rate_limited"``— HTTP 429: credentials/model were accepted (those fail earlier),
+                            the provider is just throttling. The config is valid, so the
+                            caller must NOT record this as a failure that blocks activation;
+      - ``"failed"``      — auth/model/connection/shape error; a genuine misconfiguration.
+
+    Uses httpx directly (no openai SDK dependency in admin) and checks the response
+    is OpenAI-compatible (``choices`` present).
     """
     url = base_url.rstrip("/") + "/chat/completions"
     headers = {
@@ -108,40 +114,44 @@ async def _probe(base_url: str, api_token: str, model: str) -> tuple[bool, str]:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(url, headers=headers, json=payload)
     except (httpx.ConnectError, httpx.ConnectTimeout):
-        return False, "Connection failed — check the endpoint URL."
+        return "failed", "Connection failed — check the endpoint URL."
     except httpx.TimeoutException:
-        return False, "Connection timed out — the endpoint did not respond."
+        return "failed", "Connection timed out — the endpoint did not respond."
     except httpx.HTTPError as exc:
-        return False, f"Connection failed: {exc}"
+        return "failed", f"Connection failed: {exc}"
 
     if resp.status_code in (401, 403):
-        return False, "Authentication failed — check the API token."
+        return "failed", "Authentication failed — check the API token."
     if resp.status_code in (400, 404):
-        return False, f"Model '{model}' is unavailable at this endpoint."
+        return "failed", f"Model '{model}' is unavailable at this endpoint."
     if resp.status_code == 429:
         # Auth + model were accepted (those fail earlier); the provider is
-        # rate-limiting or out of quota. The config itself is likely valid.
+        # rate-limiting or out of quota. The config itself is valid — reported as
+        # rate_limited so it does NOT get recorded as a blocking failure.
         return (
-            False,
+            "rate_limited",
             "Rate limited by the provider (HTTP 429). The credentials look valid — "
             "check your plan's rate limit or quota, then retry.",
         )
     if resp.status_code >= 500:
-        return False, f"Endpoint error (HTTP {resp.status_code})."
+        return "failed", f"Endpoint error (HTTP {resp.status_code})."
     if resp.status_code != 200:
-        return False, f"Unexpected response (HTTP {resp.status_code})."
+        return "failed", f"Unexpected response (HTTP {resp.status_code})."
 
     # Compatibility: a well-formed OpenAI response is JSON with a 'choices' array.
     try:
         data = resp.json()
     except ValueError:
         return (
-            False,
+            "failed",
             "Endpoint responded but did not return JSON (not OpenAI-compatible).",
         )
     if not isinstance(data, dict) or not data.get("choices"):
-        return False, "Endpoint responded but is not OpenAI-compatible (no 'choices')."
-    return True, f"Connection OK — model '{model}' responded."
+        return (
+            "failed",
+            "Endpoint responded but is not OpenAI-compatible (no 'choices').",
+        )
+    return "ok", f"Connection OK — model '{model}' responded."
 
 
 @router.get("", response_model=LLMProviderResponse)
@@ -176,11 +186,15 @@ async def llm_provider_health(
         return LLMProviderHealthResponse(
             active=True, ok=False, message="Active provider is missing configuration."
         )
-    reason = validate_endpoint_url(row.base_url)
+    reason = await asyncio.to_thread(validate_endpoint_url, row.base_url)
     if reason:
         return LLMProviderHealthResponse(active=True, ok=False, message=reason)
-    ok, message = await _probe(row.base_url, row.api_token, row.model)
-    return LLMProviderHealthResponse(active=True, ok=ok, message=message)
+    status, message = await _probe(row.base_url, row.api_token, row.model)
+    # A rate-limited active provider is not "broken" — creds/model are valid, it's
+    # just throttled right now; don't raise the red "unreachable" banner for it.
+    return LLMProviderHealthResponse(
+        active=True, ok=status != "failed", message=message
+    )
 
 
 @router.put("", response_model=LLMProviderResponse)
@@ -191,7 +205,7 @@ async def update_llm_provider(
     # Validate the endpoint before persisting (SSRF guard). A null/blank URL is
     # allowed here (an admin may clear the config), so only validate when set.
     if body.base_url:
-        reason = validate_endpoint_url(body.base_url)
+        reason = await asyncio.to_thread(validate_endpoint_url, body.base_url)
         if reason:
             raise HTTPException(status_code=422, detail=reason)
 
@@ -255,11 +269,11 @@ async def test_llm_provider(
             success=False,
             message="Endpoint URL, model, and API token are all required to test.",
         )
-    reason = validate_endpoint_url(base_url)
+    reason = await asyncio.to_thread(validate_endpoint_url, base_url)
     if reason:
         return LLMProviderTestResponse(success=False, message=reason)
 
-    ok, message = await _probe(base_url, api_token, model)
+    status, message = await _probe(base_url, api_token, model)
 
     # Only persist the outcome (which gates activation) when the tested values are
     # the ones actually SAVED. Testing typed-but-unsaved candidate values is a
@@ -277,7 +291,13 @@ async def test_llm_provider(
             and (body.api_token is None or body.api_token == row.api_token)
         )
         if row is not None and matches_saved:
-            row.last_test_status = "ok" if ok else "failed"
+            # A rate limit is NOT a failure of the config (creds/model are valid) —
+            # don't flip last_test_status to a blocking value, or a valid provider
+            # that happened to be throttled during the probe could never be
+            # activated. Record the message/time so the UI shows what happened, but
+            # leave the gating status (ok/None/prior) untouched.
+            if status != "rate_limited":
+                row.last_test_status = "ok" if status == "ok" else "failed"
             row.last_test_message = message
             row.last_tested_at = datetime.now(timezone.utc)
             log_audit_event(
@@ -286,11 +306,15 @@ async def test_llm_provider(
                 action="llm_provider.tested",
                 resource_type=_RESOURCE,
                 resource_id="1",
-                changes={"status": row.last_test_status},
+                changes={"status": status},
             )
             await session.commit()
-    logger.info("admin.llm_provider.tested", extra={"actor": username, "success": ok})
-    return LLMProviderTestResponse(success=ok, message=message)
+    logger.info(
+        "admin.llm_provider.tested", extra={"actor": username, "status": status}
+    )
+    # success is True only for a clean pass; a rate limit reports success=False
+    # (so the user sees the retry message) but did not block activation above.
+    return LLMProviderTestResponse(success=status == "ok", message=message)
 
 
 @router.post("/activate", response_model=LLMProviderResponse)
@@ -313,7 +337,7 @@ async def activate_llm_provider(
                 detail="Run a successful Test Connection before activating.",
             )
         # Re-validate the URL at activation (defense in depth).
-        reason = validate_endpoint_url(row.base_url)
+        reason = await asyncio.to_thread(validate_endpoint_url, row.base_url)
         if reason:
             raise HTTPException(status_code=422, detail=reason)
 

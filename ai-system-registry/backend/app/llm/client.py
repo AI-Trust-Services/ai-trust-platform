@@ -25,6 +25,7 @@ Returns: ``{text, input_tokens, output_tokens, finish_reason}``.
 
 from __future__ import annotations
 
+import asyncio
 import os
 from dataclasses import dataclass
 from typing import Any
@@ -83,8 +84,10 @@ async def resolve_runtime_config() -> RuntimeConfig:
 
     if byo is not None:
         # Defense in depth: a row could be written around the admin API. Re-check
-        # the URL before we make a server-side request to it.
-        reason = validate_endpoint_url(byo.base_url)
+        # the URL before we make a server-side request to it. validate_endpoint_url
+        # does a blocking DNS lookup (socket.getaddrinfo), so run it off the event
+        # loop to avoid stalling other requests on a slow resolver.
+        reason = await asyncio.to_thread(validate_endpoint_url, byo.base_url)
         if reason:
             logger.error(
                 "llm.byo_rejected",

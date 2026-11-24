@@ -15,9 +15,12 @@ import pytest
 pytestmark = pytest.mark.asyncio
 
 _BASE = "/v1/llm-provider"
-_OK_PROBE = AsyncMock(return_value=(True, "Connection OK — model 'm' responded."))
+_OK_PROBE = AsyncMock(return_value=("ok", "Connection OK — model 'm' responded."))
 _FAIL_PROBE = AsyncMock(
-    return_value=(False, "Authentication failed — check the API token.")
+    return_value=("failed", "Authentication failed — check the API token.")
+)
+_RATE_LIMITED_PROBE = AsyncMock(
+    return_value=("rate_limited", "Rate limited by the provider (HTTP 429)...")
 )
 
 
@@ -272,34 +275,61 @@ async def _probe_with_status(status_code: int, json_body=None):
         return await llm_provider._probe("https://api.example.com/v1", "tok", "m")
 
 
-async def test_probe_429_is_rate_limit_message():
-    ok, msg = await _probe_with_status(429)
-    assert ok is False
+async def test_probe_429_is_rate_limited_not_failed():
+    status, msg = await _probe_with_status(429)
+    # 429 is its own status, NOT "failed" — a rate limit must not block activation.
+    assert status == "rate_limited"
     assert "429" in msg and "rate limit" in msg.lower()
-    # It must read as "creds valid, retry", not as an auth/config error.
     assert "valid" in msg.lower()
 
 
 async def test_probe_401_is_auth_message():
-    ok, msg = await _probe_with_status(401)
-    assert ok is False
+    status, msg = await _probe_with_status(401)
+    assert status == "failed"
     assert "authentication" in msg.lower()
 
 
 async def test_probe_404_is_model_message():
-    ok, msg = await _probe_with_status(404)
-    assert ok is False
+    status, msg = await _probe_with_status(404)
+    assert status == "failed"
     assert "unavailable" in msg.lower()
 
 
 async def test_probe_200_with_choices_succeeds():
-    ok, msg = await _probe_with_status(
+    status, msg = await _probe_with_status(
         200, {"choices": [{"message": {"content": "x"}}]}
     )
-    assert ok is True
+    assert status == "ok"
 
 
 async def test_probe_200_without_choices_is_incompatible():
-    ok, msg = await _probe_with_status(200, {"not": "openai"})
-    assert ok is False
+    status, msg = await _probe_with_status(200, {"not": "openai"})
+    assert status == "failed"
     assert "compatible" in msg.lower()
+
+
+async def test_rate_limited_test_does_not_block_activation(client):
+    """A saved config whose probe is rate-limited (429) must stay activatable once
+    it later passes — the 429 must not record last_test_status='failed'."""
+    await _put(client, base_url="https://api.example.com/v1", model="m", api_token="t")
+    # Rate-limited test: reports failure to the user but does NOT mark the row.
+    with patch("app.routers.llm_provider._probe", _RATE_LIMITED_PROBE):
+        r = await client.post(f"{_BASE}/test", json={})
+    assert r.json()["success"] is False  # user sees "retry" message
+    cfg = (await client.get(_BASE)).json()
+    assert cfg["last_test_status"] is None  # NOT "failed" — activation not blocked
+    # A later successful test still unlocks activation.
+    with patch("app.routers.llm_provider._probe", _OK_PROBE):
+        await client.post(f"{_BASE}/test", json={})
+    assert (await client.post(f"{_BASE}/activate")).status_code == 200
+
+
+async def test_rate_limited_does_not_clear_a_prior_pass(client):
+    """If the config already passed, a later rate-limited probe must not downgrade
+    last_test_status to 'failed'."""
+    await _put(client, base_url="https://api.example.com/v1", model="m", api_token="t")
+    with patch("app.routers.llm_provider._probe", _OK_PROBE):
+        await client.post(f"{_BASE}/test", json={})
+    with patch("app.routers.llm_provider._probe", _RATE_LIMITED_PROBE):
+        await client.post(f"{_BASE}/test", json={})
+    assert (await client.get(_BASE)).json()["last_test_status"] == "ok"
