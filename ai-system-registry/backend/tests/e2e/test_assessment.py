@@ -279,15 +279,19 @@ async def test_high_confidence_answers_are_not_auto_confirmed(
 
     original_parse = None
 
-    async def _patched_parse_with_retry(text, *, task, validator, chat_fn, messages, **kw):
+    async def _patched_parse_with_retry(
+        text, *, task, validator, chat_fn, messages, **kw
+    ):
         # Return the HIGH-confidence result only for the batch that contains Scope_1;
         # fall through to the real implementation for all other batches.
         import json as _json
 
         try:
-            block = messages[-1]["content"].split("Questionnaire Configuration:\n", 1)[1].split(
-                "\n\nProvided Evidence:", 1
-            )[0]
+            block = (
+                messages[-1]["content"]
+                .split("Questionnaire Configuration:\n", 1)[1]
+                .split("\n\nProvided Evidence:", 1)[0]
+            )
             question_ids = [q["id"] for q in _json.loads(block).get("questions", [])]
         except (IndexError, ValueError, KeyError):
             question_ids = []
@@ -298,14 +302,21 @@ async def test_high_confidence_answers_are_not_auto_confirmed(
             return _high_confidence_result
 
         return await original_parse(
-            text, task=task, validator=validator, chat_fn=chat_fn, messages=messages, **kw
+            text,
+            task=task,
+            validator=validator,
+            chat_fn=chat_fn,
+            messages=messages,
+            **kw,
         )
 
     import app.questionnaire_pipeline as _qp
 
     original_parse = _qp.parse_with_retry
 
-    with patch("app.questionnaire_pipeline.parse_with_retry", new=_patched_parse_with_retry):
+    with patch(
+        "app.questionnaire_pipeline.parse_with_retry", new=_patched_parse_with_retry
+    ):
         state = await _open(client, system_id)
 
     by_key = {q["question_key"]: q for q in state["questions"]}
@@ -317,11 +328,13 @@ async def test_high_confidence_answers_are_not_auto_confirmed(
     assert scope_1["answer_source"] == "ai_prefilled"
 
     # No question must be auto-confirmed regardless of confidence band (#439).
-    assert not scope_1["confirmed"], "Scope_1 must NOT be auto-confirmed despite high confidence"
+    assert not scope_1["confirmed"], (
+        "Scope_1 must NOT be auto-confirmed despite high confidence"
+    )
     assert not scope_1["owner_confirmed"], "owner_confirmed must be False"
-    assert all(
-        not q["confirmed"] for q in state["questions"]
-    ), "no AI-prefilled answer should be auto-confirmed"
+    assert all(not q["confirmed"] for q in state["questions"]), (
+        "no AI-prefilled answer should be auto-confirmed"
+    )
 
 
 # ── mandatory-comment-on-change confirm gate ─────────────────────────────────
