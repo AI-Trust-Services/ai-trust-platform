@@ -98,9 +98,3 @@ export interface BrandingPublishResponse {
   published_at: string;
   published_by: string;
 }
-
-export interface ExternalApiToken {
-  configured: boolean;
-  token: string | null;
-  service_principal: string;
-}

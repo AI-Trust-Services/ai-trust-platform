@@ -10,7 +10,6 @@ import type {
   BrandingUpdate,
   BrandingStatus,
   BrandingPublishResponse,
-  ExternalApiToken,
 } from "../types";
 
 const API_BASE = import.meta.env.VITE_ADMIN_API_BASE as string;
@@ -73,9 +72,6 @@ export const api = {
 
   getStats: (): Promise<AdminStats> =>
     request<AdminStats>("/stats"),
-
-  getExternalApiToken: (): Promise<ExternalApiToken> =>
-    request<ExternalApiToken>("/external-api/token"),
 
   // ── Branding ─────────────────────────────────────────────────────────────
 
