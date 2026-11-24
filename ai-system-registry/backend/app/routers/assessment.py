@@ -419,10 +419,8 @@ async def _run_prefill_background(
             return
         async with SessionLocal() as session:
             row = await _get_system(session, system_id)
-            owner = _system_owner(row)
             answers = _answer_store(row)
             states = await _states_by_key(session, assessment_id)
-            now = datetime.now(timezone.utc)
             for q_key, prop in proposals.items():
                 ans = prop["answer"]
                 if not ans:
