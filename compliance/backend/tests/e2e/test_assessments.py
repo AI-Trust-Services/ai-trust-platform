@@ -407,6 +407,22 @@ async def test_generate_obligations_deployer_high_count(client: httpx.AsyncClien
     assert len(obs) == 10  # deployer high-risk has 10 obligation clusters
 
 
+async def test_generate_obligations_pending_role_coerces_to_provider(
+    client: httpx.AsyncClient,
+):
+    # #436: a system whose org_role is still the "pending" intake default (never
+    # resolved by an assessment — e.g. reclassified straight to high) must still
+    # generate its governance chain. generate_obligations_in_session coerces
+    # "pending" to the conservative provider default so obligation generation
+    # never silently no-ops, matching the full provider cluster count.
+    system = await create_system(tier="high", org_role="pending")
+    ass = await create_assessment(client, system["id"])
+    obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
+    assert len(obs) == 15  # same as provider — coerced, not dropped
+    reqs = (await client.get(f"/v1/requirements?assessment_id={ass['id']}")).json()
+    assert len(reqs) > 0  # requirements coerce too
+
+
 async def test_generate_obligations_importer_yields_none(client: httpx.AsyncClient):
     # Only provider/deployer are supported for EU High/Limited — importer gets none.
     system = await create_system(tier="high", org_role="importer")
