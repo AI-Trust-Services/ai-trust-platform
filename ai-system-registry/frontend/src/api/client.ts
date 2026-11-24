@@ -196,7 +196,7 @@ export const api = {
   // Compliance Officer end view (#348).
   issueClassification: (
     systemId: string,
-    data: { tier: string; transparency: boolean; note?: string; confirmed: boolean },
+    data: { tier: string; transparency: boolean; note?: string; confirmed: boolean; org_role?: string },
   ) =>
     request<AssessmentState>(`/systems/${encodeURIComponent(systemId)}/assessment/issue`, {
       method: "POST",

@@ -6,6 +6,25 @@ import { ORDERED_QUESTION_KEYS } from "./AssessmentSidebar";
 import { api } from "../../api/client";
 import { TIER_META } from "../../utils";
 import { cn } from "@/lib/utils";
+import type { ResolveResponse } from "../../types";
+
+function mapLabelToTier(labelId: string | undefined): string {
+  if (labelId === "HIGH_RISK") return "high";
+  if (labelId === "PROHIBITED") return "prohibited";
+  if (labelId === "TRANSPARENCY") return "limited";
+  if (labelId === "MINIMAL") return "minimal";
+  return "";
+}
+
+function deriveOrgRole(roles: ResolveResponse["roles"] | undefined): string | undefined {
+  if (!roles) return undefined;
+  const hasProvider = roles.some((r) => r.labelId === "PROVIDER" && r.result);
+  const hasDeployer = roles.some((r) => r.labelId === "DEPLOYER" && r.result);
+  if (hasProvider && hasDeployer) return "both";
+  if (hasProvider) return "provider";
+  if (hasDeployer) return "deployer";
+  return undefined;
+}
 
 // Tiers the CO may issue (the dropdown options). gpai-* are not CO-issuable.
 const ISSUABLE: { value: string; label: string }[] = [
@@ -33,9 +52,9 @@ function activeTab(tier: string): string {
 export default function CoIssueView() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { state } = useAssessment();
+  const { state, solverResult } = useAssessment();
 
-  const [tier, setTier] = useState<string>("");
+  const [tier, setTier] = useState<string>(() => mapLabelToTier(solverResult?.risk.labelId));
   const [transparency, setTransparency] = useState(false);
   const [note, setNote] = useState("");
   const [confirmed, setConfirmed] = useState(false);
@@ -62,6 +81,7 @@ export default function CoIssueView() {
         transparency: transparencyAllowed && transparency,
         note: note.trim() || undefined,
         confirmed,
+        org_role: deriveOrgRole(solverResult?.roles),
       });
       navigate(`/systems/${id}`);
     } catch (e) {
