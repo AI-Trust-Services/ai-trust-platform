@@ -160,9 +160,8 @@ export default function LLMProviderPage() {
           <div>
             <p className="font-medium">No live LLM is configured</p>
             <p>
-              No custom provider is active and the platform default is not set up, so AI
-              workflows run in offline stub mode and return placeholder output that is not
-              real analysis. Configure and activate a provider below to enable AI features.
+              No custom provider is active and the platform default is not set up.
+              Configure and activate a provider below to enable AI features.
             </p>
           </div>
         </div>
