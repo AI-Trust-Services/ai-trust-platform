@@ -134,6 +134,12 @@ export default function LLMProviderPage() {
   // (bad model / unreachable / revoked token since activation).
   const activeBroken = isActive && health?.active === true && health.ok === false;
   const hasConfig = Boolean((form.base_url || status?.base_url) && (form.model || status?.model) && (hasToken || tokenChanged));
+  // The form has edits not yet saved — Activate acts on the SAVED config, so
+  // activating while dirty would silently ignore these edits. Block it.
+  const dirty =
+    (form.base_url ?? "") !== (status?.base_url ?? "") ||
+    (form.model ?? "") !== (status?.model ?? "") ||
+    tokenChanged;
 
   return (
     <div className="p-8 max-w-3xl">
@@ -276,9 +282,15 @@ export default function LLMProviderPage() {
         {!isActive ? (
           <Button
             variant="default"
-            disabled={activating || !testPassed}
+            disabled={activating || !testPassed || dirty}
             onClick={handleActivate}
-            title={!testPassed ? "Run a successful Test Connection first" : undefined}
+            title={
+              dirty
+                ? "Save your changes first"
+                : !testPassed
+                  ? "Run a successful Test Connection first"
+                  : undefined
+            }
             className="gap-2"
           >
             <Power className="size-4" />
