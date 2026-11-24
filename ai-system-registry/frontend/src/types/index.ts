@@ -149,6 +149,7 @@ export interface AssessmentState {
   system_name: string;
   registration_mode: string;
   owner_username: string | null;
+  compliance_officer_username: string | null;
   workflow_status: string;
   status_label: string;
   editable: boolean;

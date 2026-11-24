@@ -763,6 +763,7 @@ async def _build_state(
         system_name=row.name,
         registration_mode=row.registration_mode,
         owner_username=_system_owner(row),
+        compliance_officer_username=row.compliance_officer_username,
         workflow_status=row.workflow_status,
         status_label="approved" if frozen else _status_label(row),
         editable=editable,
