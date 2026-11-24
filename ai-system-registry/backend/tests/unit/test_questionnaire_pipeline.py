@@ -84,7 +84,9 @@ def _env(row=True):
     system_row = _row() if row else None
     from app.llm.client import RuntimeConfig
 
-    stub_cfg = RuntimeConfig(base_url="stub", api_token="", model="m", source="thalamus")
+    stub_cfg = RuntimeConfig(
+        base_url="stub", api_token="", model="m", source="thalamus"
+    )
     with (
         patch(
             "app.questionnaire_pipeline.SessionLocal", lambda: _FakeSession(system_row)

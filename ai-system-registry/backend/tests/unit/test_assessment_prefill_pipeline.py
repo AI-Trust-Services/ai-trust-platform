@@ -42,7 +42,9 @@ def _stub_provider():
     """Pin the provider the orchestrator resolves once per run (no DB in unit tests)."""
     from app.llm.client import RuntimeConfig
 
-    stub_cfg = RuntimeConfig(base_url="stub", api_token="", model="m", source="thalamus")
+    stub_cfg = RuntimeConfig(
+        base_url="stub", api_token="", model="m", source="thalamus"
+    )
     with patch(
         "app.assessment_prefill_pipeline.resolve_runtime_config",
         new_callable=AsyncMock,
