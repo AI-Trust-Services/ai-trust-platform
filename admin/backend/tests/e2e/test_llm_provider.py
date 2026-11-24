@@ -164,6 +164,53 @@ async def test_test_rejects_internal_candidate_url(client):
     assert r.json()["success"] is False
 
 
+# --- health endpoint (read-only active-provider probe) ---------------------
+
+
+async def _activate(client):
+    """Put + pass test + activate a provider so /health has something to probe."""
+    await _put(client, base_url="https://api.example.com/v1", model="m", api_token="t")
+    with patch("app.routers.llm_provider._probe", _OK_PROBE):
+        await client.post(f"{_BASE}/test", json={})
+    await client.post(f"{_BASE}/activate")
+
+
+async def test_health_inactive_returns_null_ok(client):
+    r = await client.get(f"{_BASE}/health")
+    assert r.status_code == 200
+    assert r.json() == {"active": False, "ok": None, "message": None}
+
+
+async def test_health_active_healthy(client):
+    await _activate(client)
+    with patch("app.routers.llm_provider._probe", _OK_PROBE):
+        r = await client.get(f"{_BASE}/health")
+    body = r.json()
+    assert body["active"] is True
+    assert body["ok"] is True
+
+
+async def test_health_active_broken(client):
+    await _activate(client)
+    with patch("app.routers.llm_provider._probe", _FAIL_PROBE):
+        r = await client.get(f"{_BASE}/health")
+    body = r.json()
+    assert body["active"] is True
+    assert body["ok"] is False
+    assert body["message"]
+
+
+async def test_health_does_not_mutate_or_reset_activation(client):
+    """A failing /health probe must NOT flip last_test_status or deactivate —
+    unlike /test it is read-only, so a page-load probe can't churn state."""
+    await _activate(client)
+    with patch("app.routers.llm_provider._probe", _FAIL_PROBE):
+        await client.get(f"{_BASE}/health")
+    cfg = (await client.get(_BASE)).json()
+    assert cfg["is_active"] is True  # still active
+    assert cfg["last_test_status"] == "ok"  # unchanged by the health probe
+
+
 # --- _probe status-code mapping (mocked httpx response) --------------------
 
 

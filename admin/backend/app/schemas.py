@@ -100,6 +100,15 @@ class LLMProviderTestResponse(BaseModel):
     message: str
 
 
+class LLMProviderHealthResponse(BaseModel):
+    """Read-only liveness of the ACTIVE provider — probes without auditing or
+    writing status. ``ok`` is null when no provider is active (nothing to check)."""
+
+    active: bool
+    ok: bool | None
+    message: str | None
+
+
 class GeneralSettingsResponse(BaseModel):
     platform_name: str
     support_email: str | None

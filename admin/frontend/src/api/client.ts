@@ -12,6 +12,7 @@ import type {
   BrandingPublishResponse,
   ExternalApiToken,
   LLMProvider,
+  LLMProviderHealth,
   LLMProviderUpdate,
   LLMProviderTestRequest,
   LLMProviderTestResponse,
@@ -117,6 +118,9 @@ export const api = {
   // Bring-your-own-LLM provider (issue #406)
   getLLMProvider: (): Promise<LLMProvider> =>
     request<LLMProvider>("/llm-provider"),
+
+  getLLMProviderHealth: (): Promise<LLMProviderHealth> =>
+    request<LLMProviderHealth>("/llm-provider/health"),
 
   updateLLMProvider: (data: LLMProviderUpdate): Promise<LLMProvider> =>
     request<LLMProvider>("/llm-provider", json("PUT", data)),

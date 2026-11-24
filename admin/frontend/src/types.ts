@@ -138,3 +138,9 @@ export interface LLMProviderTestResponse {
   message: string;
 }
 
+export interface LLMProviderHealth {
+  active: boolean;
+  ok: boolean | null;
+  message: string | null;
+}
+

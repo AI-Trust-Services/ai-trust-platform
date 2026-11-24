@@ -28,6 +28,7 @@ from ai_trust_persistence.llm_config import validate_endpoint_url
 from ai_trust_persistence.models.llm_provider_config import LLMProviderConfig
 
 from app.schemas import (
+    LLMProviderHealthResponse,
     LLMProviderResponse,
     LLMProviderTestRequest,
     LLMProviderTestResponse,
@@ -152,6 +153,34 @@ async def get_llm_provider(
             select(LLMProviderConfig).where(LLMProviderConfig.id == 1)
         )
         return _to_response(row)
+
+
+@router.get("/health", response_model=LLMProviderHealthResponse)
+async def llm_provider_health(
+    _: str = Depends(require_permission(IAM_MANAGE)),
+) -> LLMProviderHealthResponse:
+    """Live liveness check of the ACTIVE provider, for the admin page to surface an
+    active-but-broken state (misconfigured model / unreachable) on load.
+
+    Read-only: unlike ``POST /test`` this neither writes ``last_test_status`` nor
+    emits an audit event, so a page view doesn't churn status or spam the audit
+    trail. Returns ``ok=None`` when no provider is active (nothing to probe).
+    """
+    async with SessionLocal() as session:
+        row = await session.scalar(
+            select(LLMProviderConfig).where(LLMProviderConfig.id == 1)
+        )
+    if row is None or not row.is_active:
+        return LLMProviderHealthResponse(active=False, ok=None, message=None)
+    if not (row.base_url and row.model and row.api_token):
+        return LLMProviderHealthResponse(
+            active=True, ok=False, message="Active provider is missing configuration."
+        )
+    reason = validate_endpoint_url(row.base_url)
+    if reason:
+        return LLMProviderHealthResponse(active=True, ok=False, message=reason)
+    ok, message = await _probe(row.base_url, row.api_token, row.model)
+    return LLMProviderHealthResponse(active=True, ok=ok, message=message)
 
 
 @router.put("", response_model=LLMProviderResponse)

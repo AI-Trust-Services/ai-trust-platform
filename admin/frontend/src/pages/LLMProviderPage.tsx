@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import type { LLMProvider, LLMProviderUpdate } from "@/types";
+import type { LLMProvider, LLMProviderHealth, LLMProviderUpdate } from "@/types";
 import { useToast } from "@/App";
 
 export default function LLMProviderPage() {
@@ -17,6 +17,7 @@ export default function LLMProviderPage() {
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const [status, setStatus] = useState<LLMProvider | null>(null);
+  const [health, setHealth] = useState<LLMProviderHealth | null>(null);
   const [form, setForm] = useState<LLMProviderUpdate>({ base_url: "", model: "", api_token: null });
   const [hasToken, setHasToken] = useState(false);
   const [tokenChanged, setTokenChanged] = useState(false);
@@ -30,7 +31,19 @@ export default function LLMProviderPage() {
 
   const load = useCallback(async () => {
     try {
-      apply(await api.getLLMProvider());
+      const data = await api.getLLMProvider();
+      apply(data);
+      // If a provider is active, probe it live (read-only, no audit) so an
+      // active-but-broken provider (bad model / unreachable) surfaces on load.
+      if (data.is_active) {
+        try {
+          setHealth(await api.getLLMProviderHealth());
+        } catch {
+          setHealth(null);
+        }
+      } else {
+        setHealth(null);
+      }
     } catch {
       showToast("Failed to load LLM provider config", true);
     } finally {
@@ -107,6 +120,9 @@ export default function LLMProviderPage() {
   // Silent-stub state: no custom provider active AND the platform default isn't
   // a live gateway → AI workflows return placeholder output.
   const stubWarning = !isActive && status?.platform_default_live === false;
+  // Active-but-broken: a provider is active but the live health probe failed
+  // (bad model / unreachable / revoked token since activation).
+  const activeBroken = isActive && health?.active === true && health.ok === false;
   const hasConfig = Boolean((form.base_url || status?.base_url) && (form.model || status?.model) && (hasToken || tokenChanged));
 
   return (
@@ -124,7 +140,21 @@ export default function LLMProviderPage() {
       </div>
 
       {/* Current status banner */}
-      {stubWarning ? (
+      {activeBroken ? (
+        <div className="rounded-lg border border-[#fca5a5]/60 bg-[#fef2f2] p-4 mb-4 text-sm flex items-start gap-3 text-[#991b1b]">
+          <AlertTriangle className="size-5 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">Active provider is not reachable</p>
+            <p>
+              {health?.message
+                ? `The active provider failed a connection check: ${health.message}`
+                : "The active provider failed a connection check."}{" "}
+              AI workflows will error until this is fixed — update the configuration and
+              re-run Test Connection, or restore the platform default.
+            </p>
+          </div>
+        </div>
+      ) : stubWarning ? (
         <div className="rounded-lg border border-[#fcd34d]/60 bg-[#fffbeb] p-4 mb-4 text-sm flex items-start gap-3 text-[#92400e]">
           <AlertTriangle className="size-5 shrink-0 mt-0.5" />
           <div>
