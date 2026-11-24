@@ -1441,3 +1441,64 @@ async def test_swagger_pipelines_match_what_the_assessment_start_ran(
         c.json()["result"]["skipped_labels"]
         == from_open_classification["skipped_labels"]
     )
+
+
+@pytest.mark.asyncio
+async def test_issue_with_org_role_persists_to_system_and_assessment(
+    client: httpx.AsyncClient,
+):
+    """CO passes org_role in the issue body → written to ai_systems.org_role before
+    the snapshot, so both the live row and the frozen assessment carry the value."""
+    from ai_trust_persistence.database import engine
+    from ai_trust_persistence.models.ai_system import AISystem
+    from ai_trust_persistence.models.assessment import Assessment
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    system_id = await _submit_as_owner(client)
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/issue",
+        json={"tier": "high", "transparency": True, "confirmed": True, "org_role": "both"},
+        headers=_hdr(_CO),
+    )
+    assert r.status_code == 200, r.text
+
+    async with AsyncSession(engine) as s:
+        sys_row = (await s.execute(select(AISystem).where(AISystem.id == system_id))).scalar_one()
+        assert sys_row.org_role == "both"
+        assessment = (
+            await s.execute(
+                select(Assessment)
+                .where(Assessment.ai_system_id == system_id)
+                .where(Assessment.status == "approved")
+            )
+        ).scalar_one()
+        assert assessment.org_role == "both"
+
+
+@pytest.mark.asyncio
+async def test_issue_without_org_role_leaves_existing_value(
+    client: httpx.AsyncClient,
+):
+    """org_role omitted from the issue body → existing ai_systems.org_role unchanged."""
+    from ai_trust_persistence.database import engine
+    from ai_trust_persistence.models.ai_system import AISystem
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    system_id = await _submit_as_owner(client)
+
+    async with AsyncSession(engine) as s:
+        before = (await s.execute(select(AISystem).where(AISystem.id == system_id))).scalar_one()
+        org_role_before = before.org_role
+
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/issue",
+        json={"tier": "high", "transparency": True, "confirmed": True},
+        headers=_hdr(_CO),
+    )
+    assert r.status_code == 200, r.text
+
+    async with AsyncSession(engine) as s:
+        after = (await s.execute(select(AISystem).where(AISystem.id == system_id))).scalar_one()
+        assert after.org_role == org_role_before

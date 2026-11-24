@@ -214,6 +214,7 @@ class IssueRequest(BaseModel):
     transparency: bool = False
     note: str | None = None
     confirmed: bool = False
+    org_role: str | None = None
 
     @field_validator("tier")
     @classmethod

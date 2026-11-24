@@ -1376,6 +1376,8 @@ async def issue_classification(
             )
 
         row.tier = body.tier
+        if body.org_role is not None:
+            row.org_role = body.org_role
         row.co_issued_transparency = bool(body.transparency)
         row.basis = f"Risk classification issued by compliance officer {user}."
         row.workflow_status = "approved"
