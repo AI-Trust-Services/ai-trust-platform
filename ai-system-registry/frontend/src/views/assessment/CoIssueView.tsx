@@ -5,6 +5,7 @@ import { useAssessment } from "./AssessmentApp";
 import { ORDERED_QUESTION_KEYS } from "./AssessmentSidebar";
 import { api } from "../../api/client";
 import { TIER_META } from "../../utils";
+import { orgRoleLabel } from "../../constants/orgRoles";
 import { cn } from "@/lib/utils";
 
 // Tiers the CO may issue (the dropdown options). gpai-* are not CO-issuable.
@@ -102,7 +103,7 @@ export default function CoIssueView() {
           </span>
           {state.org_role && (
             <span className="text-sm text-muted-foreground">
-              Role: <span className="text-foreground">{state.org_role}</span>
+              Role: <span className="text-foreground">{orgRoleLabel(state.org_role)}</span>
             </span>
           )}
         </div>

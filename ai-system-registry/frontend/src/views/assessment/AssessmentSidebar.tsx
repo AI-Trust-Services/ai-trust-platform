@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2, Circle, Loader2, Lock } from "lucide-react
 import type { AssessmentState, QuestionState } from "../../types";
 import { AI_SECTIONS, ORDERED_QUESTION_IDS, QUESTION_DEF_BY_ID, isGated } from "../../config/aiQuestionnaire";
 import { TierBadge } from "../../components/Badges";
+import { orgRoleLabel } from "../../constants/orgRoles";
 import { cn } from "@/lib/utils";
 
 /** Ordered sections → question keys, derived from ai-questionnaire.json
@@ -74,7 +75,7 @@ export function AssessmentSidebar({
         </div>
         {state.org_role && (
           <p className="mt-2 text-xs text-muted-foreground">
-            Role: <span className="text-foreground">{state.org_role}</span>
+            Role: <span className="text-foreground">{orgRoleLabel(state.org_role)}</span>
           </p>
         )}
         {/* Per-question progress: colored by confidence on load (green/amber/red,
