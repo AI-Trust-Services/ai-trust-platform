@@ -102,6 +102,14 @@ async def _probe(base_url: str, api_token: str, model: str) -> tuple[bool, str]:
         return False, "Authentication failed — check the API token."
     if resp.status_code in (400, 404):
         return False, f"Model '{model}' is unavailable at this endpoint."
+    if resp.status_code == 429:
+        # Auth + model were accepted (those fail earlier); the provider is
+        # rate-limiting or out of quota. The config itself is likely valid.
+        return (
+            False,
+            "Rate limited by the provider (HTTP 429). The credentials look valid — "
+            "check your plan's rate limit or quota, then retry.",
+        )
     if resp.status_code >= 500:
         return False, f"Endpoint error (HTTP {resp.status_code})."
     if resp.status_code != 200:

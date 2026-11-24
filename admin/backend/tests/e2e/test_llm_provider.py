@@ -8,7 +8,7 @@ LLM endpoint.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -149,3 +149,57 @@ async def test_test_rejects_internal_candidate_url(client):
         json={"base_url": "http://127.0.0.1/v1", "model": "m", "api_token": "t"},
     )
     assert r.json()["success"] is False
+
+
+# --- _probe status-code mapping (mocked httpx response) --------------------
+
+
+def _mock_httpx_response(status_code: int, json_body=None):
+    resp = MagicMock()
+    resp.status_code = status_code
+    resp.json = MagicMock(return_value=json_body if json_body is not None else {})
+    return resp
+
+
+async def _probe_with_status(status_code: int, json_body=None):
+    from app.routers import llm_provider
+
+    resp = _mock_httpx_response(status_code, json_body)
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=MagicMock(post=AsyncMock(return_value=resp)))
+    cm.__aexit__ = AsyncMock(return_value=False)
+    with patch.object(llm_provider.httpx, "AsyncClient", return_value=cm):
+        return await llm_provider._probe("https://api.example.com/v1", "tok", "m")
+
+
+async def test_probe_429_is_rate_limit_message():
+    ok, msg = await _probe_with_status(429)
+    assert ok is False
+    assert "429" in msg and "rate limit" in msg.lower()
+    # It must read as "creds valid, retry", not as an auth/config error.
+    assert "valid" in msg.lower()
+
+
+async def test_probe_401_is_auth_message():
+    ok, msg = await _probe_with_status(401)
+    assert ok is False
+    assert "authentication" in msg.lower()
+
+
+async def test_probe_404_is_model_message():
+    ok, msg = await _probe_with_status(404)
+    assert ok is False
+    assert "unavailable" in msg.lower()
+
+
+async def test_probe_200_with_choices_succeeds():
+    ok, msg = await _probe_with_status(
+        200, {"choices": [{"message": {"content": "x"}}]}
+    )
+    assert ok is True
+
+
+async def test_probe_200_without_choices_is_incompatible():
+    ok, msg = await _probe_with_status(200, {"not": "openai"})
+    assert ok is False
+    assert "compatible" in msg.lower()
