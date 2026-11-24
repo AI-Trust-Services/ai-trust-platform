@@ -243,9 +243,8 @@ export default function AssessmentApp() {
         {state.prefill_stub && (
           <div className="flex shrink-0 items-center gap-2 border-b border-[#fcd34d]/50 bg-[#fffbeb] px-6 py-2 text-sm text-[#92400e]">
             <span>
-              No live AI model is configured, so the assessment was not analysed — every
-              answer is a placeholder (&ldquo;not enough information&rdquo;) and the
-              classification is not meaningful. Please contact your platform administrator.
+              No live AI model is configured, so this assessment was not analysed.
+              Please contact your platform administrator.
             </span>
           </div>
         )}
