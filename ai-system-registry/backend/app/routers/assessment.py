@@ -410,12 +410,9 @@ async def _run_prefill_background(
     async def _on_batch(batch_results: list) -> None:
         """Persist one batch's answers into the existing question_states rows.
 
-        High- and medium-confidence answers are auto-confirmed on behalf of the
-        system owner (matching the feature-branch behaviour): the owner can still
-        review, change, and re-confirm any question, but they don't need to
-        manually tick every pre-filled answer with a good confidence score.
-        Low-confidence and unanswered questions remain unconfirmed and are
-        flagged for attention.
+        All AI-prefilled answers remain unconfirmed regardless of confidence
+        band — a human must explicitly confirm each one. Low-confidence and
+        unanswered questions are additionally flagged for attention.
         """
         proposals = _proposals_from_results(batch_results)
         if not proposals:
@@ -438,12 +435,6 @@ async def _run_prefill_background(
                     st.confidence = prop["confidence"]
                     st.ai_references = prop["references"] or None
                     st.ai_explanation = prop["explanation"] or None
-                    # Auto-confirm high/medium confidence answers on behalf of the
-                    # owner so they don't need to click through every pre-filled
-                    # question. Low confidence stays unconfirmed (needs attention).
-                    if prop["confidence"] in ("high", "medium") and owner:
-                        st.confirmed_at = now
-                        st.confirmed_by = owner
             row.questionnaire_answers = answers
             await session.commit()
             logger.info(
