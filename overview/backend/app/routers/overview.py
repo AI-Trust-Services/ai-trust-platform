@@ -330,7 +330,7 @@ async def get_compliance_stats(
             )
         ).scalar_one()
 
-        # Obligations with no approved evidence via linked controls — NOT EXISTS subquery
+        # Obligations with no approved evidence via linked requirements — NOT EXISTS subquery
         missing_count = (
             await session.execute(
                 select(func.count())
