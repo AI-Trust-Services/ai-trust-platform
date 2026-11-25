@@ -19,10 +19,12 @@ from ai_trust_logging import get_logger
 router = APIRouter(tags=["audit"])
 logger = get_logger(__name__)
 
-# Category → resource_type mapping for KPI stats
+# Category → resource_type mapping for KPI stats.
+# Only "assessment" and "evidence" are currently emitted by routers;
+# "requirement" and "obligation" are reserved for future instrumentation.
 _CATEGORIES: dict[str, list[str]] = {
     "system_events": ["ai_system"],
-    "risk_and_compliance": ["assessment", "evidence", "control", "obligation"],
+    "risk_and_compliance": ["assessment", "evidence", "requirement", "obligation"],
 }
 
 

@@ -24,7 +24,7 @@ export const OBLIGATION_STATUS_META: Record<string, BadgeMeta> = {
   overdue:        { label: "Overdue",        cls: "st-overdue" },
 };
 
-export const CONTROL_STATUS_META: Record<string, BadgeMeta> = {
+export const REQUIREMENT_STATUS_META: Record<string, BadgeMeta> = {
   open:         { label: "Open",         cls: "st-draft" },
   planned:      { label: "Planned",      cls: "st-applicable" },
   under_review: { label: "Under Review", cls: "st-review" },
@@ -46,7 +46,7 @@ export const ASSESSMENT_TYPES: string[] = [
   "transparency", "human_oversight", "operational_readiness", "third_party",
 ];
 
-export const CONTROL_CATEGORIES: string[] = [
+export const REQUIREMENT_CATEGORIES: string[] = [
   "human_oversight", "documentation", "monitoring", "security", "fairness",
   "data_governance", "logging", "testing", "change_management",
   "incident_response", "general",

@@ -6,7 +6,7 @@ import { StatusBadge } from "../components/Badges";
 import KpiCard from "../components/KpiCard";
 import DetailPanel, { DetailField, DetailSection } from "../components/DetailPanel";
 import CreateObligationModal from "../components/CreateObligationModal";
-import { OBLIGATION_STATUS_META, CONTROL_STATUS_META, EVIDENCE_STATUS_META, fmtDate } from "../utils";
+import { OBLIGATION_STATUS_META, REQUIREMENT_STATUS_META, EVIDENCE_STATUS_META, fmtDate } from "../utils";
 import { usePermissions } from "../hooks/usePermissions";
 import type { AISystem, Assessment, Requirement, Evidence, Obligation, ObligationDetail } from "../types";
 import { Button } from "@/components/ui/button";
@@ -239,7 +239,7 @@ export default function ObligationsPage() {
                         {c.requirement_ref && <span className="shrink-0 text-xs font-medium text-muted-foreground">{c.requirement_ref}</span>}
                         <span className="truncate text-[13px] text-foreground">{c.title}</span>
                       </span>
-                      <StatusBadge meta={CONTROL_STATUS_META} value={c.status} />
+                      <StatusBadge meta={REQUIREMENT_STATUS_META} value={c.status} />
                     </li>
                   ))}</ul>
               }

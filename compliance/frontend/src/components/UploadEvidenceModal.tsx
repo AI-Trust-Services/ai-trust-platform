@@ -14,7 +14,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import ControlPicker from "./ControlPicker";
+import RequirementPicker from "./ControlPicker";
 
 interface Props {
   open: boolean;
@@ -149,7 +149,7 @@ export default function UploadEvidenceModal({ open, onClose, onSuccess }: Props)
             </div>
 
             {/* Right column: requirement picker */}
-            <ControlPicker
+            <RequirementPicker
               value={selectedRequirements}
               onChange={setSelectedRequirements}
             />

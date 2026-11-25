@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { api } from "../api/client";
 import { useToast } from "../App";
-import { CONTROL_CATEGORIES, humanize } from "../utils";
+import { REQUIREMENT_CATEGORIES, humanize } from "../utils";
 import type { AISystem, Obligation } from "../types";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -109,7 +109,7 @@ export default function CreateRequirementModal({ open, onClose, onSuccess }: Pro
             <Select value={form.category} onValueChange={setVal("category")}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {CONTROL_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{humanize(c)}</SelectItem>)}
+                {REQUIREMENT_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{humanize(c)}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

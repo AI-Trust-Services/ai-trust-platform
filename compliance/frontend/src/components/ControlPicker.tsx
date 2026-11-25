@@ -17,7 +17,7 @@ interface Props {
 
 const NONE = "__none__";
 
-export default function ControlPicker({ value, onChange }: Props) {
+export default function RequirementPicker({ value, onChange }: Props) {
   const [systems, setSystems] = useState<AISystem[]>([]);
   const [systemId, setSystemId] = useState("");
   const [assessments, setAssessments] = useState<Assessment[]>([]);

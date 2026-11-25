@@ -18,7 +18,7 @@ const ROLE_DESCRIPTIONS: Record<string, string> = {
   platform_administrator: "Full access to all features and user management.",
   ai_engineer: "Register and manage AI systems, view monitoring and alerts.",
   business_owner: "Approve assessments and evidence, read-only access to systems.",
-  ai_compliance_officer: "Manage compliance assessments, obligations, controls and evidence.",
+  ai_compliance_officer: "Manage compliance assessments, obligations, requirements and evidence.",
   auditor: "Read-only access to systems, assessments, evidence and monitoring.",
   executive: "High-level read access to systems and monitoring dashboards.",
 };

@@ -7,7 +7,7 @@ import KpiCard from "../components/KpiCard";
 import DetailPanel, { DetailField, DetailSection } from "../components/DetailPanel";
 import CreateRequirementModal from "../components/CreateRequirementModal";
 import Pagination from "../components/Pagination";
-import { CONTROL_STATUS_META, OBLIGATION_STATUS_META, EVIDENCE_STATUS_META, fmtDate, humanize } from "../utils";
+import { REQUIREMENT_STATUS_META, OBLIGATION_STATUS_META, EVIDENCE_STATUS_META, fmtDate, humanize } from "../utils";
 import { usePermissions } from "../hooks/usePermissions";
 import type { AISystem, Requirement, RequirementDetail, Evidence, Obligation } from "../types";
 import { Button } from "@/components/ui/button";
@@ -168,7 +168,7 @@ export default function RequirementsPage() {
           <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>All Statuses</SelectItem>
-            {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{CONTROL_STATUS_META[s].label}</SelectItem>)}
+            {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{REQUIREMENT_STATUS_META[s].label}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={categoryFilter || ALL} onValueChange={(v) => setCategoryFilter(v === ALL ? "" : v)}>
@@ -220,14 +220,14 @@ export default function RequirementsPage() {
                   <TableCell className="text-[13px]">{humanize(c.category)}</TableCell>
                   <TableCell>{c.ai_system_id ? (systemsById[c.ai_system_id]?.name ?? c.ai_system_id) : <Badge variant="secondary" className="rounded-full font-medium">Org-wide</Badge>}</TableCell>
                   <TableCell className="text-[13px] text-muted-foreground">{c.owner || "—"}</TableCell>
-                  <TableCell><StatusBadge meta={CONTROL_STATUS_META} value={c.status} /></TableCell>
+                  <TableCell><StatusBadge meta={REQUIREMENT_STATUS_META} value={c.status} /></TableCell>
                   <TableCell className="text-[13px] text-muted-foreground">{fmtDate(c.due_date)}</TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-2">
                       <Select value={c.status} disabled={!mayWrite} onValueChange={(v) => changeStatus(c.id, v)}>
                         <SelectTrigger className="h-8 w-[150px]" title={mayWrite ? undefined : noWriteTitle}><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{CONTROL_STATUS_META[s].label}</SelectItem>)}
+                          {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{REQUIREMENT_STATUS_META[s].label}</SelectItem>)}
                         </SelectContent>
                       </Select>
                       <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive"
@@ -256,7 +256,7 @@ export default function RequirementsPage() {
       <DetailPanel
         open={!!detail}
         title={detail?.title ?? ""}
-        badge={detail ? CONTROL_STATUS_META[detail.status]?.label : undefined}
+        badge={detail ? REQUIREMENT_STATUS_META[detail.status]?.label : undefined}
         onClose={closePanel}
       >
         {detail && (
@@ -265,7 +265,7 @@ export default function RequirementsPage() {
               <DetailField label="ID">{detail.id}</DetailField>
               <DetailField label="AI System">{detail.ai_system_id ? (systemsById[detail.ai_system_id]?.name ?? detail.ai_system_id) : <Badge variant="secondary" className="rounded-full font-medium">Org-wide</Badge>}</DetailField>
               <DetailField label="Owner">{detail.owner || "—"}</DetailField>
-              <DetailField label="Status"><StatusBadge meta={CONTROL_STATUS_META} value={detail.status} /></DetailField>
+              <DetailField label="Status"><StatusBadge meta={REQUIREMENT_STATUS_META} value={detail.status} /></DetailField>
               <DetailField label="Due Date">{fmtDate(detail.due_date)}</DetailField>
             </DetailSection>
             {detail.description && (
@@ -297,7 +297,7 @@ export default function RequirementsPage() {
                 }}>
                 <SelectTrigger className="flex-1" title={mayWrite ? undefined : noWriteTitle}><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{CONTROL_STATUS_META[s].label}</SelectItem>)}
+                  {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{REQUIREMENT_STATUS_META[s].label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
