@@ -1530,7 +1530,7 @@ async def test_startup_sweep_reschedules_stale_pending(client: httpx.AsyncClient
 
     # The pipeline ran for our system.
     assert mock_pipeline.call_count >= 1
-    called_system_ids = [call.args[0] for call in mock_pipeline.call_args_list]
+    called_system_ids = [call.kwargs["system_id"] for call in mock_pipeline.call_args_list]
     assert system_id in called_system_ids
 
     # llm_status must have cleared to None (done).
