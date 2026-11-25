@@ -39,6 +39,7 @@ group "default" {
     "embedding-service",
     "document-indexing-backend",
     "document-indexing-worker",
+    "assessment-prefill-worker",
     # "ai-test-bed-backend",              # [MVP-off] AI test-bed MFE (RAG/document-indexing stays)
     "audit-backend",
     "audit-flush-worker",
@@ -165,6 +166,15 @@ target "document-indexing-worker" {
   tags       = [tag("document-indexing-worker")]
   cache-from = ["type=gha,scope=document-indexing-worker"]
   cache-to   = ["type=gha,mode=max,scope=document-indexing-worker"]
+}
+
+target "assessment-prefill-worker" {
+  context    = "."
+  dockerfile = "assessment-prefill-worker/Dockerfile"
+  platforms  = ["linux/amd64"]
+  tags       = [tag("assessment-prefill-worker")]
+  cache-from = ["type=gha,scope=assessment-prefill-worker"]
+  cache-to   = ["type=gha,mode=max,scope=assessment-prefill-worker"]
 }
 
 target "audit-backend" {

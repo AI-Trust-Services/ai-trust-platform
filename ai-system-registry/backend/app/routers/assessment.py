@@ -682,7 +682,7 @@ async def _build_state(
         # llm_pending: the background prefill is still running and this specific
         # question has not yet received an AI answer. Once the batch covering this
         # question completes, answer is written and llm_pending flips to False.
-        llm_pending = assessment.llm_status == "pending" and not ans
+        llm_pending = assessment.llm_status in ("pending", "processing") and not ans
         needs = _needs_attention(row, st, ans)
         # Suppress attention while the LLM is still pending for this question —
         # the answer hasn't arrived yet, so there's nothing to review.
@@ -782,7 +782,7 @@ async def _build_state(
         questions=questions,
         contributors=contributor_refs,
         prefilled=bool(states),
-        prefill_pending=assessment.llm_status == "pending",
+        prefill_pending=assessment.llm_status in ("pending", "processing"),
         prefill_failed=assessment.llm_status == "failed",
     )
 

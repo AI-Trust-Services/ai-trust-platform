@@ -1,0 +1,7 @@
+# Worker-only requirements — installed on top of the registry backend's requirements.txt
+# (which is already present when the Dockerfile COPYs ai-system-registry/backend/).
+# No FastAPI or uvicorn — this is a pure asyncio poll loop.
+#
+# All shared libs are installed via the backend's requirements.txt (-e /app/libs/...).
+# Nothing extra is needed unless a dependency drifts. Keep this file intentionally
+# minimal — the backend requirements.txt is the canonical source.
