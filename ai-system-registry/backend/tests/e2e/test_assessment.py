@@ -1363,8 +1363,8 @@ async def test_open_stores_questionnaire_then_classification_results(
 async def test_label_classification_failure_does_not_fail_the_prefill(
     client: httpx.AsyncClient,
 ):
-    """Step 2 failing as a whole is only logged: the owner still gets the answers and
-    tier, and no 'AI pre-fill failed' banner (its output isn't shown yet)."""
+    """Step 2 failing as a whole sets prefill_failed so the owner can retry, but the
+    questionnaire answers are still prefilled (the tier stays pending until retry succeeds)."""
     system_id = await _create_system(client)
     with patch(
         "app.assessment_prefill_pipeline.run_classification",
@@ -1373,11 +1373,11 @@ async def test_label_classification_failure_does_not_fail_the_prefill(
     ):
         state = await _open(client, system_id)
 
-    assert state["prefill_failed"] is False
+    assert state["prefill_failed"] is True
     assert state["prefill_pending"] is False
     by_key = {q["question_key"]: q for q in state["questions"]}
     assert by_key["Scope_1"]["answer"] == "NOT_ENOUGH_INFORMATION"
-    assert state["tier"] != "pending"
+    assert state["tier"] == "pending"
 
 
 @pytest.mark.asyncio

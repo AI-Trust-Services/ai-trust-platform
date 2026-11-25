@@ -40,8 +40,8 @@ from app.assessment_catalogue import (
     QUESTION_TYPES,
 )
 from app.assessment_prefill_pipeline import run_assessment_prefill_pipeline
-from app.classifier import classify_ai_questionnaire
 from app.dossier import create_dossier_in_session, write_ai_output_in_session
+from app.hierarchy_solver import label_to_tier, org_role_from_roles, solve
 from app.ids import new_id
 from app.llm import LLMParseError
 from app.questionnaire_gating import get_all_gated_question_ids, is_gated
@@ -398,14 +398,22 @@ async def _run_prefill_background(
     * ``_on_batch`` — after each questionnaire batch, write its answers into the
       existing ``question_states`` so the frontend sees them while polling
       ``GET /state``.
-    * ``_finalize_tier`` — once the questionnaire is done (concurrently with the
-      label classification), derive the tier, ``org_role`` and sources and clear
-      ``assessment.llm_status`` in one transaction.
+    * ``_on_questionnaire_done`` — once the questionnaire step is done (concurrently
+      with the classification run), persist ``assessment_sources`` and clear
+      ``assessment.llm_status`` so the UI shows answers immediately. No tier write.
+    * ``_on_classification_done`` — after both the classification run and
+      ``_on_questionnaire_done`` complete, call the hierarchy solver to derive
+      ``row.tier`` / ``org_role`` and freeze the dossier ``ai`` layer.
 
-    A failure of the questionnaire run or of ``_finalize_tier`` sets
-    ``llm_status="failed"`` (the frontend's retry banner); a failure of the label
-    classification is only logged by the pipeline (its output is not shown yet).
+    A failure of the questionnaire run, ``_on_questionnaire_done``, or
+    ``_on_classification_done`` sets ``llm_status="failed"`` (the frontend's retry
+    banner). A step-2 (classification) failure also sets ``llm_status="failed"``
+    (the owner retries via ``/open``).
     """
+
+    # Shared state: populated by _on_questionnaire_done, consumed by _on_classification_done.
+    # Safe: on_classification_done only runs after on_questionnaire_done completes.
+    _shared: dict = {}
 
     async def _on_batch(batch_results: list) -> None:
         """Persist one batch's answers into the existing question_states rows.
@@ -455,61 +463,60 @@ async def _run_prefill_background(
                 },
             )
 
-    async def _finalize_tier(questionnaire_output: dict) -> None:
-        """Tier step: classify from the persisted answers, then clear llm_status.
-
-        Raises on a classifier failure so the surrounding handler marks the
-        prefill failed (nothing is written, the next ``/open`` retries).
-        """
-        proposals = _proposals_from_results(
-            (questionnaire_output.get("result") or {}).get("results") or []
-        )
+    async def _on_questionnaire_done(questionnaire_output: dict) -> None:
+        """Persist assessment_sources, clear llm_status. No tier write here."""
+        results = (questionnaire_output.get("result") or {}).get("results") or []
+        proposals = _proposals_from_results(results)
+        _shared["results"] = results
+        _shared["consumed"] = questionnaire_output.get("consumed")
+        _shared["sources"] = [s.model_dump() for s in _sources_from_proposals(proposals)]
         async with SessionLocal() as session:
             row = await _get_system(session, system_id)
-            try:
-                classification, rationale = await classify_ai_questionnaire(row)
-            except Exception as exc:
-                logger.error("assessment.classify_failed", extra={"error": str(exc)})
-                raise
-            row.tier = classification.tier
-            row.basis = classification.basis
-            row.annex_iii_area = classification.annex_iii_area
-            row.classification_rationale = rationale
-            if rationale.get("org_role"):
-                row.org_role = rationale["org_role"]
-            row.assessment_sources = [
-                s.model_dump() for s in _sources_from_proposals(proposals)
-            ]
+            row.assessment_sources = _shared["sources"]
             assessment = await _current_assessment(session, system_id)
             if assessment:
                 assessment.llm_status = None
             await session.commit()
-            logger.info(
-                "assessment.prefill_completed",
-                extra={"system_id": system_id, "tier": row.tier},
-            )
+        logger.info(
+            "assessment.prefill_questionnaire_done",
+            extra={"system_id": system_id, "assessment_id": assessment_id},
+        )
 
-        # #366: freeze the AI output layer (per-question answers + proposed
-        # classification) into the dossier. Separate txn + own error handling so
-        # this append-only, write-once side-effect can never roll back the
-        # classification result committed above.
+    async def _on_classification_done(classification_output: dict) -> None:
+        """Tier step: solve the classification result, persist tier/org_role."""
+        result = solve(classification_output["result"], overrides=None)
+        tier = label_to_tier(result.risk.label_id)
+        org_role = org_role_from_roles(result.roles)
+        basis = result.risk.explanation or tier
+        async with SessionLocal() as session:
+            row = await _get_system(session, system_id)
+            row.tier = tier
+            if org_role is not None:
+                row.org_role = org_role
+            row.basis = basis
+            row.annex_iii_area = None
+            await session.commit()
+        logger.info(
+            "assessment.prefill_completed",
+            extra={"system_id": system_id, "tier": tier},
+        )
+        # #366: freeze the AI output layer. Separate txn + own error handling so
+        # this append-only, write-once side-effect never rolls back the tier commit.
         try:
             async with SessionLocal() as session:
                 await write_ai_output_in_session(
                     session,
                     assessment_id,
-                    (questionnaire_output.get("result") or {}).get("results") or [],
+                    _shared.get("results", []),
                     {
-                        "tier": classification.tier,
-                        "basis": classification.basis,
-                        "annex_iii_area": classification.annex_iii_area,
-                        "org_role": rationale.get("org_role"),
-                        "rationale": rationale,
-                        "assessment_sources": [
-                            s.model_dump() for s in _sources_from_proposals(proposals)
-                        ],
+                        "tier": tier,
+                        "basis": basis,
+                        "annex_iii_area": None,
+                        "org_role": org_role,
+                        "solver_result": result.model_dump(),
+                        "assessment_sources": _shared.get("sources", []),
                     },
-                    consumed=questionnaire_output.get("consumed"),
+                    consumed=_shared.get("consumed"),
                 )
                 await session.commit()
         except Exception as exc:  # noqa: BLE001
@@ -523,12 +530,23 @@ async def _run_prefill_background(
             )
 
     try:
-        await run_assessment_prefill_pipeline(
+        out = await run_assessment_prefill_pipeline(
             system_id,
             username,
             batch_callback=_on_batch,
-            on_questionnaire_done=_finalize_tier,
+            on_questionnaire_done=_on_questionnaire_done,
+            on_classification_done=_on_classification_done,
         )
+        if out.classification_error is not None:
+            logger.warning(
+                "assessment.prefill_classification_failed",
+                extra={"system_id": system_id, "error": str(out.classification_error)},
+            )
+            async with SessionLocal() as session:
+                assessment = await _current_assessment(session, system_id)
+                if assessment:
+                    assessment.llm_status = "failed"
+                await session.commit()
     except Exception as exc:  # noqa: BLE001
         logger.error(
             "assessment.prefill_background_failed",
