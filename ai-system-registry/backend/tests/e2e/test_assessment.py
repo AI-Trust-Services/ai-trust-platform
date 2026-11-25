@@ -116,6 +116,10 @@ async def test_open_prefills_from_questionnaire_pipeline(client: httpx.AsyncClie
 
     assert state["prefilled"] is True
     assert len(state["questions"]) > 1
+    # The e2e runs the offline stub, so the completed prefill is flagged as stub
+    # (drives the "no live LLM — contact admin" banner on the assessment screen).
+    assert state["prefill_stub"] is True
+    assert state["prefill_failed"] is False
     by_key = {q["question_key"]: q for q in state["questions"]}
     scope = by_key["Scope_1"]
     assert scope["answer"] == "NOT_ENOUGH_INFORMATION"
@@ -177,6 +181,29 @@ async def test_open_sets_prefill_failed_when_pipeline_fails(client: httpx.AsyncC
     state2 = await _open(client, system_id)
     assert state2["prefilled"] is True
     assert state2["prefill_failed"] is False
+
+
+@pytest.mark.asyncio
+async def test_reopen_reruns_a_stub_cycle(client: httpx.AsyncClient):
+    """A stub-prefilled cycle (no live LLM at run time) must re-run on re-open —
+    not be a dead-end. The e2e stub marks the first run llm_status='stub'; a second
+    /open re-schedules the pipeline (like 'failed'), so prefill_stub is cleared
+    while the retry is pending/running rather than returning the stale stub state."""
+    system_id = await _create_system(client)
+    state = await _open(client, system_id)
+    # Default e2e provider is the offline stub → this cycle is flagged stub.
+    assert state["prefilled"] is True
+    assert state["prefill_stub"] is True
+
+    # Re-open must re-trigger the background pipeline (clears the stub status to
+    # pending). Without the stub-retry fix this would no-op and stay stub.
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/open", headers=_hdr(_OWNER)
+    )
+    assert r.status_code == 200, r.text
+    # Immediately after re-open the cycle is being re-run, so it is no longer
+    # reported as a settled stub result.
+    assert r.json()["prefill_stub"] is False
 
 
 @pytest.mark.asyncio

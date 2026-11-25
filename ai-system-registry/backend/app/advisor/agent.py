@@ -174,18 +174,24 @@ class AdvisorDeps:
 # ---------------------------------------------------------------------------
 
 
-def _build_model():
-    """Build the Thalamus model, or ``None`` in stub mode (caller uses TestModel)."""
-    if llm_client._STUB_MODE:
+def _build_model(cfg: "llm_client.RuntimeConfig"):
+    """Build an OpenAIChatModel for the resolved provider, or ``None`` in stub mode.
+
+    The advisor resolves its provider **per turn** (``ask_advisor``) so a runtime
+    BYO config change — or, under ``jwt``, a different tenant — is picked up on the
+    next turn without rebuilding the agent. Returns ``None`` when the resolved
+    provider selects stub mode (the caller falls back to the agent's TestModel).
+    """
+    if cfg.stub:
         return None
     from pydantic_ai.models.openai import OpenAIChatModel
     from pydantic_ai.providers.openai import OpenAIProvider
 
     provider = OpenAIProvider(
-        base_url=llm_client.THALAMUS_BASE_URL,
-        api_key=llm_client.THALAMUS_BEARER_TOKEN or "none",
+        base_url=cfg.base_url,
+        api_key=cfg.api_token or "none",
     )
-    return OpenAIChatModel(llm_client.THALAMUS_MODEL, provider=provider)
+    return OpenAIChatModel(cfg.model, provider=provider)
 
 
 _tracing_ready = False
@@ -232,36 +238,40 @@ def _setup_tracing_once() -> None:
 
 
 def _build_agent():
-    """Construct the advisor Agent. Model is Thalamus (live) or TestModel (stub)."""
-    _setup_tracing_once()
-    model = _build_model()
-    if model is None:
-        from pydantic_ai.models.test import TestModel
+    """Construct the advisor Agent with the offline TestModel as its default.
 
-        # Deterministic offline model: calls both tools, then emits a fixed
-        # grounded answer so e2e tests exercise the whole loop without network.
-        model = TestModel(
-            custom_output_args={
-                "answer": (
-                    "Based on the system's documentation and the EU AI Act, this is a "
-                    "stub advisor answer for offline/CI mode."
-                ),
-                "sources": [
-                    {
-                        "kind": "document",
-                        "ref": "stub-document.pdf",
-                        "detail": "stub passage",
-                        "page": 1,
-                    },
-                    {
-                        "kind": "act",
-                        "ref": "Article 6 (high-risk classification)",
-                        "detail": "stub act reference",
-                        "page": None,
-                    },
-                ],
-            }
-        )
+    The default model is only used in stub mode; in live mode ``ask_advisor``
+    resolves the provider per turn and passes ``model=`` to ``agent.run()``, so
+    the agent object (tools + prompt) is a process singleton while the model is
+    chosen per turn.
+    """
+    _setup_tracing_once()
+    from pydantic_ai.models.test import TestModel
+
+    # Deterministic offline model: calls both tools, then emits a fixed
+    # grounded answer so e2e tests exercise the whole loop without network.
+    model = TestModel(
+        custom_output_args={
+            "answer": (
+                "Based on the system's documentation and the EU AI Act, this is a "
+                "stub advisor answer for offline/CI mode."
+            ),
+            "sources": [
+                {
+                    "kind": "document",
+                    "ref": "stub-document.pdf",
+                    "detail": "stub passage",
+                    "page": 1,
+                },
+                {
+                    "kind": "act",
+                    "ref": "Article 6 (high-risk classification)",
+                    "detail": "stub act reference",
+                    "page": None,
+                },
+            ],
+        }
+    )
 
     agent = Agent(
         model,
@@ -433,6 +443,15 @@ async def ask_advisor(
     """
     agent = _get_agent()
 
+    # Resolve the provider for THIS turn (BYO override or platform-default
+    # Thalamus; under jwt, the caller's tenant). A runtime config change is
+    # picked up on the next turn. Stub mode → None → agent's default TestModel.
+    cfg = await llm_client.resolve_runtime_config()
+    turn_model = _build_model(cfg)
+    run_kwargs: dict = {}
+    if turn_model is not None:
+        run_kwargs["model"] = turn_model
+
     prompt = _compose_prompt(message, transcript)
     usage_limits = UsageLimits(
         request_limit=_REQUEST_LIMIT,
@@ -443,7 +462,7 @@ async def ask_advisor(
     async def _run() -> AdvisorAnswer:
         try:
             result = await asyncio.wait_for(
-                agent.run(prompt, deps=deps, usage_limits=usage_limits),
+                agent.run(prompt, deps=deps, usage_limits=usage_limits, **run_kwargs),
                 timeout=_TIMEOUT_SECONDS,
             )
         except (UsageLimitExceeded, asyncio.TimeoutError) as exc:
