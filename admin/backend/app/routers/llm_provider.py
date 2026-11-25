@@ -224,6 +224,9 @@ async def update_llm_provider(
             row.api_token = body.api_token
             token_changed = True
         row.updated_by = username
+        # onupdate=func.now() only fires on Core UPDATEs, not ORM flushes, so set
+        # updated_at explicitly on every mutation (same pattern as platform_settings).
+        row.updated_at = datetime.now(timezone.utc)
         # Any config change invalidates a prior passing test and deactivates the
         # provider — activation must re-pass Test Connection.
         row.is_active = False
@@ -343,6 +346,9 @@ async def activate_llm_provider(
 
         row.is_active = True
         row.updated_by = username
+        # onupdate=func.now() only fires on Core UPDATEs, not ORM flushes, so set
+        # updated_at explicitly on every mutation (same pattern as platform_settings).
+        row.updated_at = datetime.now(timezone.utc)
         log_audit_event(
             session,
             actor=username,
@@ -370,6 +376,9 @@ async def deactivate_llm_provider(
             return _to_response(None)
         row.is_active = False
         row.updated_by = username
+        # onupdate=func.now() only fires on Core UPDATEs, not ORM flushes, so set
+        # updated_at explicitly on every mutation (same pattern as platform_settings).
+        row.updated_at = datetime.now(timezone.utc)
         log_audit_event(
             session,
             actor=username,

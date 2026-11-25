@@ -21,6 +21,12 @@ class LLMProviderConfig(Base):
 
     The token is stored plaintext and **never returned** by the admin GET
     endpoint (only ``has_token: bool``), matching ``platform_settings.smtp_password``.
+    Plaintext is intentional — the same approach as ``platform_settings.smtp_password``.
+    Column-level encryption would add key-management complexity for little real gain:
+    the row lives on the same DB instance as every other platform secret, and the
+    value is never returned over the API. Do not "harden" this to encrypted-at-rest
+    in isolation — it would break parity with the rest of the platform's secret
+    handling without closing a meaningful threat.
     """
 
     __tablename__ = "llm_provider_config"

@@ -15,13 +15,24 @@ import pytest
 pytestmark = pytest.mark.asyncio
 
 _BASE = "/v1/llm-provider"
-_OK_PROBE = AsyncMock(return_value=("ok", "Connection OK — model 'm' responded."))
-_FAIL_PROBE = AsyncMock(
-    return_value=("failed", "Authentication failed — check the API token.")
-)
-_RATE_LIMITED_PROBE = AsyncMock(
-    return_value=("rate_limited", "Rate limited by the provider (HTTP 429)...")
-)
+
+
+# Fresh probe mock per call — a shared module-level AsyncMock would accumulate
+# call state across the session and surprise any later call-count assertion.
+def _ok_probe() -> AsyncMock:
+    return AsyncMock(return_value=("ok", "Connection OK — model 'm' responded."))
+
+
+def _fail_probe() -> AsyncMock:
+    return AsyncMock(
+        return_value=("failed", "Authentication failed — check the API token.")
+    )
+
+
+def _rate_limited_probe() -> AsyncMock:
+    return AsyncMock(
+        return_value=("rate_limited", "Rate limited by the provider (HTTP 429)...")
+    )
 
 
 async def _put(client, **fields):
@@ -78,6 +89,25 @@ async def test_put_preserves_token_when_omitted(client):
     assert r.json()["model"] == "m2"
 
 
+async def test_updated_at_advances_on_each_mutation(client):
+    """updated_at must move forward on a subsequent PUT — onupdate=func.now() does
+    NOT fire on ORM flushes, so each handler sets it explicitly. The first-write
+    test only covers the server_default path; this guards the update path."""
+    first = (
+        await _put(
+            client, base_url="https://api.example.com/v1", model="m", api_token="t"
+        )
+    ).json()["updated_at"]
+    import asyncio
+
+    await asyncio.sleep(0.01)
+    second = (
+        await _put(client, base_url="https://api.example.com/v1", model="m2")
+    ).json()["updated_at"]
+    assert first is not None and second is not None
+    assert second > first  # advanced, not frozen at the first insert's value
+
+
 async def test_put_rejects_internal_url(client):
     r = await _put(
         client, base_url="http://169.254.169.254/v1", model="m", api_token="t"
@@ -102,7 +132,7 @@ async def test_activate_requires_a_passing_test(client):
 
 async def test_test_then_activate_flow(client):
     await _put(client, base_url="https://api.example.com/v1", model="m", api_token="t")
-    with patch("app.routers.llm_provider._probe", _OK_PROBE):
+    with patch("app.routers.llm_provider._probe", _ok_probe()):
         tr = await client.post(f"{_BASE}/test", json={})
     assert tr.json()["success"] is True
 
@@ -114,7 +144,7 @@ async def test_test_then_activate_flow(client):
 
 async def test_failed_test_blocks_activation(client):
     await _put(client, base_url="https://api.example.com/v1", model="m", api_token="t")
-    with patch("app.routers.llm_provider._probe", _FAIL_PROBE):
+    with patch("app.routers.llm_provider._probe", _fail_probe()):
         tr = await client.post(f"{_BASE}/test", json={})
     assert tr.json()["success"] is False
 
@@ -125,7 +155,7 @@ async def test_failed_test_blocks_activation(client):
 async def test_put_after_passing_test_reinvalidates(client):
     """Changing config after a passing test must reset activation + test status."""
     await _put(client, base_url="https://api.example.com/v1", model="m", api_token="t")
-    with patch("app.routers.llm_provider._probe", _OK_PROBE):
+    with patch("app.routers.llm_provider._probe", _ok_probe()):
         await client.post(f"{_BASE}/test", json={})
     await client.post(f"{_BASE}/activate")
 
@@ -143,7 +173,7 @@ async def test_put_after_passing_test_reinvalidates(client):
 
 async def test_deactivate_restores_default(client):
     await _put(client, base_url="https://api.example.com/v1", model="m", api_token="t")
-    with patch("app.routers.llm_provider._probe", _OK_PROBE):
+    with patch("app.routers.llm_provider._probe", _ok_probe()):
         await client.post(f"{_BASE}/test", json={})
     await client.post(f"{_BASE}/activate")
 
@@ -177,7 +207,7 @@ async def test_scratch_test_of_unsaved_values_does_not_mark_saved_row(client):
     await _put(
         client, base_url="https://saved.example.com/v1", model="saved", api_token="t"
     )
-    with patch("app.routers.llm_provider._probe", _OK_PROBE):
+    with patch("app.routers.llm_provider._probe", _ok_probe()):
         r = await client.post(
             f"{_BASE}/test",
             json={
@@ -199,7 +229,7 @@ async def test_test_of_saved_values_marks_the_row_and_enables_activation(client)
     await _put(
         client, base_url="https://saved.example.com/v1", model="saved", api_token="t"
     )
-    with patch("app.routers.llm_provider._probe", _OK_PROBE):
+    with patch("app.routers.llm_provider._probe", _ok_probe()):
         # Explicit matching values also count as "the saved config".
         r = await client.post(
             f"{_BASE}/test",
@@ -216,7 +246,7 @@ async def test_test_of_saved_values_marks_the_row_and_enables_activation(client)
 async def _activate(client):
     """Put + pass test + activate a provider so /health has something to probe."""
     await _put(client, base_url="https://api.example.com/v1", model="m", api_token="t")
-    with patch("app.routers.llm_provider._probe", _OK_PROBE):
+    with patch("app.routers.llm_provider._probe", _ok_probe()):
         await client.post(f"{_BASE}/test", json={})
     await client.post(f"{_BASE}/activate")
 
@@ -229,7 +259,7 @@ async def test_health_inactive_returns_null_ok(client):
 
 async def test_health_active_healthy(client):
     await _activate(client)
-    with patch("app.routers.llm_provider._probe", _OK_PROBE):
+    with patch("app.routers.llm_provider._probe", _ok_probe()):
         r = await client.get(f"{_BASE}/health")
     body = r.json()
     assert body["active"] is True
@@ -238,7 +268,7 @@ async def test_health_active_healthy(client):
 
 async def test_health_active_broken(client):
     await _activate(client)
-    with patch("app.routers.llm_provider._probe", _FAIL_PROBE):
+    with patch("app.routers.llm_provider._probe", _fail_probe()):
         r = await client.get(f"{_BASE}/health")
     body = r.json()
     assert body["active"] is True
@@ -250,7 +280,7 @@ async def test_health_does_not_mutate_or_reset_activation(client):
     """A failing /health probe must NOT flip last_test_status or deactivate —
     unlike /test it is read-only, so a page-load probe can't churn state."""
     await _activate(client)
-    with patch("app.routers.llm_provider._probe", _FAIL_PROBE):
+    with patch("app.routers.llm_provider._probe", _fail_probe()):
         await client.get(f"{_BASE}/health")
     cfg = (await client.get(_BASE)).json()
     assert cfg["is_active"] is True  # still active
@@ -316,13 +346,13 @@ async def test_rate_limited_test_does_not_block_activation(client):
     it later passes — the 429 must not record last_test_status='failed'."""
     await _put(client, base_url="https://api.example.com/v1", model="m", api_token="t")
     # Rate-limited test: reports failure to the user but does NOT mark the row.
-    with patch("app.routers.llm_provider._probe", _RATE_LIMITED_PROBE):
+    with patch("app.routers.llm_provider._probe", _rate_limited_probe()):
         r = await client.post(f"{_BASE}/test", json={})
     assert r.json()["success"] is False  # user sees "retry" message
     cfg = (await client.get(_BASE)).json()
     assert cfg["last_test_status"] is None  # NOT "failed" — activation not blocked
     # A later successful test still unlocks activation.
-    with patch("app.routers.llm_provider._probe", _OK_PROBE):
+    with patch("app.routers.llm_provider._probe", _ok_probe()):
         await client.post(f"{_BASE}/test", json={})
     assert (await client.post(f"{_BASE}/activate")).status_code == 200
 
@@ -331,8 +361,8 @@ async def test_rate_limited_does_not_clear_a_prior_pass(client):
     """If the config already passed, a later rate-limited probe must not downgrade
     last_test_status to 'failed'."""
     await _put(client, base_url="https://api.example.com/v1", model="m", api_token="t")
-    with patch("app.routers.llm_provider._probe", _OK_PROBE):
+    with patch("app.routers.llm_provider._probe", _ok_probe()):
         await client.post(f"{_BASE}/test", json={})
-    with patch("app.routers.llm_provider._probe", _RATE_LIMITED_PROBE):
+    with patch("app.routers.llm_provider._probe", _rate_limited_probe()):
         await client.post(f"{_BASE}/test", json={})
     assert (await client.get(_BASE)).json()["last_test_status"] == "ok"
