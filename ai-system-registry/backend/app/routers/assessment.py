@@ -11,7 +11,6 @@ its transaction (``async with SessionLocal()``), per the repo convention.
 
 from __future__ import annotations
 
-import asyncio
 import json
 from datetime import datetime, timezone
 from typing import Any
@@ -540,51 +539,6 @@ async def _run_prefill_background(
             if assessment:
                 assessment.llm_status = "failed"
             await session.commit()
-
-
-# Strong references to startup-sweep tasks so they are not GC-collected before
-# they complete. Each task removes itself on done.
-_sweep_tasks: set[asyncio.Task] = set()
-
-
-async def sweep_stale_prefills() -> int:
-    """Re-schedule prefill pipelines orphaned by a pod restart.
-
-    FastAPI BackgroundTasks are in-memory — a restart between POST /open and the
-    pipeline's terminal llm_status write leaves the assessment stuck on "pending"
-    forever. On pod boot we find every such row and re-run its prefill. This is
-    safe because the old pod (and its in-process task) is already gone when the
-    new pod starts; there is nothing to collide with.
-
-    Returns the number of assessments recovered. Only covers the current Postgres
-    schema (single-tenant deployments); in jwt multi-tenant mode this sweep runs
-    with no tenant context (public schema only) — a known limitation.
-    """
-    async with SessionLocal() as session:
-        result = await session.execute(
-            select(Assessment, AISystem)
-            .join(AISystem, AISystem.id == Assessment.ai_system_id)
-            .where(
-                Assessment.llm_status == "pending",
-                Assessment.status != "inactive",
-            )
-        )
-        rows = result.all()
-
-    for assessment, system in rows:
-        user = _system_owner(system) or "svc-prefill-recovery"
-        task = asyncio.create_task(
-            _run_prefill_background(system.id, assessment.id, user)
-        )
-        _sweep_tasks.add(task)
-        task.add_done_callback(_sweep_tasks.discard)
-        logger.info(
-            "assessment.prefill_resweep",
-            extra={"system_id": system.id, "assessment_id": assessment.id},
-        )
-
-    logger.info("assessment.prefill_sweep", extra={"recovered": len(rows)})
-    return len(rows)
 
 
 @router.post(
