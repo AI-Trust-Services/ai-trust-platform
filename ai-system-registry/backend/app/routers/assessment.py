@@ -42,6 +42,7 @@ from app.assessment_catalogue import (
 from app.assessment_prefill_pipeline import run_assessment_prefill_pipeline
 from app.dossier import create_dossier_in_session, write_ai_output_in_session
 from app.hierarchy_solver import label_to_tier, org_role_from_roles, solve
+from app.schemas.hierarchy_solver import LabelOverrides
 from app.ids import new_id
 from app.llm import LLMParseError
 from app.questionnaire_gating import get_all_gated_question_ids, is_gated
@@ -495,6 +496,7 @@ async def _run_prefill_background(
                 row.org_role = org_role
             row.basis = basis
             row.annex_iii_area = None
+            row.classification_rationale = classification_output["result"]
             await session.commit()
         logger.info(
             "assessment.prefill_completed",
@@ -988,7 +990,34 @@ async def confirm_question(
         state.confirmed_at = datetime.now(timezone.utc)
         state.confirmed_by = user
         await session.commit()
-        return ConfirmResponse(question_key=question_key, confirmed=True)
+
+    # Re-solve with manual overrides so tier reflects the latest confirmed answers.
+    # Runs outside the confirm session to keep the confirm txn minimal.
+    if row.classification_rationale:
+        async with SessionLocal() as resession:
+            all_states = await _states_by_key(resession, assessment.id)
+        manual_answers: dict[str, list[str]] = {}
+        for key, st in all_states.items():
+            if st.answer_source == "manual" and st.answer:
+                try:
+                    parsed = json.loads(st.answer)
+                    manual_answers[key] = parsed if isinstance(parsed, list) else [st.answer]
+                except Exception:
+                    manual_answers[key] = [st.answer]
+        if manual_answers:
+            overrides = LabelOverrides(answers=manual_answers)
+            result = solve(row.classification_rationale, overrides)
+            tier = label_to_tier(result.risk.label_id)
+            org_role = org_role_from_roles(result.roles)
+            async with SessionLocal() as session:
+                row = await _get_system(session, system_id)
+                row.tier = tier
+                if org_role is not None:
+                    row.org_role = org_role
+                row.basis = result.risk.explanation or tier
+                await session.commit()
+
+    return ConfirmResponse(question_key=question_key, confirmed=True)
 
 
 @router.post(
