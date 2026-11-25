@@ -10,7 +10,6 @@ import type {
   BrandingUpdate,
   BrandingStatus,
   BrandingPublishResponse,
-  ExternalApiToken,
   LLMProvider,
   LLMProviderHealth,
   LLMProviderUpdate,
@@ -78,9 +77,6 @@ export const api = {
 
   getStats: (): Promise<AdminStats> =>
     request<AdminStats>("/stats"),
-
-  getExternalApiToken: (): Promise<ExternalApiToken> =>
-    request<ExternalApiToken>("/external-api/token"),
 
   // ── Branding ─────────────────────────────────────────────────────────────
 

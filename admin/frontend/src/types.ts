@@ -99,12 +99,6 @@ export interface BrandingPublishResponse {
   published_by: string;
 }
 
-export interface ExternalApiToken {
-  configured: boolean;
-  token: string | null;
-  service_principal: string;
-}
-
 // Bring-your-own-LLM provider (issue #406)
 export interface LLMProvider {
   base_url: string | null;
