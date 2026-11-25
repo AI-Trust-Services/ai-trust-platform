@@ -1,0 +1,33 @@
+{{/* Background worker, no HTTP port — claims pending assessments from Postgres and
+     runs the LLM prefill pipeline. Uses SELECT … FOR UPDATE SKIP LOCKED so the
+     Deployment can safely scale to >1 replica without double-scheduling. */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: assessment-prefill-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ai-trust.labels" (dict "name" "assessment-prefill-worker") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-trust.labels" (dict "name" "assessment-prefill-worker") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.jobWaiter }}
+      {{- include "ai-trust.imagePullSecrets" . | nindent 6 }}
+      initContainers:
+        # Wait for the DB migration Job to complete before the worker starts polling.
+        {{- include "ai-trust.waitForJob" (dict "job" "db-migrate" "rev" .Release.Revision "image" .Values.waitImages.kubectl) | nindent 8 }}
+      containers:
+        - name: assessment-prefill-worker
+          image: {{ .Values.image.repository }}/assessment-prefill-worker:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secretName }} } # DATABASE_URL, THALAMUS_*, MINIO_*, etc.
+          env:
+            - name: PREFILL_POLL_INTERVAL
+              value: {{ .Values.prefillWorker.pollInterval | quote }}
+            - name: ALLOWED_ORIGINS
+              value: "http://localhost" # not an HTTP server — satisfies the env-var check at import time

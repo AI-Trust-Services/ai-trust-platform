@@ -106,6 +106,9 @@ auditFlush:
   interval: "5"
   batchSize: "500"
 
+prefillWorker:
+  pollInterval: "30"
+
 # ── Document indexing (document-indexing-backend/-worker + embedding-service) ──
 # backend + worker use image.repository/<name>:image.tag like every other built
 # image; embedding-service loads the embedModel once and is shared by both.

@@ -75,6 +75,7 @@ build policy-checker-worker . policy-checker-worker/Dockerfile
 build embedding-service . embedding-service/Dockerfile
 build document-indexing-backend . document-indexing/backend/Dockerfile
 build document-indexing-worker . document-indexing-worker/Dockerfile
+build assessment-prefill-worker . assessment-prefill-worker/Dockerfile
 build otel-clickhouse-consumer . consumers/clickhouse-consumer/Dockerfile
 build openfga-provision . infra/openfga-provision/Dockerfile
 
