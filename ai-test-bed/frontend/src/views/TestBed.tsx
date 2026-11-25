@@ -69,8 +69,8 @@ const TIER_LABEL: Record<string, string> = {
   "gpai-systemic": "GPAI Systemic",
   "gpai-standard": "GPAI Standard",
   high: "High Risk",
-  limited: "Limited Risk",
-  minimal: "Minimal Risk",
+  transparency: "AI System with Transparency Obligations",
+  minimal_no: "Minimal or No Risk AI System",
   pending: "Pending",
 };
 

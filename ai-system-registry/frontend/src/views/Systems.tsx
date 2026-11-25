@@ -75,8 +75,8 @@ const RISK_OPTIONS: { label: string; value: string }[] = [
   { label: "Pending", value: "pending" },
   { label: "Prohibited practice", value: "prohibited" },
   { label: "High risk", value: "high" },
-  { label: "Transparency Obligations", value: "limited" },
-  { label: "Minimal or No Risk", value: "minimal" },
+  { label: "Transparency Obligations", value: "transparency" },
+  { label: "Minimal or No Risk", value: "minimal_no" },
 ];
 const ROLE_OPTIONS: { label: string; value: string }[] = [
   { label: "TBD", value: "__tbd__" },

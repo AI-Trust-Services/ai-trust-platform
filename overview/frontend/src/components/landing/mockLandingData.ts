@@ -91,7 +91,7 @@ export const MOCK_MY_SYSTEMS: MySystemRow[] = [
   {
     id: "SYS-DEMO-03",
     name: "Customer Support Chatbot",
-    tier: "limited",
+    tier: "transparency",
     workflow_status: "technical_pending",
     is_chatbot: true,
     generates_synthetic_content: true,

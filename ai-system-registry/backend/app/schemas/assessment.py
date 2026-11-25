@@ -210,7 +210,7 @@ class SubmitRequest(BaseModel):
 # ── Compliance Officer end view (#348) ───────────────────────────────────────
 
 # Tiers the CO may issue, and the only allowed companion.
-ISSUABLE_TIERS = frozenset({"minimal", "limited", "high", "prohibited"})
+ISSUABLE_TIERS = frozenset({"minimal_no", "transparency", "high", "prohibited"})
 
 
 class IssueRequest(BaseModel):

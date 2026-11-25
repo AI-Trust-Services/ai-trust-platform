@@ -38,8 +38,8 @@ VALID_TIERS = frozenset(
         "gpai-systemic",
         "gpai-standard",
         "high",
-        "limited",
-        "minimal",
+        "transparency",
+        "minimal_no",
         "pending",
     }
 )

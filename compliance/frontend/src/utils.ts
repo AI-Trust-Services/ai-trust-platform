@@ -52,13 +52,24 @@ export const CONTROL_CATEGORIES: string[] = [
   "incident_response", "general",
 ];
 
-export const EVIDENCE_TYPES: string[] = ["document", "code", "function_is_used"];
+export const EVIDENCE_TYPES: string[] = [
+  "document", "policy_document", "technical_doc", "test_report",
+  "monitoring_data", "approval_record", "audit_log", "training_record",
+  "certificate", "screenshot", "api_log",
+];
 
-// Display labels for evidence types (humanize would render "Function Is Used").
 export const EVIDENCE_TYPE_LABELS: Record<string, string> = {
   document: "Document",
-  code: "Code",
-  function_is_used: "Function is used",
+  policy_document: "Policy Document",
+  technical_doc: "Technical Doc",
+  test_report: "Test Report",
+  monitoring_data: "Monitoring Data",
+  approval_record: "Approval Record",
+  audit_log: "Audit Log",
+  training_record: "Training Record",
+  certificate: "Certificate",
+  screenshot: "Screenshot",
+  api_log: "API Log",
 };
 
 export function evidenceTypeLabel(t: string | null | undefined): string {

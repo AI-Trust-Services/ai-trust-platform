@@ -3,7 +3,7 @@ export interface AlertEvent {
   rule_id: string;
   rule_name: string;
   category: "risk" | "compliance" | "observability" | "registry";
-  severity: "error" | "warning" | "info";
+  severity: "error" | "warning";
   alert_type: "event" | "threshold";
   description: string;
   value_at_trigger: number | null;
@@ -20,7 +20,7 @@ export interface AlertRule {
   id: string;
   name: string;
   category: "risk" | "compliance" | "observability" | "registry";
-  severity: "error" | "warning" | "info";
+  severity: "error" | "warning";
   description: string;
   condition_type: string;
   threshold: number | null;

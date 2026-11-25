@@ -14,11 +14,17 @@ interface Props {
 
 const CATEGORIES = ["risk", "compliance", "observability", "registry"] as const;
 
+const CATEGORY_LABELS: Record<string, string> = {
+  risk: "Not Compliant",
+  compliance: "Not Compliant",
+  observability: "Potential Compliance Issue",
+  registry: "Potential Compliance Issue",
+};
+
 // ── Identity color map — severity encodes meaning; keep exact hues ──
 const SEV_CLASS: Record<string, string> = {
   error: "bg-[#fde8e8] text-[#8b0000]",
   warning: "bg-[#fff3c4] text-[#7a5900]",
-  info: "bg-muted text-muted-foreground",
 };
 
 export function AlertRules({ rules, onRefresh }: Props) {
@@ -47,7 +53,7 @@ export function AlertRules({ rules, onRefresh }: Props) {
       {CATEGORIES.filter((cat) => grouped[cat].length > 0).map((cat) => (
         <div key={cat}>
           <div className="mt-1 px-0.5 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            {cat}
+          {CATEGORY_LABELS[cat] ?? cat}
           </div>
           <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(380px,1fr))]">
             {grouped[cat].map((r) => (

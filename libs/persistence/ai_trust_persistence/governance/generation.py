@@ -51,7 +51,7 @@ async def generate_obligations_in_session(
 
     if (
         assessment.framework_id == "FRM-EU-AI-ACT"
-        and system.tier in ("high", "limited")
+        and system.tier in ("high", "transparency")
         and org_role not in ("provider", "deployer", "both")
     ):
         # Only provider/deployer (and their union, "both") obligation sets are

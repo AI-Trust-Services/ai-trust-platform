@@ -121,18 +121,18 @@ def classify(body: Any) -> ClassificationResult:
                 annex_iii_area=area_num,
             )
 
-    # Art. 50 — limited risk
+    # Art. 50 — transparency risk
     if body.is_chatbot or body.generates_synthetic_content:
         return ClassificationResult(
-            tier="limited",
-            basis="Limited-risk under EU AI Act Art. 50 (transparency obligations)",
+            tier="transparency",
+            basis="Transparency obligations under EU AI Act Art. 50",
             obligations=_LIMITED_OBLIGATIONS,
         )
 
-    # Minimal risk
+    # Minimal or no risk
     return ClassificationResult(
-        tier="minimal",
-        basis="Minimal risk — no mandatory obligations under EU AI Act",
+        tier="minimal_no",
+        basis="Minimal or no risk — no mandatory obligations under EU AI Act",
         obligations=[],
     )
 

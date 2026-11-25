@@ -1,4 +1,4 @@
-export type TierKey = "prohibited" | "gpai-systemic" | "gpai-standard" | "high" | "limited" | "minimal" | "pending";
+export type TierKey = "prohibited" | "gpai-systemic" | "gpai-standard" | "high" | "transparency" | "minimal_no" | "pending";
 export type LifecycleKey = "development" | "testing" | "prod_ready" | "market" | "service" | "updated" | "decommissioned";
 export type OrgRole = "provider" | "deployer" | "both" | "importer" | "distributor" | "authorised_representative";
 export type SystemType = "application" | "model" | "component" | "service";

@@ -246,7 +246,7 @@ ENGINEER_TARGET_FIELDS: list[dict[str, str]] = [
     {
         "key": "lifecycle",
         "label": "Lifecycle State",
-        "hint": "One of: development, testing, conformity, market.",
+        "hint": "One of: development, testing, prod_ready, market, service, updated, decommissioned.",
     },
     {
         "key": "autonomy_level",
