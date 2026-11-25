@@ -173,6 +173,9 @@ async def delete_file(key: str) -> None:
 
 
 def _list_latest_classification_sync(system_id: str, config_id: str) -> Any:
+    # writer stores under the config id's basename (classification_pipeline.config_id_short);
+    # mirror that here so a nested config id ("risk_classification/foo") still matches.
+    config_id = os.path.basename(config_id)
     prefix = f"classification-results/{system_id}/{config_id}/"
     objects = list(_get_client().list_objects(BUCKET, prefix=prefix))
     if not objects:
