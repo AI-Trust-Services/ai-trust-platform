@@ -140,8 +140,7 @@ async def test_open_prefills_from_questionnaire_pipeline(client: httpx.AsyncClie
         )
         assert q["answer"] == expected, q["question_key"]
     assert all(q["confidence"] is None for q in state["questions"])
-    # Null confidence → not auto-confirmed.
-    # High/medium confidence answers from a real LLM would be auto-confirmed.
+    # Null confidence → not confirmed (humans must confirm explicitly).
     assert all(not q["confirmed"] for q in state["questions"])
     assert all(not q["owner_confirmed"] for q in state["questions"])
     # Nothing was established, so every question is flagged for review — a
@@ -270,6 +269,136 @@ async def test_open_is_idempotent(client: httpx.AsyncClient):
     second = await _open(client, system_id)
     confirmed = {q["question_key"]: q["confirmed"] for q in second["questions"]}
     assert confirmed[qkey] is True
+
+
+@pytest.mark.asyncio
+async def test_high_confidence_answers_are_not_auto_confirmed(
+    client: httpx.AsyncClient,
+):
+    """Regression guard for issue #439: AI-prefilled answers with high or medium
+    confidence must NOT be auto-confirmed. The confidence band is stored, but
+    confirmed_at/confirmed_by are only set by an explicit human action.
+
+    The stub returns NOT_ENOUGH_INFORMATION (null confidence) so this test patches
+    parse_with_retry to inject a HIGH-strength YES answer for Scope_1 and a
+    MEDIUM-strength YES answer for Scope_3, letting the real _on_batch /
+    _proposals_from_results path run with both confidence bands.
+    """
+    system_id = await _create_system(client)
+
+    # Inject HIGH confidence on Scope_1 and MEDIUM confidence on Scope_3 (both are
+    # PREDEFINED questions with the same allowedAnswers). Each is in its own
+    # dependency group so they land in separate batch calls; the patch intercepts
+    # each batch independently.
+    _scope_1_result = {
+        "results": [
+            {
+                "questionId": "Scope_1",
+                "question": "Is your system an AI system within the meaning of the AI Act?",
+                "questionType": "PREDEFINED",
+                "answer": [
+                    {
+                        "value": "YES",
+                        "answerStrength": "HIGH",
+                        "reason": "The system matches the EU AI Act definition.",
+                    }
+                ],
+                "explanation": "High-confidence answer injected by test fixture.",
+                "references": [],
+            },
+        ]
+    }
+    _scope_3_result = {
+        "results": [
+            {
+                "questionId": "Scope_3",
+                "question": (
+                    "Is the AI System used by a public authority of a third country "
+                    "OR an international organisation?"
+                ),
+                "questionType": "PREDEFINED",
+                "answer": [
+                    {
+                        "value": "NO",
+                        "answerStrength": "MEDIUM",
+                        "reason": "No indication of third-country public authority use.",
+                    }
+                ],
+                "explanation": "Medium-confidence answer injected by test fixture.",
+                "references": [],
+            },
+        ]
+    }
+
+    original_parse = None
+
+    async def _patched_parse_with_retry(
+        text, *, task, validator, chat_fn, messages, **kw
+    ):
+        # Intercept batches containing Scope_1 or Scope_3 to inject confidence bands;
+        # fall through to the real stub for all other batches.
+        import json as _json
+
+        try:
+            block = (
+                messages[-1]["content"]
+                .split("Questionnaire Configuration:\n", 1)[1]
+                .split("\n\nProvided Evidence:", 1)[0]
+            )
+            question_ids = [q["id"] for q in _json.loads(block).get("questions", [])]
+        except (IndexError, ValueError, KeyError):
+            question_ids = []
+
+        if "Scope_1" in question_ids:
+            return _scope_1_result
+        if "Scope_3" in question_ids:
+            return _scope_3_result
+
+        return await original_parse(
+            text,
+            task=task,
+            validator=validator,
+            chat_fn=chat_fn,
+            messages=messages,
+            **kw,
+        )
+
+    import app.questionnaire_pipeline as _qp
+
+    original_parse = _qp.parse_with_retry
+
+    with patch(
+        "app.questionnaire_pipeline.parse_with_retry", new=_patched_parse_with_retry
+    ):
+        state = await _open(client, system_id)
+
+    by_key = {q["question_key"]: q for q in state["questions"]}
+    scope_1 = by_key["Scope_1"]
+    scope_3 = by_key["Scope_3"]
+
+    # Both confidence bands are written — the pipeline ran the injected paths.
+    assert scope_1["confidence"] == "high", "expected high confidence band on Scope_1"
+    assert scope_1["answer"] == "YES", "expected YES answer on Scope_1"
+    assert scope_1["answer_source"] == "ai_prefilled"
+
+    assert scope_3["confidence"] == "medium", (
+        "expected medium confidence band on Scope_3"
+    )
+    assert scope_3["answer"] == "NO", "expected NO answer on Scope_3"
+    assert scope_3["answer_source"] == "ai_prefilled"
+
+    # No question must be auto-confirmed regardless of confidence band (#439).
+    assert not scope_1["confirmed"], (
+        "Scope_1 must NOT be auto-confirmed despite high confidence"
+    )
+    assert not scope_1["owner_confirmed"], "owner_confirmed must be False for Scope_1"
+    assert not scope_3["confirmed"], (
+        "Scope_3 must NOT be auto-confirmed despite medium confidence"
+    )
+    assert not scope_3["owner_confirmed"], "owner_confirmed must be False for Scope_3"
+    assert all(not q["confirmed"] for q in state["questions"]), (
+        "no AI-prefilled answer should be auto-confirmed"
+    )
 
 
 # ── mandatory-comment-on-change confirm gate ─────────────────────────────────
