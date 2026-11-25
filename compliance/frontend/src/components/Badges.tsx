@@ -32,8 +32,8 @@ const TIER_CLASSES: Record<string, string> = {
   high:            "bg-[#fff7ed] text-[#c2410c]",
   "gpai-systemic": "bg-[#f0e8ff] text-[#4108A0]",
   "gpai-standard": "bg-[#f4edff] text-[#6C1AF4]",
-  limited:         "bg-[#fffbeb] text-[#b45309]",
-  minimal:         "bg-[#f0fdf4] text-[#15803d]",
+  transparency:    "bg-[#fffbeb] text-[#b45309]",
+  minimal_no:      "bg-[#f0fdf4] text-[#15803d]",
 };
 
 interface TierBadgeProps { tier: string; }
@@ -43,8 +43,8 @@ export function TierBadge({ tier }: TierBadgeProps) {
     high: "High Risk",
     "gpai-systemic": "GPAI with Systemic Risk",
     "gpai-standard": "GPAI Standard",
-    limited: "Transparency Obligations",
-    minimal: "Minimal or No Risk",
+    transparency: "Transparency Obligations",
+    minimal_no: "Minimal or No Risk",
   };
   return (
     <Badge className={cn("rounded-full gap-1.5 font-semibold", TIER_CLASSES[tier] ?? "bg-muted text-muted-foreground")}>
