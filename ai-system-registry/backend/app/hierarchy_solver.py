@@ -186,3 +186,33 @@ def solve(
     ]
 
     return ResolveResponse(risk=risk, roles=roles)
+
+
+# ---------------------------------------------------------------------------
+# DB-persist helpers (used by assessment router for Prefill + Per-Confirm)
+# ---------------------------------------------------------------------------
+
+_LABEL_TO_TIER: dict[str, str] = {
+    "PROHIBITED": "prohibited",
+    "HIGH_RISK": "high",
+    "TRANSPARENCY": "limited",
+    "MINIMAL": "minimal",
+}
+
+
+def label_to_tier(label_id: str) -> str:
+    """Map a solver risk-winner labelId to a DB tier string."""
+    return _LABEL_TO_TIER[label_id]
+
+
+def org_role_from_roles(roles: list[ResolvedLabel]) -> str | None:
+    """Derive org_role from the solver's role labels."""
+    has_provider = any(r.label_id == "PROVIDER" and r.result for r in roles)
+    has_deployer = any(r.label_id == "DEPLOYER" and r.result for r in roles)
+    if has_provider and has_deployer:
+        return "both"
+    if has_provider:
+        return "provider"
+    if has_deployer:
+        return "deployer"
+    return None

@@ -108,3 +108,58 @@ def test_answer_override_revives_skipped_high_risk_supported_operator():
 
     assert resp.risk.label_id == "HIGH_RISK"
     assert resp.risk.result is True
+
+
+# ---------------------------------------------------------------------------
+# A1: label_to_tier + org_role_from_roles
+# ---------------------------------------------------------------------------
+
+def test_label_to_tier_all_cases():
+    assert hierarchy_solver.label_to_tier("PROHIBITED") == "prohibited"
+    assert hierarchy_solver.label_to_tier("HIGH_RISK") == "high"
+    assert hierarchy_solver.label_to_tier("TRANSPARENCY") == "limited"
+    assert hierarchy_solver.label_to_tier("MINIMAL") == "minimal"
+
+
+def test_label_to_tier_unknown_raises():
+    import pytest
+    with pytest.raises(KeyError):
+        hierarchy_solver.label_to_tier("GPAI")
+
+
+def test_org_role_both():
+    from app.schemas.hierarchy_solver import ResolvedLabel
+    roles = [
+        ResolvedLabel(label_id="PROVIDER", result=True, source="pipeline", confidence=90.0, confidence_band="High", explanation=None),
+        ResolvedLabel(label_id="DEPLOYER", result=True, source="pipeline", confidence=80.0, confidence_band="High", explanation=None),
+    ]
+    assert hierarchy_solver.org_role_from_roles(roles) == "both"
+
+
+def test_org_role_provider_only():
+    from app.schemas.hierarchy_solver import ResolvedLabel
+    roles = [
+        ResolvedLabel(label_id="PROVIDER", result=True, source="pipeline", confidence=90.0, confidence_band="High", explanation=None),
+        ResolvedLabel(label_id="DEPLOYER", result=False, source="pipeline", confidence=70.0, confidence_band="High", explanation=None),
+    ]
+    assert hierarchy_solver.org_role_from_roles(roles) == "provider"
+
+
+def test_org_role_deployer_only():
+    from app.schemas.hierarchy_solver import ResolvedLabel
+    roles = [
+        ResolvedLabel(label_id="DEPLOYER", result=True, source="pipeline", confidence=85.0, confidence_band="High", explanation=None),
+    ]
+    assert hierarchy_solver.org_role_from_roles(roles) == "deployer"
+
+
+def test_org_role_none():
+    from app.schemas.hierarchy_solver import ResolvedLabel
+    roles = [
+        ResolvedLabel(label_id="PROVIDER", result=False, source="pipeline", confidence=50.0, confidence_band="Low", explanation=None),
+    ]
+    assert hierarchy_solver.org_role_from_roles(roles) is None
+
+
+def test_org_role_empty():
+    assert hierarchy_solver.org_role_from_roles([]) is None
