@@ -98,3 +98,43 @@ export interface BrandingPublishResponse {
   published_at: string;
   published_by: string;
 }
+
+// Bring-your-own-LLM provider (issue #406)
+export interface LLMProvider {
+  base_url: string | null;
+  model: string | null;
+  has_token: boolean;
+  is_active: boolean;
+  last_test_status: string | null;
+  last_test_message: string | null;
+  last_tested_at: string | null;
+  updated_at: string | null;
+  updated_by: string | null;
+  // False when no live LLM is configured (Thalamus stub/unset) and no BYO active:
+  // AI workflows return placeholder output.
+  platform_default_live: boolean;
+}
+
+export interface LLMProviderUpdate {
+  base_url?: string | null;
+  model?: string | null;
+  api_token?: string | null;
+}
+
+export interface LLMProviderTestRequest {
+  base_url?: string | null;
+  model?: string | null;
+  api_token?: string | null;
+}
+
+export interface LLMProviderTestResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface LLMProviderHealth {
+  active: boolean;
+  ok: boolean | null;
+  message: string | null;
+}
+
