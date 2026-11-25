@@ -7,7 +7,7 @@ optional. Unknown keys are ignored.
 ```json
 [
   { "name": "Fraud scoring model", "tier": "high", "annex_iii_area": 5, "org_role": "deployer" },
-  { "name": "Internal chatbot", "is_chatbot": true, "tier": "limited" }
+  { "name": "Internal chatbot", "is_chatbot": true, "tier": "transparency" }
 ]
 ```
 
@@ -42,7 +42,7 @@ optional. Unknown keys are ignored.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `tier` | enum | `"pending"` if absent | EU AI Act risk tier. One of `prohibited`, `gpai-systemic`, `gpai-standard`, `high`, `limited`, `minimal`, `pending`. **Taken verbatim from the source — the classifier does not run on import.** A record with no `tier` is created as a `pending` stub. |
+| `tier` | enum | `"pending"` if absent | EU AI Act risk tier. One of `prohibited`, `gpai-systemic`, `gpai-standard`, `high`, `transparency`, `minimal_no`, `pending`. **Taken verbatim from the source — the classifier does not run on import.** A record with no `tier` is created as a `pending` stub. |
 | `basis` | string | `""` | Human-readable basis for the tier. |
 | `annex_iii_area` | integer (1–8) | `null` | Annex III high-risk area number. |
 

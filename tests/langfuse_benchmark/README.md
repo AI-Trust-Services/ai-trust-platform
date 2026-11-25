@@ -22,7 +22,7 @@ experiment run, scored per risk tier).
    `tier_closeness` (ordinal distance), and run-level `multiclass_metrics`
    (accuracy + per-tier precision/recall/F1 + macro averages, via scikit-learn).
 
-The classifier can emit six tiers (`minimal`, `limited`, `gpai-standard`, `gpai-systemic`,
+The classifier can emit six tiers (`minimal_no`, `transparency`, `gpai-standard`, `gpai-systemic`,
 `high`, `prohibited`); the scenarios' ground truth uses only four, but a prediction may be
 `gpai-*`, so `RISK_TIERS` covers all six and such a prediction is scored as a mismatch
 rather than crashing the ordinal/sklearn evaluators.
