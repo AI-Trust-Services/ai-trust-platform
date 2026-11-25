@@ -37,12 +37,12 @@ evidence_requirements = Table(
 
 
 class Evidence(Base):
-    """An artifact proving a control is implemented.
+    """An artifact proving a requirement is fulfilled.
 
     Links to requirements via evidence_requirements. Obligations are derived from
-    linked controls, never linked directly. When a file is uploaded it is
+    linked requirements, never linked directly. When a file is uploaded it is
     stored in MinIO; file_path is the object key within the evidence bucket.
-    Approving evidence cascades to control effectiveness.
+    Approving evidence cascades to requirement fulfillment.
     """
 
     __tablename__ = "evidence"

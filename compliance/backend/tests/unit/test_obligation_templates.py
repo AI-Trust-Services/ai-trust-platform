@@ -61,7 +61,7 @@ def test_eu_high_risk_has_required_fields():
         assert ob["article_ref"]
         assert ob["cluster_id"]
         # Clusters carry no description of their own — descriptive text lives on
-        # the requirement-level controls, not the obligation.
+        # the requirement-level requirements, not the obligation.
         assert "description" not in ob
 
 
@@ -108,35 +108,35 @@ def test_eu_high_both_is_union_of_provider_and_deployer():
 
 
 def test_eu_limited_both_is_union_of_provider_and_deployer():
-    both = obligations_for("FRM-EU-AI-ACT", "limited", "both")
-    provider = obligations_for("FRM-EU-AI-ACT", "limited", "provider")
-    deployer = obligations_for("FRM-EU-AI-ACT", "limited", "deployer")
+    both = obligations_for("FRM-EU-AI-ACT", "transparency", "both")
+    provider = obligations_for("FRM-EU-AI-ACT", "transparency", "provider")
+    deployer = obligations_for("FRM-EU-AI-ACT", "transparency", "deployer")
     assert len(both) == len(provider) + len(deployer) == 3
 
 
 def test_eu_limited_provider_count():
-    obs = obligations_for("FRM-EU-AI-ACT", "limited")
+    obs = obligations_for("FRM-EU-AI-ACT", "transparency")
     assert len(obs) == 2
 
 
 def test_eu_limited_deployer_count():
-    obs = obligations_for("FRM-EU-AI-ACT", "limited", "deployer")
+    obs = obligations_for("FRM-EU-AI-ACT", "transparency", "deployer")
     assert len(obs) == 1
 
 
 def test_eu_limited_provider_article_refs():
-    refs = {ob["article_ref"] for ob in obligations_for("FRM-EU-AI-ACT", "limited")}
+    refs = {ob["article_ref"] for ob in obligations_for("FRM-EU-AI-ACT", "transparency")}
     assert "Art. 50 EU AI Act" in refs
 
 
 def test_eu_limited_provider_includes_all_risk_cluster():
-    # P-REG carries a "Risk = All" requirement, so it applies at limited risk too.
-    ids = {ob["cluster_id"] for ob in obligations_for("FRM-EU-AI-ACT", "limited")}
+    # P-REG carries a "Risk = All" requirement, so it applies at transparency risk too.
+    ids = {ob["cluster_id"] for ob in obligations_for("FRM-EU-AI-ACT", "transparency")}
     assert "P-REG" in ids
 
 
 def test_eu_limited_importer_is_empty():
-    assert obligations_for("FRM-EU-AI-ACT", "limited", "importer") == []
+    assert obligations_for("FRM-EU-AI-ACT", "transparency", "importer") == []
 
 
 # ---------------------------------------------------------------------------

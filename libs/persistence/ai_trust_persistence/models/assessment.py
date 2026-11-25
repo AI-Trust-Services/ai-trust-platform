@@ -14,7 +14,7 @@ class Assessment(Base):
 
     Assessments are the entry point into the governance lifecycle: they
     auto-generate obligations (from the system's risk tier), which are satisfied
-    by controls and demonstrated by evidence. Multiple assessments may exist per
+    by requirements and demonstrated by evidence. Multiple assessments may exist per
     (ai_system_id, framework_id); the most recent by created_at is the current
     one. Once approved, an assessment is immutable (see routers/assessments.py).
     """

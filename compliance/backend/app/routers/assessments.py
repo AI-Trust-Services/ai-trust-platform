@@ -230,7 +230,7 @@ async def advance_from_classification(assessment_id: str) -> AssessmentResponse:
                 422, "System tier is still pending — complete risk classification first"
             )
 
-        # Idempotent: only generate obligations/controls on the first advance. A
+        # Idempotent: only generate obligations/requirements on the first advance. A
         # bounce-back (CO reject / request-info) reopens the assessment and re-runs
         # this endpoint on resubmit — regenerating here would duplicate every row.
         existing = (
@@ -284,7 +284,7 @@ async def reopen_assessment(assessment_id: str) -> AssessmentResponse:
     frontend, after the registry workflow is already bounced back to a *_pending
     state). The row-click gate opens the editable questionnaire only for
     questionnaire_pending assessments, so this reopens the section for the owner
-    to edit. Obligations/controls are left intact — advance-from-classification is
+    to edit. Obligations/requirements are left intact — advance-from-classification is
     idempotent, so the eventual resubmit reuses them rather than duplicating.
 
     Gated on ASSESSMENTS_WRITE (which the compliance officer holds) — SYSTEMS_WRITE

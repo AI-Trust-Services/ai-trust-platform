@@ -13,9 +13,9 @@ class Obligation(Base):
 
     Defines *what* must be achieved (e.g. "Enable human oversight" / Art. 14).
     Auto-generated when an assessment's obligations are generated, or created
-    manually. Status is recalculated automatically from linked controls (see
-    cascade.py): applicable -> in_progress (control linked) -> fulfilled (all
-    linked controls effective).
+    manually. Status is recalculated automatically from linked requirements (see
+    cascade.py): applicable -> in_progress (requirement linked) -> fulfilled (all
+    linked requirements fulfilled).
     """
 
     __tablename__ = "obligations"

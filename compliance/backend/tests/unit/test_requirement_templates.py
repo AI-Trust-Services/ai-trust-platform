@@ -22,8 +22,8 @@ from app.schemas.requirement import VALID_REQUIREMENT_CATEGORIES
 def test_all_applies_to_every_tier():
     for tier in (
         "high",
-        "limited",
-        "minimal",
+        "transparency",
+        "minimal_no",
         "prohibited",
         "gpai-standard",
         "gpai-systemic",
@@ -41,8 +41,8 @@ def test_high_risk_matches_high_only():
 
 
 def test_limited_tokens():
-    assert _tier_allows("Limited", "limited")
-    assert not _tier_allows("Limited-Risk", "limited")
+    assert _tier_allows("Limited", "transparency")
+    assert not _tier_allows("Limited-Risk", "transparency")
     assert not _tier_allows("Limited", "high")
 
 
@@ -59,8 +59,8 @@ def test_gpai_systemic_is_superset_of_standard():
 
 
 def test_minimal_allows_only_all():
-    assert not _tier_allows("High-Risk", "minimal")
-    assert _tier_allows("All", "minimal")
+    assert not _tier_allows("High-Risk", "minimal_no")
+    assert _tier_allows("All", "minimal_no")
 
 
 def test_unknown_tier_allows_only_all():
@@ -158,13 +158,13 @@ def test_both_collects_provider_and_deployer_requirements():
 
 def test_all_risk_cluster_applies_at_limited_tier():
     # P-REG carries a "Risk = All" requirement, so at least one requirement survives
-    # at the limited tier too.
-    assert len(requirements_for("P-REG", "limited", "provider")) == 1
+    # at the transparency tier too.
+    assert len(requirements_for("P-REG", "transparency", "provider")) == 1
 
 
 def test_limited_transparency_requirements():
-    assert len(requirements_for("P-LIM", "limited", "provider")) == 2
-    assert len(requirements_for("D-LIM", "limited", "deployer")) == 4
+    assert len(requirements_for("P-LIM", "transparency", "provider")) == 2
+    assert len(requirements_for("D-LIM", "transparency", "deployer")) == 4
 
 
 def test_requirements_have_required_fields():
@@ -251,8 +251,8 @@ def test_every_eu_obligation_has_requirements_at_its_tier_and_role():
         "gpai-systemic",
         "gpai-standard",
         "high",
-        "limited",
-        "minimal",
+        "transparency",
+        "minimal_no",
     ):
         for role in ("provider", "deployer"):
             for ob in obligations_for("FRM-EU-AI-ACT", tier, role):

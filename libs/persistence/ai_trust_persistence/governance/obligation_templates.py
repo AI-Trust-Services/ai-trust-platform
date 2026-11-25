@@ -22,7 +22,7 @@ from ai_trust_persistence.governance.requirement_templates import requirements_f
 # --- EU AI Act: High / Limited obligation clusters ---------------------------
 # Display metadata only. article_ref is the primary article shown for the cluster;
 # whether a cluster is applicable to a (tier, org_role) is decided by whether its
-# controls survive the filter, not by any field here. Titles are the cluster names
+# requirements survive the filter, not by any field here. Titles are the cluster names
 # from the "Obligation" column of the AI Act Requirements catalogue verbatim; for
 # the clusters the catalogue leaves unnamed, a concise title is derived from the
 # cluster's theme. Clusters carry no description of their own — the catalogue
@@ -202,7 +202,7 @@ def obligations_for(
     """Return the obligation template list for a framework + risk tier + org_role.
 
     For the EU AI Act at High/Limited tiers, obligation clusters are emitted only
-    when at least one of their controls survives the (tier, org_role) filter — so
+    when at least one of their requirements survives the (tier, org_role) filter — so
     provider systems get the provider set, deployer systems get the deployer set,
     a "both" system gets the union of the two, and unsupported roles
     (importer/distributor) get an empty list.

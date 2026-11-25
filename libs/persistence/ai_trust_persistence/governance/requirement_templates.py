@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import re
 
-# Which source risk tokens apply to each assessment tier. A control is generated
+# Which source risk tokens apply to each assessment tier. A requirement is generated
 # for a tier if its risk is "All" or shares any token here. The tokens come from
 # the AI Act Requirements catalogue.
 _TIER_RISK_CATEGORIES: dict[str, set[str]] = {
@@ -880,7 +880,7 @@ def _role_allows(role: str | None, org_role: str) -> bool:
 
     EU AI Act templates carry an explicit "provider"/"deployer" role. An org_role
     of "both" (the org both develops and uses the system) matches either, so it
-    collects the union of the provider + deployer controls. Any other explicit
+    collects the union of the provider + deployer requirements. Any other explicit
     org_role matches only its own role — there is no fallback (importer/distributor
     match nothing). A template without a `role` (None) applies to any org_role.
     """
