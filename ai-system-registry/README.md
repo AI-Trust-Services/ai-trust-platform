@@ -8,8 +8,8 @@ EU AI Act compliance registry — register AI systems, get automatic risk classi
 - **Classifies** each system automatically into one of four EU AI Act risk tiers:
   - `prohibited` — Art. 5 systems (subliminal manipulation, social scoring, etc.)
   - `high` — Annex III systems (biometrics, credit scoring, law enforcement, etc.)
-  - `limited` — chatbots and synthetic content generators
-  - `minimal` — everything else
+  - `transparency` — chatbots and synthetic content generators
+  - `minimal_no` — everything else
 - **Tracks model cards** for the underlying AI models (provider, version, capabilities)
 - **Links** systems to their model cards
 
