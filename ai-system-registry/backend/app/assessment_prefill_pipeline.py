@@ -43,6 +43,7 @@ from app.classification_pipeline import (
     DEFAULT_CLASSIFICATION_PROMPT_ID,
     run_classification,
 )
+from app.llm.client import resolve_runtime_config
 from app.questionnaire_pipeline import (
     DEFAULT_QUESTIONNAIRE_ID,
     DEFAULT_QUESTIONNAIRE_PROMPT_ID,
@@ -82,6 +83,12 @@ async def run_assessment_prefill_pipeline(
     Raises whatever step 1 or ``on_questionnaire_done`` raises; a step-2 failure
     is returned in ``PrefillOutput.classification_error`` (see module docstring).
     """
+    # Resolve the LLM provider ONCE for the entire prefill run and pin it across
+    # BOTH the questionnaire and classification steps, so the whole assessment is
+    # produced by a single provider/model even if an admin changes the BYO config
+    # mid-run. The dossier records this one model for the run.
+    run_config = await resolve_runtime_config()
+
     # Step 1 — questionnaire run.
     questionnaire = await run_questionnaire_pipeline(
         system_id=system_id,
@@ -89,6 +96,7 @@ async def run_assessment_prefill_pipeline(
         prompt_id=questionnaire_prompt_id,
         username=username,
         batch_callback=batch_callback,
+        config=run_config,
     )
 
     async def _done_hook() -> None:
@@ -102,6 +110,7 @@ async def run_assessment_prefill_pipeline(
             questionnaire_run_key=questionnaire["run_key"],
             classification_config_id=classification_config_id,
             prompt_id=classification_prompt_id,
+            provider_config=run_config,
         ),
         _done_hook(),
         return_exceptions=True,

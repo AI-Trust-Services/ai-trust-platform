@@ -59,6 +59,56 @@ class SmtpTestResponse(BaseModel):
     message: str
 
 
+# --- LLM provider (bring-your-own-LLM, issue #406) -------------------------
+
+
+class LLMProviderResponse(BaseModel):
+    """Current config — the token is NEVER returned, only ``has_token``."""
+
+    base_url: str | None
+    model: str | None
+    has_token: bool
+    is_active: bool
+    last_test_status: str | None
+    last_test_message: str | None
+    last_tested_at: str | None
+    updated_at: str | None
+    updated_by: str | None
+    # False when the platform-default Thalamus is stub/unset — i.e. with no active
+    # BYO provider, AI workflows return placeholder output (admin UI warns).
+    platform_default_live: bool
+
+
+class LLMProviderUpdate(BaseModel):
+    base_url: str | None = None
+    model: str | None = None
+    # Omit / send empty to preserve the stored token (mirrors SMTP password).
+    api_token: str | None = None
+
+
+class LLMProviderTestRequest(BaseModel):
+    """Test a *candidate* config before activating it. Any field omitted falls
+    back to the stored row, so an admin can re-test the saved config too."""
+
+    base_url: str | None = None
+    model: str | None = None
+    api_token: str | None = None
+
+
+class LLMProviderTestResponse(BaseModel):
+    success: bool
+    message: str
+
+
+class LLMProviderHealthResponse(BaseModel):
+    """Read-only liveness of the ACTIVE provider — probes without auditing or
+    writing status. ``ok`` is null when no provider is active (nothing to check)."""
+
+    active: bool
+    ok: bool | None
+    message: str | None
+
+
 class GeneralSettingsResponse(BaseModel):
     platform_name: str
     support_email: str | None

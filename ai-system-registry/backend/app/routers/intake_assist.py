@@ -40,6 +40,7 @@ from app.llm import (
     chat,
     parse_json_response,
 )
+from app.llm.client import resolve_runtime_config
 from app.schemas import (
     AssistExtractResponse,
     AssistTurnRequest,
@@ -142,15 +143,23 @@ async def _run_assist_extract(
     except DocumentParseError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    # Resolve the provider once so we can choose the right model for images.
+    # THALAMUS_VISION_MODEL is a Thalamus-specific model id — forcing it onto a
+    # BYO provider (which serves a single model under "single model for everything")
+    # would 502. Use the vision model only for the Thalamus default; for BYO, let
+    # the provider's own model handle the image (model=None).
+    cfg = await resolve_runtime_config()
     if doc.is_image:
         messages = build_messages_fn(image_b64=doc.image_b64, media_type=doc.media_type)
-        model = THALAMUS_VISION_MODEL
+        model = THALAMUS_VISION_MODEL if cfg.source == "thalamus" else None
     else:
         messages = build_messages_fn(parsed_text=doc.text)
         model = None
 
     try:
-        result = await chat(messages, model=model, json_mode=True, task=task)
+        result = await chat(
+            messages, model=model, json_mode=True, task=task, config=cfg
+        )
         parsed = await parse_json_response(result["text"], task=task)
     except (LLMParseError, Exception) as exc:  # noqa: BLE001
         logger.error(

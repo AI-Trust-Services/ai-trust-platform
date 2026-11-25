@@ -471,7 +471,12 @@ async def _run_prefill_background(
             ]
             assessment = await _current_assessment(session, system_id)
             if assessment:
-                assessment.llm_status = None
+                # A completed run that ran on the offline stub produced no real
+                # analysis (every answer is NOT_ENOUGH_INFORMATION). Mark it
+                # "stub" instead of clearing so the UI can warn the owner to
+                # contact an admin; a real run clears to None as before.
+                provider = questionnaire_output.get("provider") or {}
+                assessment.llm_status = "stub" if provider.get("stub") else None
             await session.commit()
             logger.info(
                 "assessment.prefill_completed",
@@ -499,6 +504,7 @@ async def _run_prefill_background(
                         ],
                     },
                     consumed=questionnaire_output.get("consumed"),
+                    provider=questionnaire_output.get("provider"),
                 )
                 await session.commit()
         except Exception as exc:  # noqa: BLE001
@@ -557,8 +563,13 @@ async def open_assessment(
         assessment = await _ensure_assessment(session, row)
         existing = await _states_by_key(session, assessment.id)
         if existing:
-            # Retry after a background failure: clear llm_status and re-schedule.
-            if assessment.llm_status == "failed":
+            # Retry after a background failure OR a stub run: clear llm_status and
+            # re-schedule. "stub" means the cycle was never really analysed (no live
+            # LLM at the time), so re-opening once a provider is configured must
+            # re-run the prefill — same rationale as "failed". Without this a stub
+            # cycle is a dead-end (stuck on the "contact admin" banner) even after a
+            # provider is activated; the only escape would be starting a new cycle.
+            if assessment.llm_status in ("failed", "stub"):
                 assessment.llm_status = "pending"
                 await session.commit()
                 background_tasks.add_task(
@@ -773,6 +784,7 @@ async def _build_state(
         prefilled=bool(states),
         prefill_pending=assessment.llm_status == "pending",
         prefill_failed=assessment.llm_status == "failed",
+        prefill_stub=assessment.llm_status == "stub",
     )
 
 

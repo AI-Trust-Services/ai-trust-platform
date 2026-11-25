@@ -4,6 +4,7 @@ import { AlertTriangle, ChevronLeft, Save } from "lucide-react";
 import { useAssessment } from "./AssessmentApp";
 import { ORDERED_QUESTION_KEYS } from "./AssessmentSidebar";
 import { api } from "../../api/client";
+import { isGated } from "../../config/aiQuestionnaire";
 import { cn } from "@/lib/utils";
 
 /** Owner "Submit to compliance officer" screen (Figma 575:5832). Reached from the
@@ -17,11 +18,22 @@ export default function AssessmentSubmitPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Gated (dependent) questions can never be confirmed, so they must be excluded
+  // from the submit gate — mirrors the backend /submit gate and AssessmentApp's
+  // allConfirmed, which the sidebar Finalize button already keys off.
+  const currentAnswers = Object.fromEntries(
+    state.questions.map((q) => [q.question_key, q.answer ?? null]),
+  );
   const stillAssigned = state.questions.filter(
-    (q) => q.assignee_username && !q.owner_confirmed,
+    (q) =>
+      q.assignee_username &&
+      !q.owner_confirmed &&
+      !isGated(q.question_key, currentAnswers),
   ).length;
   const unconfirmed = ORDERED_QUESTION_KEYS.filter(
-    (k) => !state.questions.find((q) => q.question_key === k)?.owner_confirmed,
+    (k) =>
+      !isGated(k, currentAnswers) &&
+      !state.questions.find((q) => q.question_key === k)?.owner_confirmed,
   ).length;
   const lastQuestionKey = ORDERED_QUESTION_KEYS[ORDERED_QUESTION_KEYS.length - 1];
 
