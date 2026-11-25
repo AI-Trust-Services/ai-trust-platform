@@ -253,12 +253,16 @@ async def test_high_confidence_answers_are_not_auto_confirmed(
     confirmed_at/confirmed_by are only set by an explicit human action.
 
     The stub returns NOT_ENOUGH_INFORMATION (null confidence) so this test patches
-    parse_with_retry to inject a HIGH-strength YES answer for Scope_1, letting the
-    real _on_batch / _proposals_from_results path run with a high-confidence answer.
+    parse_with_retry to inject a HIGH-strength YES answer for Scope_1 and a
+    MEDIUM-strength YES answer for Scope_3, letting the real _on_batch /
+    _proposals_from_results path run with both confidence bands.
     """
     system_id = await _create_system(client)
 
-    _high_confidence_result = {
+    # Inject HIGH confidence on Scope_1 and MEDIUM confidence on Scope_3 (both are
+    # PREDEFINED questions with the same allowedAnswers). Scope_3 is in the same
+    # dependency group as Scope_1 so they land in the same batch call.
+    _mixed_confidence_result = {
         "results": [
             {
                 "questionId": "Scope_1",
@@ -273,7 +277,24 @@ async def test_high_confidence_answers_are_not_auto_confirmed(
                 ],
                 "explanation": "High-confidence answer injected by test fixture.",
                 "references": [],
-            }
+            },
+            {
+                "questionId": "Scope_3",
+                "question": (
+                    "Is the AI System used by a public authority of a third country "
+                    "OR an international organisation?"
+                ),
+                "questionType": "PREDEFINED",
+                "answer": [
+                    {
+                        "value": "NO",
+                        "answerStrength": "MEDIUM",
+                        "reason": "No indication of third-country public authority use.",
+                    }
+                ],
+                "explanation": "Medium-confidence answer injected by test fixture.",
+                "references": [],
+            },
         ]
     }
 
@@ -282,7 +303,7 @@ async def test_high_confidence_answers_are_not_auto_confirmed(
     async def _patched_parse_with_retry(
         text, *, task, validator, chat_fn, messages, **kw
     ):
-        # Return the HIGH-confidence result only for the batch that contains Scope_1;
+        # Return the mixed-confidence result for the batch containing Scope_1;
         # fall through to the real implementation for all other batches.
         import json as _json
 
@@ -297,9 +318,7 @@ async def test_high_confidence_answers_are_not_auto_confirmed(
             question_ids = []
 
         if "Scope_1" in question_ids:
-            # Validate only the Scope_1 entry so the real validator accepts it;
-            # skip the others in this fake single-question result.
-            return _high_confidence_result
+            return _mixed_confidence_result
 
         return await original_parse(
             text,
@@ -321,17 +340,26 @@ async def test_high_confidence_answers_are_not_auto_confirmed(
 
     by_key = {q["question_key"]: q for q in state["questions"]}
     scope_1 = by_key["Scope_1"]
+    scope_3 = by_key["Scope_3"]
 
-    # The confidence band is written — the pipeline ran the high-confidence path.
+    # Both confidence bands are written — the pipeline ran the injected paths.
     assert scope_1["confidence"] == "high", "expected high confidence band on Scope_1"
     assert scope_1["answer"] == "YES", "expected YES answer on Scope_1"
     assert scope_1["answer_source"] == "ai_prefilled"
+
+    assert scope_3["confidence"] == "medium", "expected medium confidence band on Scope_3"
+    assert scope_3["answer"] == "NO", "expected NO answer on Scope_3"
+    assert scope_3["answer_source"] == "ai_prefilled"
 
     # No question must be auto-confirmed regardless of confidence band (#439).
     assert not scope_1["confirmed"], (
         "Scope_1 must NOT be auto-confirmed despite high confidence"
     )
-    assert not scope_1["owner_confirmed"], "owner_confirmed must be False"
+    assert not scope_1["owner_confirmed"], "owner_confirmed must be False for Scope_1"
+    assert not scope_3["confirmed"], (
+        "Scope_3 must NOT be auto-confirmed despite medium confidence"
+    )
+    assert not scope_3["owner_confirmed"], "owner_confirmed must be False for Scope_3"
     assert all(not q["confirmed"] for q in state["questions"]), (
         "no AI-prefilled answer should be auto-confirmed"
     )
