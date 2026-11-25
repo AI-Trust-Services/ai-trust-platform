@@ -347,7 +347,9 @@ async def test_high_confidence_answers_are_not_auto_confirmed(
     assert scope_1["answer"] == "YES", "expected YES answer on Scope_1"
     assert scope_1["answer_source"] == "ai_prefilled"
 
-    assert scope_3["confidence"] == "medium", "expected medium confidence band on Scope_3"
+    assert scope_3["confidence"] == "medium", (
+        "expected medium confidence band on Scope_3"
+    )
     assert scope_3["answer"] == "NO", "expected NO answer on Scope_3"
     assert scope_3["answer_source"] == "ai_prefilled"
 
