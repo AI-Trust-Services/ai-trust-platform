@@ -6,8 +6,18 @@ import { ORDERED_QUESTION_KEYS } from "./AssessmentSidebar";
 import { api } from "../../api/client";
 import { TIER_META } from "../../utils";
 import { cn } from "@/lib/utils";
-import type { ResolveResponse } from "../../types";
 
+// ═══════════════════════════════════════════════════════════════════════════
+// TODO(high+transparency) — KNOWN GAP, CURRENTLY IGNORED
+// The hierarchy solver returns a SINGLE risk winner, so it CANNOT represent the
+// one stacked combo the registry treats specially: high-risk + Art. 50
+// transparency (the "dual risk label"). If HIGH_RISK wins, TRANSPARENCY drops
+// out of the solver output entirely, and this mapping maps it away. We IGNORE
+// the stacked case here — the CO's transparency checkbox is handled
+// independently at issue time (co_issued_transparency). A real fix needs a
+// solver output that carries the transparency flag ALONGSIDE the risk winner.
+// See docs/bugs/co-view-high-transparency-not-representable-in-solver.md
+// ═══════════════════════════════════════════════════════════════════════════
 function mapLabelToTier(labelId: string | undefined): string {
   if (labelId === "HIGH_RISK") return "high";
   if (labelId === "PROHIBITED") return "prohibited";
@@ -16,15 +26,6 @@ function mapLabelToTier(labelId: string | undefined): string {
   return "";
 }
 
-function deriveOrgRole(roles: ResolveResponse["roles"] | undefined): string | undefined {
-  if (!roles) return undefined;
-  const hasProvider = roles.some((r) => r.labelId === "PROVIDER" && r.result);
-  const hasDeployer = roles.some((r) => r.labelId === "DEPLOYER" && r.result);
-  if (hasProvider && hasDeployer) return "both";
-  if (hasProvider) return "provider";
-  if (hasDeployer) return "deployer";
-  return undefined;
-}
 
 // Tiers the CO may issue (the dropdown options). gpai-* are not CO-issuable.
 const ISSUABLE: { value: string; label: string }[] = [
@@ -81,7 +82,6 @@ export default function CoIssueView() {
         transparency: transparencyAllowed && transparency,
         note: note.trim() || undefined,
         confirmed,
-        org_role: deriveOrgRole(solverResult?.roles),
       });
       navigate(`/systems/${id}`);
     } catch (e) {

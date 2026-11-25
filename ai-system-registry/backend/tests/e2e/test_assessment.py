@@ -1444,11 +1444,12 @@ async def test_swagger_pipelines_match_what_the_assessment_start_ran(
 
 
 @pytest.mark.asyncio
-async def test_issue_with_org_role_persists_to_system_and_assessment(
+async def test_issue_org_role_comes_from_solver_not_issue_body(
     client: httpx.AsyncClient,
 ):
-    """CO passes org_role in the issue body → written to ai_systems.org_role before
-    the snapshot, so both the live row and the frozen assessment carry the value."""
+    """org_role is derived by the solver during prefill/confirm — the issue body
+    no longer accepts it. Any org_role field in the payload is silently ignored
+    and the solver-derived value is preserved on the system and assessment rows."""
     from ai_trust_persistence.database import engine
     from ai_trust_persistence.models.ai_system import AISystem
     from ai_trust_persistence.models.assessment import Assessment
@@ -1456,6 +1457,12 @@ async def test_issue_with_org_role_persists_to_system_and_assessment(
     from sqlalchemy.ext.asyncio import AsyncSession
 
     system_id = await _submit_as_owner(client)
+
+    async with AsyncSession(engine) as s:
+        before = (await s.execute(select(AISystem).where(AISystem.id == system_id))).scalar_one()
+        org_role_before = before.org_role
+
+    # Pass a bogus org_role — must be silently ignored.
     r = await client.post(
         f"/v1/systems/{system_id}/assessment/issue",
         json={"tier": "high", "transparency": True, "confirmed": True, "org_role": "both"},
@@ -1465,7 +1472,7 @@ async def test_issue_with_org_role_persists_to_system_and_assessment(
 
     async with AsyncSession(engine) as s:
         sys_row = (await s.execute(select(AISystem).where(AISystem.id == system_id))).scalar_one()
-        assert sys_row.org_role == "both"
+        assert sys_row.org_role == org_role_before
         assessment = (
             await s.execute(
                 select(Assessment)
@@ -1473,7 +1480,7 @@ async def test_issue_with_org_role_persists_to_system_and_assessment(
                 .where(Assessment.status == "approved")
             )
         ).scalar_one()
-        assert assessment.org_role == "both"
+        assert assessment.org_role == org_role_before
 
 
 @pytest.mark.asyncio
