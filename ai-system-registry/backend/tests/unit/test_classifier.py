@@ -39,7 +39,7 @@ def _base(**overrides) -> object:
 
 def test_minimal_risk():
     result = classify(_base())
-    assert result.tier == "minimal"
+    assert result.tier == "minimal_no"
     assert result.obligations == []
     assert result.annex_iii_area is None
 
@@ -153,15 +153,15 @@ def test_high_risk_takes_priority_over_limited():
 
 def test_limited_chatbot():
     result = classify(_base(is_chatbot=True))
-    assert result.tier == "limited"
+    assert result.tier == "transparency"
     assert "Art. 50" in result.basis
 
 
 def test_limited_synthetic_content():
     result = classify(_base(generates_synthetic_content=True))
-    assert result.tier == "limited"
+    assert result.tier == "transparency"
 
 
 def test_limited_both_flags():
     result = classify(_base(is_chatbot=True, generates_synthetic_content=True))
-    assert result.tier == "limited"
+    assert result.tier == "transparency"

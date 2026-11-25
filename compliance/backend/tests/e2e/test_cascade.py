@@ -35,7 +35,7 @@ from app.ids import new_id
 # ---------------------------------------------------------------------------
 
 
-async def _system(session: AsyncSession, tier: str = "minimal") -> AISystem:
+async def _system(session: AsyncSession, tier: str = "minimal_no") -> AISystem:
     row = AISystem(id=new_id("SYS"), name="Cascade Test System", tier=tier)
     session.add(row)
     await session.flush()

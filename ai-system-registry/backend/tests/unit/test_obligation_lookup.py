@@ -49,5 +49,5 @@ def test_unknown_tier_returns_empty_list():
 def test_non_catalogue_tiers_return_empty_list():
     """The AI Act Requirements catalogue covers only High/Limited risk, so the
     RCE panel shows no obligations for prohibited/GPAI/minimal tiers."""
-    for tier in ("prohibited", "gpai-standard", "gpai-systemic", "minimal"):
+    for tier in ("prohibited", "gpai-standard", "gpai-systemic", "minimal_no"):
         assert obligations_for_tier(tier, org_role="both") == []

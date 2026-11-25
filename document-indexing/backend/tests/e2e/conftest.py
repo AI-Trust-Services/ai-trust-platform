@@ -199,7 +199,7 @@ async def system_id(client):
                 name="Test System for Document Indexing",
                 version="1.0.0",
                 provider="Test Provider",
-                tier="limited",
+                tier="transparency",
             )
         )
         await session.commit()

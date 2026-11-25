@@ -36,7 +36,7 @@ def test_high_risk_matches_high_only():
     # from the old AISEC-* library are no longer recognised).
     assert _tier_allows("High", "high")
     assert not _tier_allows("High-Risk", "high")
-    assert not _tier_allows("High", "minimal")
+    assert not _tier_allows("High", "minimal_no")
     assert not _tier_allows("High", "prohibited")
 
 

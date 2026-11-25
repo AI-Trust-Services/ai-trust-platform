@@ -80,7 +80,7 @@ async def test_evaluate_chatbot_returns_minimal_or_limited(client: httpx.AsyncCl
     )
     assert r.status_code == 200
     body = r.json()
-    assert body["tier"] in ("minimal", "limited", "high")  # stub may vary
+    assert body["tier"] in ("minimal_no", "transparency", "high")  # stub may vary
     assert "rationale" in body
 
 
@@ -141,8 +141,8 @@ async def test_evaluate_empty_answers_returns_minimal(client: httpx.AsyncClient)
     assert r.status_code == 200
     body = r.json()
     assert body["tier"] in (
-        "minimal",
-        "limited",
+        "minimal_no",
+        "transparency",
         "high",
         "prohibited",
         "gpai-standard",

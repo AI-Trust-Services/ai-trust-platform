@@ -82,7 +82,7 @@ async def test_bounce_back_reject_and_resubmit(owner, compliance):
     # CO issues.
     r = await compliance.post(
         f"/api/registry/v1/systems/{sid}/assessment/issue",
-        json={"tier": "minimal", "confirmed": True},
+        json={"tier": "minimal_no", "confirmed": True},
     )
     assert r.status_code == 200, f"issue failed: {r.status_code} {r.text[:300]}"
     r = await owner.get(f"/api/registry/v1/systems/{sid}")

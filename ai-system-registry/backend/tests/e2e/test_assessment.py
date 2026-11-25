@@ -830,7 +830,7 @@ async def test_co_transparency_only_with_high(client: httpx.AsyncClient):
     # transparency + a non-high tier is rejected (the combo rule).
     r = await client.post(
         f"/v1/systems/{system_id}/assessment/issue",
-        json={"tier": "minimal", "transparency": True, "confirmed": True},
+        json={"tier": "minimal_no", "transparency": True, "confirmed": True},
         headers=_hdr(_CO),
     )
     assert r.status_code == 422, r.text
@@ -1055,7 +1055,7 @@ async def test_issue_minimal_tier_generates_no_obligations(
     system_id = await _submit_as_owner(client)
     r = await client.post(
         f"/v1/systems/{system_id}/assessment/issue",
-        json={"tier": "minimal", "confirmed": True},
+        json={"tier": "minimal_no", "confirmed": True},
         headers=_hdr(_CO),
     )
     assert r.status_code == 200, r.text

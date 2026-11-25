@@ -30,7 +30,7 @@ async def test_import_valid_classified_system_approved(client: httpx.AsyncClient
     records = [
         {"name": "Fraud model", "tier": "high", "annex_iii_area": 5},
         {"name": "HR screening tool", "tier": "high", "is_employment_related": True},
-        {"name": "Internal chatbot", "tier": "limited", "is_chatbot": True},
+        {"name": "Internal chatbot", "tier": "transparency", "is_chatbot": True},
     ]
     r = await client.post(
         "/v1/intake/batch",
@@ -51,7 +51,7 @@ async def test_import_valid_classified_system_approved(client: httpx.AsyncClient
     assert items["Fraud model"]["tier"] == "high"
     assert items["Fraud model"]["annex_iii_area"] == 5
     assert items["HR screening tool"]["is_employment_related"] is True
-    assert items["Internal chatbot"]["tier"] == "limited"
+    assert items["Internal chatbot"]["tier"] == "transparency"
 
 
 async def test_import_tier_less_record_rejected_when_targeting_approved(
@@ -80,13 +80,13 @@ async def test_import_tier_less_record_rejected_when_targeting_approved(
 async def test_import_partial_success(client: httpx.AsyncClient):
     """Valid and invalid records in one batch: valid inserted, invalid reported."""
     records = [
-        {"name": "Good system", "tier": "minimal"},
+        {"name": "Good system", "tier": "minimal_no"},
         {"name": "Bad tier system", "tier": "super-high"},  # invalid tier
         {
             "name": "Bad url system",
             "git_repo_url": "javascript:alert(1)",
         },  # invalid scheme
-        {"name": "Another good one", "tier": "limited", "is_chatbot": True},
+        {"name": "Another good one", "tier": "transparency", "is_chatbot": True},
     ]
     r = await client.post(
         "/v1/intake/batch",

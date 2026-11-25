@@ -177,7 +177,7 @@ async def _cleanup_test_data() -> None:
 async def register_system(
     registry_client: httpx.AsyncClient,
     name: str = "Integration Test System",
-    tier: str = "minimal",
+    tier: str = "minimal_no",
     **extra_fields: object,
 ) -> dict:
     # Intake always creates a "pending" stub — the classifier runs on PUT/reclassify.

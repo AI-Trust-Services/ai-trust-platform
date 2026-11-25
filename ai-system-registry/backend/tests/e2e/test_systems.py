@@ -454,12 +454,12 @@ async def test_reclassify_no_tier_change_omits_changes(client: httpx.AsyncClient
     # First reclassify: pending→minimal (has changes, logs tier change)
     r = await client.post(f"/v1/systems/{system_id}/reclassify", headers=_HEADERS)
     assert r.status_code == 200
-    assert r.json()["classification"]["tier"] == "minimal"
+    assert r.json()["classification"]["tier"] == "minimal_no"
 
     # Second reclassify: minimal→minimal (no change — changes must be None/empty)
     r = await client.post(f"/v1/systems/{system_id}/reclassify", headers=_HEADERS)
     assert r.status_code == 200
-    assert r.json()["classification"]["tier"] == "minimal"
+    assert r.json()["classification"]["tier"] == "minimal_no"
 
     from ai_trust_persistence.database import engine
     from ai_trust_persistence.models.audit_event import AuditEvent

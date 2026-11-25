@@ -43,8 +43,8 @@ from auth import login
 # but classify() can return gpai-standard / gpai-systemic, so the evaluators must know
 # all six to score (not crash on) such a prediction.
 RISK_TIERS = [
-    "minimal",
-    "limited",
+    "minimal_no",
+    "transparency",
     "gpai-standard",
     "gpai-systemic",
     "high",
@@ -347,7 +347,7 @@ def _self_check() -> None:
     sample = [
         {"name": "a", "intended_purpose": "x", TRUTH_KEY: "high"},
         {"name": "b", "intended_purpose": "y"},  # no truth -> dropped
-        {"intended_purpose": "z", TRUTH_KEY: "minimal"},  # no name -> dropped
+        {"intended_purpose": "z", TRUTH_KEY: "minimal_no"},  # no name -> dropped
     ]
     with tempfile.NamedTemporaryFile(
         "w", suffix=".json", delete=False, encoding="utf-8"
@@ -359,9 +359,9 @@ def _self_check() -> None:
     assert [p["name"] for p in pairs] == ["a"], pairs
 
     # RISK_TIERS ordering is self-consistent and covers the 4 ground-truth tiers.
-    for t in ("minimal", "limited", "high", "prohibited"):
+    for t in ("minimal_no", "transparency", "high", "prohibited"):
         assert t in RISK_TIERS, t
-    assert RISK_TIERS.index("minimal") < RISK_TIERS.index("prohibited")
+    assert RISK_TIERS.index("minimal_no") < RISK_TIERS.index("prohibited")
 
     print("self-check ok")
 

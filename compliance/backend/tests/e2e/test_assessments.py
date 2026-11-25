@@ -132,7 +132,7 @@ async def test_create_assessment_tier_without_obligations_yields_none(
 ):
     # The cluster catalogue only defines obligations for EU high/limited tiers.
     # A minimal-tier system yields zero obligations — a valid state (logged as a warning).
-    system = await create_system(tier="minimal")
+    system = await create_system(tier="minimal_no")
     ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
     assert len(obs) == 0
@@ -145,7 +145,7 @@ async def test_create_assessment_obligation_failure_rolls_back_assessment(
     # also be rolled back — no orphaned assessments with zero obligations from errors.
     from unittest.mock import patch, AsyncMock
 
-    system = await create_system(tier="minimal")
+    system = await create_system(tier="minimal_no")
 
     try:
         with patch(
@@ -457,7 +457,7 @@ async def test_generated_obligations_carry_cluster_id(
 async def test_generate_obligations_minimal_tier(client: httpx.AsyncClient):
     # The cluster catalogue defines obligations only for EU high/limited tiers, so a
     # minimal-tier system yields none.
-    system = await create_system(tier="minimal")
+    system = await create_system(tier="minimal_no")
     ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
     assert len(obs) == 0
@@ -584,7 +584,7 @@ async def test_approve_updates_system_compliance(client: httpx.AsyncClient):
     from sqlalchemy import select
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    system = await create_system(tier="minimal")
+    system = await create_system(tier="minimal_no")
     ass = await create_assessment(client, system["id"])
     await client.post(f"/v1/assessments/{ass['id']}/generate-obligations")
     await client.post(f"/v1/assessments/{ass['id']}/submit")
@@ -659,7 +659,7 @@ async def test_generated_requirements_flip_obligations_in_progress(
 
 
 async def test_generated_requirements_start_open(client: httpx.AsyncClient):
-    system = await create_system(tier="minimal")
+    system = await create_system(tier="minimal_no")
     await create_assessment(client, system["id"])
     requirements = (
         await client.get(f"/v1/requirements?ai_system_id={system['id']}")
@@ -680,7 +680,7 @@ async def test_prohibited_tier_generates_no_requirements(client: httpx.AsyncClie
 
 async def test_unknown_tier_generates_no_requirements(client: httpx.AsyncClient):
     # A tier with no obligation clusters -> no requirements, assessment still created.
-    system = await create_system(tier="minimal")
+    system = await create_system(tier="minimal_no")
     await create_assessment(client, system["id"])
     requirements = (
         await client.get(f"/v1/requirements?ai_system_id={system['id']}")
@@ -708,7 +708,7 @@ async def test_generate_requirements_creates_for_obligations_without_requirement
     client: httpx.AsyncClient,
 ):
     # Manually create an obligation (no requirements), then generate.
-    system = await create_system(tier="minimal")
+    system = await create_system(tier="minimal_no")
     ass = await create_assessment(client, system["id"])
     # Manual obligation keyed to the P-REG cluster, which carries a "Risk = All"
     # requirement (P-REG-02) that generates regardless of tier. A minimal-tier
@@ -725,7 +725,7 @@ async def test_generate_requirements_creates_for_obligations_without_requirement
 async def test_generate_requirements_approved_assessment_returns_409(
     client: httpx.AsyncClient,
 ):
-    system = await create_system(tier="minimal")
+    system = await create_system(tier="minimal_no")
     ass = await create_assessment(client, system["id"])
     await client.post(f"/v1/assessments/{ass['id']}/submit")
     await client.post(f"/v1/assessments/{ass['id']}/approve")
@@ -736,7 +736,7 @@ async def test_generate_requirements_approved_assessment_returns_409(
 async def test_generate_requirements_no_obligations_returns_422(
     client: httpx.AsyncClient,
 ):
-    system = await create_system(tier="minimal")  # yields zero obligations
+    system = await create_system(tier="minimal_no")  # yields zero obligations
     ass = await create_assessment(client, system["id"])
     r = await client.post(f"/v1/assessments/{ass['id']}/generate-requirements")
     assert r.status_code == 422

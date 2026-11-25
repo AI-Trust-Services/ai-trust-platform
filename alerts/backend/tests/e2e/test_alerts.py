@@ -580,7 +580,7 @@ async def test_active_alerts_resolves_ai_system_display_name(client: httpx.Async
             AISystem(
                 id="SYS-DISP0001",
                 name="Fraud Detector",
-                tier="minimal",
+                tier="minimal_no",
                 lifecycle="development",
                 compliance=0.0,
             )

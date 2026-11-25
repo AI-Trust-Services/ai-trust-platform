@@ -39,7 +39,7 @@ def test_trend_rounds_to_one_decimal():
 
 
 def test_parse_changes_valid_json():
-    raw = '{"tier": {"before": "minimal", "after": "high"}}'
+    raw = '{"tier": {"before": "minimal_no", "after": "high"}}'
     result = _parse_changes(raw)
     assert result["tier"]["after"] == "high"
 

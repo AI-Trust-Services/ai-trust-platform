@@ -17,7 +17,7 @@ def _sys(created_at: datetime, **kwargs) -> AISystem:
     defaults = dict(
         id=f"SYS-{uuid.uuid4().hex[:8].upper()}",
         name="Test System",
-        tier="minimal",
+        tier="minimal_no",
         lifecycle="development",
         compliance=0.0,
         created_at=created_at,

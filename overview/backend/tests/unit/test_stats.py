@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 def test_tier_distribution_sums_correctly():
-    by_tier = {"minimal": 5, "limited": 3, "high": 2, "prohibited": 0}
+    by_tier = {"minimal_no": 5, "transparency": 3, "high": 2, "prohibited": 0}
     assert sum(by_tier.values()) == 10
 
 

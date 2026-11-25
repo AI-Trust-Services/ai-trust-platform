@@ -159,8 +159,8 @@ async def test_valid_tiers_accepted():
         "gpai-systemic",
         "gpai-standard",
         "high",
-        "limited",
-        "minimal",
+        "transparency",
+        "minimal_no",
     ):
         await create_system(tier=tier)
 

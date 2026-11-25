@@ -202,7 +202,7 @@ async def test_get_event_detail(client: httpx.AsyncClient):
         action="system.reclassified",
         resource_type="ai_system",
         ai_system_id="SYS-DET00001",
-        changes={"tier": {"before": "minimal", "after": "high"}},
+        changes={"tier": {"before": "minimal_no", "after": "high"}},
     )
 
     r = await client.get(f"/v1/events/{event_id}")
@@ -211,7 +211,7 @@ async def test_get_event_detail(client: httpx.AsyncClient):
     assert body["id"] == event_id
     assert body["actor_username"] == "eve"
     assert body["action"] == "system.reclassified"
-    assert body["changes"] == {"tier": {"before": "minimal", "after": "high"}}
+    assert body["changes"] == {"tier": {"before": "minimal_no", "after": "high"}}
 
 
 async def test_get_event_not_found(client: httpx.AsyncClient):

@@ -23,7 +23,7 @@ def _sys(**kwargs) -> AISystem:
     defaults = dict(
         id=f"SYS-{uuid.uuid4().hex[:8].upper()}",
         name="Test System",
-        tier="minimal",
+        tier="minimal_no",
         lifecycle="development",
         compliance=0.0,
     )
@@ -136,7 +136,7 @@ async def test_high_risk_on_market(client: httpx.AsyncClient):
                 _sys(tier="high", lifecycle="market"),
                 _sys(tier="high", lifecycle="service"),
                 _sys(tier="high", lifecycle="development"),  # not on market
-                _sys(tier="minimal", lifecycle="market"),  # not high
+                _sys(tier="minimal_no", lifecycle="market"),  # not high
             ]
         )
         await session.commit()
@@ -152,7 +152,7 @@ async def test_prohibited_count_and_high_count(client: httpx.AsyncClient):
                 _sys(tier="prohibited"),
                 _sys(tier="prohibited"),
                 _sys(tier="high"),
-                _sys(tier="minimal"),
+                _sys(tier="minimal_no"),
             ]
         )
         await session.commit()
@@ -172,15 +172,15 @@ async def test_by_tier(client: httpx.AsyncClient):
     async with SessionLocal() as session:
         session.add_all(
             [
-                _sys(tier="minimal"),
-                _sys(tier="minimal"),
+                _sys(tier="minimal_no"),
+                _sys(tier="minimal_no"),
                 _sys(tier="high"),
             ]
         )
         await session.commit()
 
     r = await client.get("/v1/stats")
-    assert r.json()["by_tier"] == {"minimal": 2, "high": 1}
+    assert r.json()["by_tier"] == {"minimal_no": 2, "high": 1}
 
 
 async def test_by_lifecycle(client: httpx.AsyncClient):
@@ -238,7 +238,7 @@ async def test_compliance_by_tier(client: httpx.AsyncClient):
             [
                 _sys(tier="high", compliance=40.0),
                 _sys(tier="high", compliance=60.0),
-                _sys(tier="minimal", compliance=80.0),
+                _sys(tier="minimal_no", compliance=80.0),
             ]
         )
         await session.commit()
@@ -246,7 +246,7 @@ async def test_compliance_by_tier(client: httpx.AsyncClient):
     r = await client.get("/v1/stats")
     cbt = r.json()["compliance_by_tier"]
     assert cbt["high"] == 50.0
-    assert cbt["minimal"] == 80.0
+    assert cbt["minimal_no"] == 80.0
 
 
 # ---------------------------------------------------------------------------
@@ -354,10 +354,10 @@ async def test_attention_includes_on_market_without_model_card(
 ):
     async with SessionLocal() as session:
         # System on market with no model card → should appear in attention.
-        session.add(_sys(tier="minimal", lifecycle="market"))
+        session.add(_sys(tier="minimal_no", lifecycle="market"))
         # Same lifecycle but with a linked model card → should NOT appear.
         mc = _model()
-        linked = _sys(tier="minimal", lifecycle="market")
+        linked = _sys(tier="minimal_no", lifecycle="market")
         session.add(mc)
         session.add(linked)
         await session.flush()
@@ -387,7 +387,7 @@ async def test_attention_capped_at_20(client: httpx.AsyncClient):
 async def test_attention_excludes_clean_systems(client: httpx.AsyncClient):
     async with SessionLocal() as session:
         # minimal, development, no model card — should NOT appear in attention
-        session.add(_sys(tier="minimal", lifecycle="development"))
+        session.add(_sys(tier="minimal_no", lifecycle="development"))
         await session.commit()
 
     r = await client.get("/v1/stats")
@@ -621,7 +621,7 @@ async def test_risk_heatmap_groups_by_tier_and_compliance(client: httpx.AsyncCli
             [
                 _sys(tier="high", compliance=10.0),  # tier_x=3, residual_y=90
                 _sys(tier="high", compliance=10.0),  # same bucket
-                _sys(tier="minimal", compliance=90.0),  # tier_x=1, residual_y=10
+                _sys(tier="minimal_no", compliance=90.0),  # tier_x=1, residual_y=10
             ]
         )
         await session.commit()
@@ -632,7 +632,7 @@ async def test_risk_heatmap_groups_by_tier_and_compliance(client: httpx.AsyncCli
         c for c in heatmap if c["tier"] == "high" and c["residual_risk_y"] == 90
     )
     minimal_good = next(
-        c for c in heatmap if c["tier"] == "minimal" and c["residual_risk_y"] == 10
+        c for c in heatmap if c["tier"] == "minimal_no" and c["residual_risk_y"] == 10
     )
     assert high_bad["count"] == 2
     assert minimal_good["count"] == 1

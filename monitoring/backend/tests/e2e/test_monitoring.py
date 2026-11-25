@@ -21,7 +21,7 @@ def _sys(**kwargs) -> AISystem:
     defaults = dict(
         id=f"SYS-{uuid.uuid4().hex[:8].upper()}",
         name="Test System",
-        tier="minimal",
+        tier="minimal_no",
         lifecycle="development",
         compliance=0.0,
     )
@@ -242,7 +242,7 @@ async def test_stats_kpi_counts(client: httpx.AsyncClient):
                 _sys(tier="prohibited", compliance=10.0),
                 _sys(tier="prohibited", compliance=90.0),
                 _sys(tier="high", compliance=40.0),
-                _sys(tier="minimal", compliance=80.0),
+                _sys(tier="minimal_no", compliance=80.0),
             ]
         )
         await session.commit()
@@ -263,11 +263,11 @@ async def test_stats_kpi_counts(client: httpx.AsyncClient):
 
 async def test_stats_by_tier(client: httpx.AsyncClient):
     async with SessionLocal() as session:
-        session.add_all([_sys(tier="minimal"), _sys(tier="minimal"), _sys(tier="high")])
+        session.add_all([_sys(tier="minimal_no"), _sys(tier="minimal_no"), _sys(tier="high")])
         await session.commit()
 
     r = await client.get("/v1/stats")
-    assert r.json()["by_tier"] == {"minimal": 2, "high": 1}
+    assert r.json()["by_tier"] == {"minimal_no": 2, "high": 1}
 
 
 async def test_stats_by_type_and_autonomy(client: httpx.AsyncClient):
@@ -317,7 +317,7 @@ async def test_stats_compliance_by_tier(client: httpx.AsyncClient):
             [
                 _sys(tier="high", compliance=40.0),
                 _sys(tier="high", compliance=60.0),
-                _sys(tier="minimal", compliance=80.0),
+                _sys(tier="minimal_no", compliance=80.0),
             ]
         )
         await session.commit()
@@ -325,7 +325,7 @@ async def test_stats_compliance_by_tier(client: httpx.AsyncClient):
     r = await client.get("/v1/stats")
     cbt = r.json()["compliance_by_tier"]
     assert cbt["high"] == 50.0
-    assert cbt["minimal"] == 80.0
+    assert cbt["minimal_no"] == 80.0
 
 
 # ---------------------------------------------------------------------------
@@ -391,7 +391,7 @@ async def test_stats_lifecycle_filter_narrows_counts(client: httpx.AsyncClient):
         session.add_all(
             [
                 _sys(lifecycle="market", tier="high"),
-                _sys(lifecycle="market", tier="minimal"),
+                _sys(lifecycle="market", tier="minimal_no"),
                 _sys(lifecycle="development", tier="high"),
             ]
         )
@@ -401,7 +401,7 @@ async def test_stats_lifecycle_filter_narrows_counts(client: httpx.AsyncClient):
     body = r.json()
     # total_systems and by_tier respect the filter...
     assert body["total_systems"] == 2
-    assert body["by_tier"] == {"high": 1, "minimal": 1}
+    assert body["by_tier"] == {"high": 1, "minimal_no": 1}
     # ...but by_lifecycle is intentionally computed unfiltered in the router:
     # it always reports the full lifecycle distribution for context.
     assert body["by_lifecycle"] == {"market": 2, "development": 1}

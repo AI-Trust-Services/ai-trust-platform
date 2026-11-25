@@ -24,7 +24,7 @@ def _make_event(**kwargs) -> AuditEvent:
         resource_id="SYS-00000001",
         ai_system_id="SYS-00000001",
         ai_system_name="Test System",
-        changes={"tier": {"before": None, "after": "minimal"}},
+        changes={"tier": {"before": None, "after": "minimal_no"}},
         source="ui",
     )
     return AuditEvent(**{**defaults, **kwargs})
@@ -93,7 +93,7 @@ async def test_flush_once_inserts_into_clickhouse():
     assert row[4] == "ai_system"  # resource_type
     assert row[6] == "SYS-00000001"  # ai_system_id
     assert row[7] == "Test System"  # ai_system_name
-    assert json.loads(row[8]) == {"tier": {"before": None, "after": "minimal"}}
+    assert json.loads(row[8]) == {"tier": {"before": None, "after": "minimal_no"}}
     assert row[9] == "ui"  # source
     assert "id" in columns
 
