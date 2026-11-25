@@ -574,8 +574,13 @@ async def open_assessment(
         assessment = await _ensure_assessment(session, row)
         existing = await _states_by_key(session, assessment.id)
         if existing:
-            # Retry after a background failure: clear llm_status and re-schedule.
-            if assessment.llm_status == "failed":
+            # Retry after a background failure OR a stub run: clear llm_status and
+            # re-schedule. "stub" means the cycle was never really analysed (no live
+            # LLM at the time), so re-opening once a provider is configured must
+            # re-run the prefill — same rationale as "failed". Without this a stub
+            # cycle is a dead-end (stuck on the "contact admin" banner) even after a
+            # provider is activated; the only escape would be starting a new cycle.
+            if assessment.llm_status in ("failed", "stub"):
                 assessment.llm_status = "pending"
                 await session.commit()
                 background_tasks.add_task(

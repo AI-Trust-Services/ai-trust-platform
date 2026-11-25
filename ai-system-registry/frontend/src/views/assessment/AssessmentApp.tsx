@@ -119,10 +119,14 @@ export default function AssessmentApp() {
           });
           return;
         }
-        // A failed prefill still seeded question_states (prefilled=true), so GET
-        // /state alone would never retry. Re-POST /open to re-trigger the
-        // background pipeline (idempotent; clears llm_status=failed).
-        setState(s.prefill_failed ? await api.openAssessment(id) : s);
+        // A failed OR stub prefill still seeded question_states (prefilled=true),
+        // so GET /state alone would never retry. Re-POST /open to re-trigger the
+        // background pipeline (idempotent; backend re-runs when llm_status is
+        // failed or stub). This lets a stub cycle be re-analysed once a provider
+        // has been configured, instead of being stuck on the "contact admin" banner.
+        setState(
+          s.prefill_failed || s.prefill_stub ? await api.openAssessment(id) : s,
+        );
       } else {
         const s = await api.getAssessmentState(id);
         setState(s);

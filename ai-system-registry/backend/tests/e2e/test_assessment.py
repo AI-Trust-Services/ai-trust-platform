@@ -184,6 +184,29 @@ async def test_open_sets_prefill_failed_when_pipeline_fails(client: httpx.AsyncC
 
 
 @pytest.mark.asyncio
+async def test_reopen_reruns_a_stub_cycle(client: httpx.AsyncClient):
+    """A stub-prefilled cycle (no live LLM at run time) must re-run on re-open —
+    not be a dead-end. The e2e stub marks the first run llm_status='stub'; a second
+    /open re-schedules the pipeline (like 'failed'), so prefill_stub is cleared
+    while the retry is pending/running rather than returning the stale stub state."""
+    system_id = await _create_system(client)
+    state = await _open(client, system_id)
+    # Default e2e provider is the offline stub → this cycle is flagged stub.
+    assert state["prefilled"] is True
+    assert state["prefill_stub"] is True
+
+    # Re-open must re-trigger the background pipeline (clears the stub status to
+    # pending). Without the stub-retry fix this would no-op and stay stub.
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/open", headers=_hdr(_OWNER)
+    )
+    assert r.status_code == 200, r.text
+    # Immediately after re-open the cycle is being re-run, so it is no longer
+    # reported as a settled stub result.
+    assert r.json()["prefill_stub"] is False
+
+
+@pytest.mark.asyncio
 async def test_prefill_choice_answers_are_valid_options(client: httpx.AsyncClient):
     """A predefined question answered by the prefill must contain a value from the
     question's allowed options, so the frontend's exact-match radios select it —
