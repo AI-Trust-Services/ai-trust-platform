@@ -1441,3 +1441,184 @@ async def test_swagger_pipelines_match_what_the_assessment_start_ran(
         c.json()["result"]["skipped_labels"]
         == from_open_classification["skipped_labels"]
     )
+
+
+# ── startup sweep ─────────────────────────────────────────────────────────────
+
+
+async def _seed_pending(system_id: str) -> str:
+    """Write an assessment row directly with llm_status='pending' and seed
+    blank question_states, simulating an open that lost its background task."""
+    from ai_trust_persistence import SessionLocal
+    from ai_trust_persistence.models.assessment import Assessment
+    from ai_trust_persistence.models.question_state import QuestionState
+    from app.assessment_catalogue import ASSESSMENT_QUESTION_KEYS
+    from app.ids import new_id
+    from sqlalchemy import select
+
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(Assessment).where(
+                Assessment.ai_system_id == system_id,
+                Assessment.status != "inactive",
+            )
+        )
+        assessment = result.scalar_one_or_none()
+        if assessment is None:
+            assessment = Assessment(
+                id=new_id("ASS"),
+                ai_system_id=system_id,
+                framework_id="FRM-EU-AI-ACT",
+                title="Test cycle (#1)",
+                status="draft",
+                llm_status="pending",
+            )
+            session.add(assessment)
+            await session.flush()
+            for q_key in ASSESSMENT_QUESTION_KEYS:
+                session.add(
+                    QuestionState(
+                        id=new_id("QST"),
+                        assessment_id=assessment.id,
+                        system_id=system_id,
+                        question_key=q_key,
+                        answer=None,
+                        answer_source="ai_prefilled",
+                        ai_original_answer=None,
+                        confidence=None,
+                        ai_references=None,
+                        ai_explanation=None,
+                    )
+                )
+        else:
+            assessment.llm_status = "pending"
+        await session.commit()
+        return assessment.id
+
+
+@pytest.mark.asyncio
+async def test_startup_sweep_reschedules_stale_pending(client: httpx.AsyncClient):
+    """sweep_stale_prefills() re-runs the prefill for a pending assessment that
+    lost its background task (e.g. pod restart). The assessment must settle to
+    llm_status=None after the pipeline completes."""
+    import asyncio
+
+    from app.routers.assessment import sweep_stale_prefills, _sweep_tasks
+
+    system_id = await _create_system(client)
+    await _seed_pending(system_id)
+
+    with patch(
+        "app.assessment_prefill_pipeline.run_questionnaire_pipeline",
+        new_callable=AsyncMock,
+    ) as mock_pipeline:
+        # Stub returns a valid (empty-result) pipeline output so _finalize_tier can
+        # run and clear llm_status to None.
+        mock_pipeline.return_value = {
+            "run_key": "questionnaire-results/stub/stub/stub.json",
+            "presigned_url": _STUB_PRESIGNED,
+            "result": {"results": []},
+            "consumed": {"evidence": {}, "documents": []},
+        }
+
+        count = await sweep_stale_prefills()
+        assert count == 1
+
+        # Wait for all detached asyncio tasks spawned by the sweep to finish.
+        if _sweep_tasks:
+            await asyncio.gather(*list(_sweep_tasks), return_exceptions=True)
+
+    # The pipeline ran for our system.
+    assert mock_pipeline.call_count >= 1
+    called_system_ids = [call.args[0] for call in mock_pipeline.call_args_list]
+    assert system_id in called_system_ids
+
+    # llm_status must have cleared to None (done).
+    r = await client.get(
+        f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
+    )
+    assert r.status_code == 200, r.text
+    state = r.json()
+    assert state["prefill_pending"] is False
+    assert state["prefill_failed"] is False
+
+
+@pytest.mark.asyncio
+async def test_startup_sweep_ignores_non_pending(client: httpx.AsyncClient):
+    """sweep_stale_prefills() does not re-schedule assessments that are already
+    done (llm_status=None) or failed — only 'pending' rows are swept."""
+    from ai_trust_persistence import SessionLocal
+    from ai_trust_persistence.models.assessment import Assessment
+    from sqlalchemy import select
+
+    system_id = await _create_system(client)
+    # Open normally so the cycle is in a done state (llm_status=None).
+    await _open(client, system_id)
+
+    # Confirm it's done.
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(Assessment).where(
+                Assessment.ai_system_id == system_id,
+                Assessment.status != "inactive",
+            )
+        )
+        assessment = result.scalar_one()
+    assert assessment.llm_status is None
+
+    with patch(
+        "app.assessment_prefill_pipeline.run_questionnaire_pipeline",
+        new_callable=AsyncMock,
+    ) as mock_pipeline:
+        from app.routers.assessment import sweep_stale_prefills
+
+        count = await sweep_stale_prefills()
+
+    assert count == 0
+    mock_pipeline.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_startup_sweep_uses_service_principal_fallback(
+    client: httpx.AsyncClient,
+):
+    """When a system has no business_owner, the sweep uses 'svc-prefill-recovery'
+    as the username — the pipeline must not crash on a missing request user."""
+    import asyncio
+
+    from ai_trust_persistence import SessionLocal
+    from ai_trust_persistence.models.ai_system import AISystem
+    from sqlalchemy import select
+
+    system_id = await _create_system(client)
+
+    # Clear the business owner so the sweep falls back to the service principal.
+    async with SessionLocal() as session:
+        result = await session.execute(select(AISystem).where(AISystem.id == system_id))
+        row = result.scalar_one()
+        row.business_owners = None
+        await session.commit()
+
+    await _seed_pending(system_id)
+
+    with patch(
+        "app.assessment_prefill_pipeline.run_questionnaire_pipeline",
+        new_callable=AsyncMock,
+    ) as mock_pipeline:
+        mock_pipeline.return_value = {
+            "run_key": "questionnaire-results/stub/stub/stub.json",
+            "presigned_url": _STUB_PRESIGNED,
+            "result": {"results": []},
+            "consumed": {"evidence": {}, "documents": []},
+        }
+
+        from app.routers.assessment import sweep_stale_prefills, _sweep_tasks
+
+        count = await sweep_stale_prefills()
+        assert count == 1
+
+        if _sweep_tasks:
+            await asyncio.gather(*list(_sweep_tasks), return_exceptions=True)
+
+    # Pipeline was called — no crash from missing username.
+    assert mock_pipeline.call_count >= 1

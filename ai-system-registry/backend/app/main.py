@@ -26,6 +26,7 @@ from app.routers import (
     systems,
     workflow,
 )
+from app.routers.assessment import sweep_stale_prefills
 
 logger = get_logger(__name__)
 
@@ -36,6 +37,10 @@ async def lifespan(app: FastAPI):
         await minio_client.ensure_bucket()
     except Exception as e:
         logger.warning("startup.bucket_ensure_failed", extra={"error": str(e)})
+    try:
+        await sweep_stale_prefills()
+    except Exception as e:
+        logger.warning("startup.prefill_sweep_failed", extra={"error": str(e)})
     yield
 
 
