@@ -3,23 +3,16 @@ import { ArrowRight, Loader2 } from "lucide-react";
 import { useAssessment } from "./AssessmentApp";
 import { ORDERED_QUESTION_KEYS } from "./AssessmentSidebar";
 import { usePermissions } from "../../hooks/usePermissions";
-import { TIER_META } from "../../utils";
 import { isGated } from "../../config/aiQuestionnaire";
-import { SolverPanel } from "./SolverPanel";
 
-const CLASSIFICATION_TABS = [
-  { key: "minimal", label: "Minimal or no risk" },
-  { key: "limited", label: "Transparency Obligations" },
-  { key: "high", label: "High-risk" },
-  { key: "prohibited", label: "Prohibited practice" },
-];
+const BAND_CLS: Record<string, string> = {
+  High: "text-[#1a9d5c] bg-[#f0fdf4] border-[#bbf7d0]",
+  Medium: "text-[#b57e00] bg-[#fffbeb] border-[#fde68a]",
+  Low: "text-[#d14343] bg-[#fef2f2] border-[#fecaca]",
+};
 
-function activeTab(tier: string): string {
-  if (tier === "prohibited") return "prohibited";
-  if (tier === "high") return "high";
-  if (tier === "limited") return "limited";
-  if (tier.startsWith("gpai")) return "high";
-  return "minimal";
+function labelDisplay(labelId: string): string {
+  return labelId.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export default function AssessmentStartPage() {
@@ -29,21 +22,8 @@ export default function AssessmentStartPage() {
   const { can } = usePermissions();
   const counts = state.confidence_counts;
   const total = counts.high + counts.medium + counts.low || 1;
-  const active = activeTab(state.tier);
-  const tierLabel = TIER_META[state.tier]?.label ?? state.tier;
-  // CO entry: offer "Issue a Risk Classification" only while the assessment is
-  // submitted-but-not-yet-decided (status_label "locked" = workflow pending_review).
-  // An already-approved assessment is read-only with no action (the backend /issue
-  // 409s on a non-pending_review status), matching the CO/contributor read-only view.
   const canIssue = state.status_label === "locked" && can("systems:approve");
 
-  // Resume at the first question that still needs the current user, rather than
-  // always restarting at question 1. "Open" = editable by me and not yet
-  // owner-confirmed (an assignee can only edit their assigned questions, so this
-  // lands them on their first open one; the owner lands on the first unconfirmed
-  // question overall). Skip questions still waiting on the AI prefill, and skip
-  // questions currently locked by a gate condition. Falls back to the first
-  // unconfirmed non-gated, then to the very first, so it always goes somewhere.
   const byKey = Object.fromEntries(state.questions.map((q) => [q.question_key, q]));
   const currentAnswers = Object.fromEntries(state.questions.map((q) => [q.question_key, q.answer ?? null]));
   const firstOpenKey =
@@ -54,6 +34,8 @@ export default function AssessmentStartPage() {
     ORDERED_QUESTION_KEYS.find((k) => !isGated(k, currentAnswers)) ??
     ORDERED_QUESTION_KEYS[0];
 
+  const solverLabel = solverResult ? labelDisplay(solverResult.risk.labelId) : null;
+
   return (
     <div className="mx-auto max-w-4xl px-8 py-8">
       <p className="text-sm text-muted-foreground">EU AI Act Compliance</p>
@@ -61,8 +43,8 @@ export default function AssessmentStartPage() {
       <p className="mt-3 text-muted-foreground">
         Our AI reviewed your {state.source_documents.length} uploaded document
         {state.source_documents.length === 1 ? "" : "s"} and pre-filled{" "}
-        {state.questions.filter((q) => q.answer_source === "ai_prefilled" && q.answer).length} answers. Check the
-        preliminary risk classification, then review the answers it was least sure about.
+        {state.questions.filter((q) => q.answer_source === "ai_prefilled" && q.answer).length} answers. Review the
+        risk classification below, then check the answers the AI was least sure about.
       </p>
 
       {state.prefill_pending && (
@@ -74,44 +56,59 @@ export default function AssessmentStartPage() {
 
       <div className="mt-6 rounded-xl border border-border bg-card p-6">
         <div className="flex items-start justify-between">
-          <span className="rounded-full bg-[#eaecee] px-3 py-1 text-xs font-medium text-[#556b82]">
-            AI-generated · not final
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-[#eaecee] px-3 py-1 text-xs font-medium text-[#556b82]">
+              AI-generated · not final
+            </span>
+            <span className="rounded-full bg-[#eef3ff] px-3 py-1 text-xs font-medium text-[#1147E9]">
+              Rule-based · updates on each confirm
+            </span>
+          </div>
           {state.org_role && (
             <span className="text-sm text-muted-foreground">
               Role: <span className="text-foreground">{state.org_role}</span>
             </span>
           )}
         </div>
+
         <h2 className="mt-4 text-xl font-bold">
-          Preliminary Risk Classification:{" "}
-          {state.prefill_pending ? (
+          Risk Classification:{" "}
+          {state.prefill_pending || !solverResult ? (
             <span className="inline-flex items-center gap-1.5 text-muted-foreground">
               <Loader2 className="size-4 animate-spin" />
-              <span>Calculating…</span>
+              <span>Computing…</span>
             </span>
           ) : (
-            <span className="text-[#8b3a00]">{tierLabel}</span>
+            <span className="text-[#8b3a00]">{solverLabel}</span>
           )}
         </h2>
 
-        <div className="mt-4 grid grid-cols-4 gap-2">
-          {CLASSIFICATION_TABS.map((t) => (
-            <div
-              key={t.key}
-              className={
-                "rounded-md border px-3 py-2 text-center text-sm " +
-                (!state.prefill_pending && t.key === active
-                  ? "border-[#1147E9] font-semibold text-[#1147E9]"
-                  : "border-border text-muted-foreground")
-              }
-            >
-              {t.label}
+        {solverResult && (
+          <>
+            <div className="mt-2 flex items-center gap-3">
+              {solverResult.risk.confidenceBand && (
+                <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${BAND_CLS[solverResult.risk.confidenceBand] ?? ""}`}>
+                  {solverResult.risk.confidenceBand} confidence
+                </span>
+              )}
             </div>
-          ))}
-        </div>
-
-        {state.basis && <p className="mt-4 text-sm text-muted-foreground">{state.basis}</p>}
+            {solverResult.risk.explanation && (
+              <p className="mt-3 text-sm text-muted-foreground">{solverResult.risk.explanation}</p>
+            )}
+            {solverResult.roles.filter((r) => r.result).length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {solverResult.roles.filter((r) => r.result).map((r) => (
+                  <span
+                    key={r.labelId}
+                    className={`rounded-full border px-2.5 py-0.5 text-xs ${r.source === "user" ? "border-[#c4b5fd] text-[#6d28d9]" : "border-border text-muted-foreground"}`}
+                  >
+                    {labelDisplay(r.labelId)}
+                  </span>
+                ))}
+              </div>
+            )}
+          </>
+        )}
 
         <h3 className="mt-6 text-lg font-semibold">How confident the assessment was answered</h3>
         <div className="mt-3 flex h-2 overflow-hidden rounded-full">
@@ -130,8 +127,8 @@ export default function AssessmentStartPage() {
             <h3 className="mt-6 text-lg font-semibold">Why this classification</h3>
             <p className="mt-1 text-sm text-muted-foreground">
               These {state.decisive_questions.length} answer
-              {state.decisive_questions.length === 1 ? "" : "s"} determine the {tierLabel} result. If you change one of
-              them, the classification may change.
+              {state.decisive_questions.length === 1 ? "" : "s"} determine the{" "}
+              {solverLabel ?? "classification"} result. If you change one of them, the classification may change.
             </p>
             <div className="mt-3 space-y-3">
               {state.decisive_questions.map((d) => (
@@ -160,12 +157,6 @@ export default function AssessmentStartPage() {
           </>
         )}
       </div>
-
-      {!state.prefill_pending && (
-        <div className="mt-6">
-          <SolverPanel solverResult={solverResult} />
-        </div>
-      )}
 
       <div className="mt-6 flex items-center gap-4">
         <button
