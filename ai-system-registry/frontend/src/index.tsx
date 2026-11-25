@@ -9,6 +9,7 @@ import ModelListPage from "./views/ModelListPage";
 import ModelPage from "./views/ModelPage";
 import SystemDetailPage from "./views/SystemDetailPage";
 import AssessmentApp from "./views/assessment/AssessmentApp";
+import AssessmentMethodPage from "./views/assessment/AssessmentMethodPage";
 import AssessmentStartPage from "./views/assessment/AssessmentStartPage";
 import QuestionView from "./views/assessment/QuestionView";
 import AssessmentSubmitPage from "./views/assessment/AssessmentSubmitPage";
@@ -33,6 +34,12 @@ const router = createHashRouter([
       {
         path: "systems/:id",
         element: <RequirePermission anyOf={SYSTEM_PERMS}><SystemDetailPage /></RequirePermission>,
+      },
+      {
+        // Method selection — shown before opening a new assessment cycle.
+        // Writers only; read/approve roles enter via /assessment directly.
+        path: "systems/:id/assessment/method",
+        element: <RequirePermission anyOf={["systems:write"]}><AssessmentMethodPage /></RequirePermission>,
       },
       {
         path: "systems/:id/assessment",

@@ -160,6 +160,9 @@ class AssessmentStateResponse(BaseModel):
     # The system owner's username (creator). Surfaced so the UI can let the owner
     # delete any comment (contributors may delete only their own).
     owner_username: str | None = None
+    # The assigned compliance officer's username, if any. Surfaced so the method
+    # selection page can show the reviewer without a second system fetch.
+    compliance_officer_username: str | None = None
     workflow_status: str
     # Owner-facing lifecycle label derived from the status (e.g. "locked" when the
     # assessment is pending_review/submitted, "under_review" when returned).

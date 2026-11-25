@@ -44,10 +44,15 @@ function goToAssessments(
   systemName: string,
   action: AssessmentAction,
   rows: AssessmentRow[],
-  navigate: (path: string) => void,
+  navigate: (path: string, opts?: { state?: unknown }) => void,
 ) {
   if (action === "start" || action === "continue") {
-    navigate(`/systems/${systemId}/assessment`);
+    if (action === "start") {
+      // Thread the origin so the method page's Cancel returns to this list.
+      navigate(`/systems/${systemId}/assessment/method`, { state: { from: "/systems" } });
+    } else {
+      navigate(`/systems/${systemId}/assessment`);
+    }
     return;
   }
   localStorage.setItem("compliance.viewSystem", JSON.stringify({ systemId, systemName }));

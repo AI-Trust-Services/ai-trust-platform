@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
-import { Outlet, useNavigate, useParams, useMatch } from "react-router";
+import { Outlet, useNavigate, useParams, useMatch, useLocation } from "react-router";
 import { Loader2, Save } from "lucide-react";
 import type { AssessmentState, ResolveResponse } from "../../types";
 import { api } from "../../api/client";
@@ -48,6 +48,7 @@ function sectionForQuestion(questionKey?: string): string | undefined {
 export default function AssessmentApp() {
   const { id, assessmentId: viewAssessmentId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   // "View results": the /assessment/view/:assessmentId route opens that specific
   // (historical) cycle read-only, regardless of write permission.
   const { can, loading: permsLoading } = usePermissions();
@@ -98,15 +99,38 @@ export default function AssessmentApp() {
       // never the write-gated POST /open prefill — even though the CO role now
       // also holds systems:write (for system registration/editing), it must not
       // trigger prefill/reclassification by opening an assessment. Writers who
-      // are NOT approvers (owner / engineer) prefill via POST /open (idempotent).
-      const s = viewAssessmentId
-        ? await api.getAssessmentState(id, viewAssessmentId)
-        : can("systems:approve")
-          ? await api.getAssessmentState(id)
-          : can("systems:write")
-            ? await api.openAssessment(id)
-            : await api.getAssessmentState(id);
-      setState(s);
+      // are NOT approvers (owner / engineer) first check /state:
+      //   • cycle already opened (question_states seeded) → use state directly
+      //     (method was chosen).
+      //   • not yet opened (fresh cycle) → redirect to method selection so the
+      //     user picks AI-assisted vs manual before we call /open.
+      // NOTE: `questions` is always the full static catalogue — it can't signal
+      // "already opened". `prefilled` (question_states seeded) is the real flag.
+      if (viewAssessmentId) {
+        const s = await api.getAssessmentState(id, viewAssessmentId);
+        setState(s);
+      } else if (can("systems:approve")) {
+        const s = await api.getAssessmentState(id);
+        setState(s);
+      } else if (can("systems:write")) {
+        const s = await api.getAssessmentState(id);
+        if (!s.prefilled) {
+          // Cycle not opened yet — send to method selection. Forward the origin
+          // so the method page's Cancel returns to wherever this flow started.
+          navigate(`/systems/${id}/assessment/method`, {
+            replace: true,
+            state: { from: (location.state as { from?: string } | null)?.from },
+          });
+          return;
+        }
+        // A failed prefill still seeded question_states (prefilled=true), so GET
+        // /state alone would never retry. Re-POST /open to re-trigger the
+        // background pipeline (idempotent; clears llm_status=failed).
+        setState(s.prefill_failed ? await api.openAssessment(id) : s);
+      } else {
+        const s = await api.getAssessmentState(id);
+        setState(s);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to open assessment");
     }
