@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ChevronLeft, Save, XCircle } from "lucide-react";
 import { useAssessment } from "./AssessmentApp";
@@ -6,6 +6,7 @@ import { ORDERED_QUESTION_KEYS } from "./AssessmentSidebar";
 import { api } from "../../api/client";
 import { TIER_META } from "../../utils";
 import { cn } from "@/lib/utils";
+import { SolverPanel } from "./SolverPanel";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TODO(high+transparency) — KNOWN GAP, CURRENTLY IGNORED
@@ -55,8 +56,18 @@ export default function CoIssueView() {
   const navigate = useNavigate();
   const { state, solverResult } = useAssessment();
 
-  const [tier, setTier] = useState<string>(() => mapLabelToTier(solverResult?.risk.labelId));
+  const [tier, setTier] = useState<string>("");
+  const [coTouched, setCoTouched] = useState(false);
   const [transparency, setTransparency] = useState(false);
+
+  // Prefill the dropdown from the solver once it arrives — but only if the CO
+  // hasn't manually selected a tier yet. Once-Initializer can't do this because
+  // solverResult is usually null at mount (async fetch hasn't landed yet).
+  useEffect(() => {
+    if (coTouched || !solverResult) return;
+    const derived = mapLabelToTier(solverResult.risk.labelId);
+    if (derived) setTier(derived);
+  }, [solverResult, coTouched]);
   const [note, setNote] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -154,6 +165,11 @@ export default function CoIssueView() {
         )}
       </div>
 
+      {/* Hierarchy solver result — read-only for the CO */}
+      <div className="mt-4">
+        <SolverPanel solverResult={solverResult} />
+      </div>
+
       {/* CO classification panel */}
       <div className="mt-4 rounded-xl border border-border bg-card p-6">
         <span className="rounded-full bg-[#eaecee] px-3 py-1 text-xs font-medium text-[#556b82]">
@@ -164,6 +180,7 @@ export default function CoIssueView() {
           className="mt-2 w-full max-w-sm rounded-md border border-border p-2 text-sm"
           value={tier}
           onChange={(e) => {
+            setCoTouched(true);
             setTier(e.target.value);
             if (e.target.value !== "high") setTransparency(false);
           }}
