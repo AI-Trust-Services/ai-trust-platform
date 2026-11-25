@@ -465,7 +465,7 @@ async def _run_prefill_background(
             )
 
     async def _on_questionnaire_done(questionnaire_output: dict) -> None:
-        """Persist assessment_sources, clear llm_status. No tier write here."""
+        """Persist assessment_sources. llm_status stays pending until classification done."""
         results = (questionnaire_output.get("result") or {}).get("results") or []
         proposals = _proposals_from_results(results)
         _shared["results"] = results
@@ -474,9 +474,6 @@ async def _run_prefill_background(
         async with SessionLocal() as session:
             row = await _get_system(session, system_id)
             row.assessment_sources = _shared["sources"]
-            assessment = await _current_assessment(session, system_id)
-            if assessment:
-                assessment.llm_status = None
             await session.commit()
         logger.info(
             "assessment.prefill_questionnaire_done",
@@ -588,8 +585,8 @@ async def open_assessment(
         assessment = await _ensure_assessment(session, row)
         existing = await _states_by_key(session, assessment.id)
         if existing:
-            # Retry after a background failure: clear llm_status and re-schedule.
-            if assessment.llm_status == "failed":
+            # Retry after a background failure or a lost in-flight task (pod restart).
+            if assessment.llm_status in ("failed", "pending"):
                 assessment.llm_status = "pending"
                 await session.commit()
                 background_tasks.add_task(
