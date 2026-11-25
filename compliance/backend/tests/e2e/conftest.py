@@ -233,7 +233,7 @@ async def db_session():
 
 
 async def create_system(
-    name: str = "Test System", tier: str = "minimal", **kwargs
+    name: str = "Test System", tier: str = "minimal_no", **kwargs
 ) -> dict:
     """Insert an AI system directly into the DB (compliance app has no intake endpoint).
 

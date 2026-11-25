@@ -7,8 +7,8 @@ import { TIER_META } from "../../utils";
 import { isGated } from "../../config/aiQuestionnaire";
 
 const CLASSIFICATION_TABS = [
-  { key: "minimal", label: "Minimal or no risk" },
-  { key: "limited", label: "Transparency Obligations" },
+  { key: "minimal_no", label: "Minimal or no risk" },
+  { key: "transparency", label: "Transparency Obligations" },
   { key: "high", label: "High-risk" },
   { key: "prohibited", label: "Prohibited practice" },
 ];
@@ -17,9 +17,9 @@ const CLASSIFICATION_TABS = [
 function activeTab(tier: string): string {
   if (tier === "prohibited") return "prohibited";
   if (tier === "high") return "high";
-  if (tier === "limited") return "limited";
+  if (tier === "transparency") return "transparency";
   if (tier.startsWith("gpai")) return "high";
-  return "minimal";
+  return "minimal_no";
 }
 
 /** #346 — the AI-prefilled assessment start page. */

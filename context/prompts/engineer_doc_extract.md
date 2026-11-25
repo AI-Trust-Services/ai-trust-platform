@@ -8,7 +8,7 @@ You MUST respond with a SINGLE JSON object and nothing else, in this exact shape
 
 For enum fields use only these allowed values:
 - system_type: application | model | component | service
-- lifecycle: development | testing | conformity | market
+- lifecycle: development | testing | prod_ready | market | service | updated | decommissioned
 - autonomy_level: decision_support | human_in_the_loop | human_on_the_loop | fully_automated
 
 Use the exact field keys shown above.

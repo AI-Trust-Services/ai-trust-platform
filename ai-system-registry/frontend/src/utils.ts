@@ -23,13 +23,13 @@ export function fmtDateTime(iso: string | null | undefined): string {
 }
 
 export const TIER_META: Record<TierKey, { label: string; cls: string }> = {
-  "prohibited":    { label: "Prohibited Practice",     cls: "badge-prohibited" },
-  "high":          { label: "High Risk",               cls: "badge-high" },
-  "gpai-systemic": { label: "GPAI with Systemic Risk", cls: "badge-gpai-systemic" },
-  "gpai-standard": { label: "GPAI Standard",           cls: "badge-gpai-standard" },
-  "limited":       { label: "Transparency Obligations",cls: "badge-limited" },
-  "minimal":       { label: "Minimal or No Risk",      cls: "badge-minimal" },
-  "pending":       { label: "Pending",                 cls: "badge-pending" },
+  "prohibited":    { label: "Prohibited Practice",                     cls: "badge-prohibited" },
+  "high":          { label: "High Risk AI System",                     cls: "badge-high" },
+  "gpai-systemic": { label: "GPAI with Systemic Risk",                 cls: "badge-gpai-systemic" },
+  "gpai-standard": { label: "GPAI Standard",                           cls: "badge-gpai-standard" },
+  "transparency":  { label: "AI System with Transparency Obligations", cls: "badge-limited" },
+  "minimal_no":    { label: "Minimal or No Risk AI System",            cls: "badge-minimal" },
+  "pending":       { label: "Pending",                                 cls: "badge-pending" },
 };
 
 export const LIFECYCLE_LABELS: Record<LifecycleKey, string> = {
@@ -71,10 +71,10 @@ export function previewClassify(flags: Partial<AISystemFormData>, flops: number)
         "Art. 11 — Technical documentation", "Art. 13 — Transparency", "Art. 49 — Registration"] };
   }
   if (g("is_chatbot") || g("generates_synthetic_content")) {
-    return { tier: "limited", basis: "Limited-risk under EU AI Act Art. 50",
+    return { tier: "transparency", basis: "Transparency obligations under EU AI Act Art. 50",
       obligations: ["Art. 50 — Transparency obligation"] };
   }
-  return { tier: "minimal", basis: "Minimal risk — no mandatory obligations", obligations: [] };
+  return { tier: "minimal_no", basis: "Minimal or no risk — no mandatory obligations", obligations: [] };
 }
 
 /**

@@ -9,15 +9,15 @@ import { cn } from "@/lib/utils";
 
 // Tiers the CO may issue (the dropdown options). gpai-* are not CO-issuable.
 const ISSUABLE: { value: string; label: string }[] = [
-  { value: "minimal", label: "Minimal or no risk" },
-  { value: "limited", label: "Transparency obligations" },
+  { value: "minimal_no", label: "Minimal or no risk" },
+  { value: "transparency", label: "Transparency obligations" },
   { value: "high", label: "High-risk" },
   { value: "prohibited", label: "Prohibited practice" },
 ];
 
 const PRELIM_TABS = [
-  { key: "minimal", label: "Minimal or no risk" },
-  { key: "limited", label: "Transparency Obligations" },
+  { key: "minimal_no", label: "Minimal or no risk" },
+  { key: "transparency", label: "Transparency Obligations" },
   { key: "high", label: "High-risk" },
   { key: "prohibited", label: "Prohibited practice" },
 ];
@@ -25,8 +25,8 @@ const PRELIM_TABS = [
 function activeTab(tier: string): string {
   if (tier === "prohibited") return "prohibited";
   if (tier === "high" || tier.startsWith("gpai")) return "high";
-  if (tier === "limited") return "limited";
-  return "minimal";
+  if (tier === "transparency") return "transparency";
+  return "minimal_no";
 }
 
 /** #348 — Compliance Officer "Issue a Risk Classification" end view. */

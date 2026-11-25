@@ -29,8 +29,8 @@ import re
 _TIER_RISK_CATEGORIES: dict[str, set[str]] = {
     "prohibited": {"Prohibited"},
     "high": {"High"},
-    "limited": {"Limited"},
-    "minimal": set(),  # only "All"-risk controls apply
+    "transparency": {"Limited"},
+    "minimal_no": set(),  # only "All"-risk controls apply
     "gpai-standard": {"GPAI"},
     "gpai-systemic": {"GPAI", "GPAI-Systemic"},  # systemic is a superset
 }

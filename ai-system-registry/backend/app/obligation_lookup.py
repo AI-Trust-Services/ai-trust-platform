@@ -126,7 +126,7 @@ _LIMITED = [
 
 _BY_TIER: dict[str, list[dict]] = {
     "high": _HIGH,
-    "limited": _LIMITED,
+    "transparency": _LIMITED,
 }
 
 

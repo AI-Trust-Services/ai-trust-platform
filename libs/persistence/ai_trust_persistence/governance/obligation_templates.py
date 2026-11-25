@@ -211,7 +211,7 @@ def obligations_for(
     as "no obligations to generate".
     """
     if framework_id == "FRM-EU-AI-ACT":
-        if tier in ("high", "limited"):
+        if tier in ("high", "transparency"):
             result: list[dict] = []
             for c in _EU_CLUSTERS:
                 if org_role == "both":

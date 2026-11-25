@@ -405,8 +405,8 @@ async def get_compliance_stats(
 
         # Risk heat map — GROUP BY tier x compliance bucket, max 20 rows
         tier_x = case(
-            (AISystem.tier == "minimal", 1),
-            (AISystem.tier == "limited", 2),
+            (AISystem.tier == "minimal_no", 1),
+            (AISystem.tier == "transparency", 2),
             (AISystem.tier == "gpai-standard", 2),
             (AISystem.tier == "high", 3),
             (AISystem.tier == "gpai-systemic", 3),

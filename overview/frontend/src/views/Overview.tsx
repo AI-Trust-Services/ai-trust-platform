@@ -213,7 +213,7 @@ export default function Overview() {
           icon={Boxes} sub="registered in platform"
           onClick={() => navigateTo("/home/ai-system-registry", REGISTRY_URL)} />
         <KpiTile label="High-Risk Systems" value={high_risk_on_market} color={highRiskColor}
-          icon={ShieldAlert} sub="on market / post-market"
+          icon={ShieldAlert} sub="on market / in service"
           onClick={() => navigateTo("/home/ai-system-registry", REGISTRY_URL)} />
         <KpiTile label="Compliance Score" value={`${avg_compliance}%`} color={complianceColor}
           icon={Gauge} sub="average across all systems"

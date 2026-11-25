@@ -15,8 +15,8 @@ export const TIER_META = {
   "high":          { label: "High Risk",               cls: "badge-high" },
   "gpai-systemic": { label: "GPAI with Systemic Risk", cls: "badge-gpai-systemic" },
   "gpai-standard": { label: "GPAI Standard",           cls: "badge-gpai-standard" },
-  "limited":       { label: "Transparency Obligations",cls: "badge-limited" },
-  "minimal":       { label: "Minimal or No Risk",      cls: "badge-minimal" },
+  "transparency":  { label: "AI System with Transparency Obligations", cls: "badge-limited" },
+  "minimal_no":    { label: "Minimal or No Risk AI System",            cls: "badge-minimal" },
 };
 
 export const LIFECYCLE_LABELS = {

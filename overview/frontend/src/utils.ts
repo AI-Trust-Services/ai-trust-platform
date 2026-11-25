@@ -16,8 +16,8 @@ export const TIER_COLORS: Record<TierKey, string> = {
   high:             "#e05c00",
   "gpai-systemic":  "#4108A0",
   "gpai-standard":  "#6C1AF4",
-  limited:          "#e9a922",
-  minimal:          "#1a7a3c",
+  transparency:     "#e9a922",
+  minimal_no:       "#1a7a3c",
   pending:          "#999999",
 };
 
@@ -41,10 +41,10 @@ export const HIST_COLORS = ["#bb0000", "#e05c00", "#e9a922", "#3d9e6b", "#1a7a3c
 
 export const TIER_LABELS: Record<TierKey, string> = {
   prohibited:       "Prohibited Practice",
-  high:             "High Risk",
+  high:             "High Risk AI System",
   "gpai-systemic":  "GPAI with Systemic Risk",
   "gpai-standard":  "GPAI Standard",
-  limited:          "Transparency Obligations",
-  minimal:          "Minimal or No Risk",
+  transparency:     "AI System with Transparency Obligations",
+  minimal_no:       "Minimal or No Risk AI System",
   pending:          "Pending Classification",
 };
