@@ -42,7 +42,7 @@ from app.questionnaire_tree import collect_question_ids, get_question_ids_from_l
 
 logger = get_logger(__name__)
 
-_CLASSIFICATION_MAX_TOKENS = int(os.environ.get("CLASSIFICATION_MAX_TOKENS", "2048"))
+_CLASSIFICATION_MAX_TOKENS = int(os.environ.get("CLASSIFICATION_MAX_TOKENS", "8192"))
 
 
 class InvalidRunKeyError(ValueError):
