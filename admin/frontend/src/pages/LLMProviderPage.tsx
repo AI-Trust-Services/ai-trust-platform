@@ -85,8 +85,18 @@ export default function LLMProviderPage() {
         ...(tokenChanged ? { api_token: form.api_token || null } : {}),
       });
       setTestResult(result);
-      // Refresh so last_test_status (which gates Activate) is current.
-      apply(await api.getLLMProvider());
+      // Only refresh from the server when the form matches the SAVED config —
+      // that's the only case where the backend recorded last_test_status (and
+      // the form already equals the row, so nothing is lost). For a scratch test
+      // of UNSAVED edits, refreshing would overwrite the typed-in values with the
+      // (empty/old) saved row and the user would lose their input — so skip it.
+      const isDirty =
+        (form.base_url ?? "") !== (status?.base_url ?? "") ||
+        (form.model ?? "") !== (status?.model ?? "") ||
+        tokenChanged;
+      if (!isDirty) {
+        apply(await api.getLLMProvider());
+      }
     } catch (e) {
       setTestResult({ success: false, message: e instanceof Error ? e.message : "Test failed" });
     } finally {
@@ -268,7 +278,12 @@ export default function LLMProviderPage() {
             <p className={cn("mt-2 text-sm", testResult.success ? "text-[var(--success-fg)]" : "text-destructive")}>
               {testResult.message}
               {testResult.success && !isActive && (
-                <span className="font-medium"> Click Activate to start using this provider.</span>
+                <span className="font-medium">
+                  {" "}
+                  {dirty
+                    ? "Save your changes, then Test the saved configuration to activate."
+                    : "Click Activate to start using this provider."}
+                </span>
               )}
             </p>
           )}
