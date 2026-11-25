@@ -215,34 +215,3 @@ async def classify_from_questionnaire_answers(
         "org_role_rationale": parsed.get("org_role_rationale"),
     }
     return classification, rationale
-
-
-async def classify_ai_questionnaire(row: Any) -> tuple[ClassificationResult, dict]:
-    """AI-mode classification from a system's stored questionnaire answers.
-
-    Infers the hidden classifier flags from the free-text business + technical
-    answers via the LLM, runs the deterministic ``classify()`` over them, and
-    returns ``(ClassificationResult, extended_rationale)`` where the rationale is
-    the ``ClassificationRationale`` shape ``{flags, confidence, reasoning,
-    missing_info}`` — visible only to the compliance officer.
-
-    Called identically by submit-technical and submit-info. The LLM call happens
-    *before* any status mutation in the router, so an ``LLMParseError`` leaves the
-    row untouched and the router can return 502 without corrupting workflow state.
-
-    Imports from ``app.llm`` are deferred to avoid a circular import
-    (``app.llm.prompts`` imports ``CLASSIFIER_INPUTS`` from this module at import time).
-    """
-    answers = dict(row.questionnaire_answers or {})
-    technical_answers = answers.pop("technical", {}) or {}
-    business_answers = {
-        "intended_purpose": row.intended_purpose or "",
-        "department": row.department or "",
-        "use_case": row.use_case or "",
-        "people_affected": row.people_affected or "",
-        "decision_context": row.decision_context or "",
-        **answers,
-    }
-    return await classify_from_questionnaire_answers(
-        business_answers, technical_answers
-    )
