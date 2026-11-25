@@ -239,8 +239,8 @@ export default function QuestionView() {
     try {
       await api.confirmQuestion(id, questionKey);
       markSaved();
-      await reload();
-      fetchSolverResult();
+      const s = await reload();
+      fetchSolverResult(s);
       if (nextKey) navigate(`${basePath}/q/${nextKey}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Confirm failed");

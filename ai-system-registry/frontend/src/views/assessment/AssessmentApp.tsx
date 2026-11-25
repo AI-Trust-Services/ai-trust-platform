@@ -5,14 +5,14 @@ import { Loader2, Save } from "lucide-react";
 import type { AssessmentState, ResolveResponse } from "../../types";
 import { api } from "../../api/client";
 import { usePermissions } from "../../hooks/usePermissions";
-import { isGated } from "../../config/aiQuestionnaire";
+import { isGated, isMultiselect, QUESTION_DEF_BY_ID } from "../../config/aiQuestionnaire";
 import { AssessmentSidebar, ORDERED_QUESTION_KEYS } from "./AssessmentSidebar";
 import { ComplianceAdvisor } from "./ComplianceAdvisor";
 import { ASSESSMENT_SECTIONS } from "./AssessmentSidebar";
 
 interface AssessmentCtx {
   state: AssessmentState;
-  reload: () => Promise<void>;
+  reload: () => Promise<AssessmentState>;
   savedAt: number | null;
   markSaved: () => void;
   // Username → display name. Populated lazily on first QuestionView mount so
@@ -26,8 +26,8 @@ interface AssessmentCtx {
   basePath: string;
   // Hierarchy solver result — null until pipeline finishes and ≥1 answer is confirmed.
   solverResult: ResolveResponse | null;
-  // Trigger a fresh solver call using the current confirmed answers.
-  fetchSolverResult: () => Promise<void>;
+  // Trigger a fresh solver call. Pass the fresh state from reload() to avoid stale refs.
+  fetchSolverResult: (s?: AssessmentState) => Promise<void>;
 }
 
 const Ctx = createContext<AssessmentCtx | null>(null);
@@ -143,10 +143,11 @@ export default function AssessmentApp() {
     load();
   }, [load]);
 
-  const reload = useCallback(async () => {
-    if (!id) return;
+  const reload = useCallback(async (): Promise<AssessmentState> => {
+    if (!id) throw new Error("no system id");
     const s = await api.getAssessmentState(id, viewAssessmentId);
     setState(s);
+    return s;
   }, [id, viewAssessmentId]);
 
   // Poll GET /state every 3 s while the background prefill pipeline is running.
@@ -193,17 +194,30 @@ export default function AssessmentApp() {
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  const fetchSolverResult = useCallback(async () => {
+  const fetchSolverResult = useCallback(async (s?: AssessmentState) => {
     if (!id) return;
-    const s = stateRef.current;
-    if (!s) return;
+    // s from reload() avoids staleRef after a confirm; fallback for mount-time calls.
+    const questions = (s ?? stateRef.current)?.questions;
+    if (!questions) return;
     const answers: Record<string, string[]> = {};
-    for (const q of s.questions) {
-      if (q.owner_confirmed && q.answer) answers[q.question_key] = [q.answer];
+    for (const q of questions) {
+      // Only manual answers as overrides — keeps LLM confidence for unmodified questions.
+      if (q.answer_source !== "manual" || !q.answer) continue;
+      const def = QUESTION_DEF_BY_ID[q.question_key];
+      if (def && isMultiselect(def)) {
+        try {
+          // Multiselect stored as JSON string '["A","B"]' — parse to array or solver gets a no-op.
+          const parsed = JSON.parse(q.answer);
+          answers[q.question_key] = Array.isArray(parsed) ? parsed : [q.answer];
+        } catch {
+          answers[q.question_key] = [q.answer];
+        }
+      } else {
+        answers[q.question_key] = [q.answer];
+      }
     }
-    if (Object.keys(answers).length === 0) return;
     try {
-      setSolverResult(await api.resolveClassification(id, { answers }));
+      setSolverResult(await api.resolveClassification(id, Object.keys(answers).length ? { answers } : {}));
     } catch {
       // best-effort — panel stays empty on error
     }
