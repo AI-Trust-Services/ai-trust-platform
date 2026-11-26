@@ -34,7 +34,7 @@ from app.classification_config import (
     DEFAULT_CLASSIFICATION_CONFIG_ID,
     DEFAULT_CLASSIFICATION_PROMPT_ID,
 )
-from app.llm.client import chat
+from app.llm.client import RuntimeConfig, chat
 from app.llm.parsing import LLMParseError, parse_with_retry
 from app.llm.templates import load_questionnaire, load_template
 from app.llm.validators import validate_answer_entries, validate_classification_label
@@ -79,6 +79,7 @@ async def _classify_label(
     label: dict,
     scoped_data: list[dict],
     system_prompt: str,
+    provider_config: RuntimeConfig | None = None,
 ) -> dict:
     """Run one LLM call for one active label.
 
@@ -112,7 +113,11 @@ async def _classify_label(
     ]
 
     llm_response = await chat(
-        messages, task=task, json_mode=True, max_tokens=_CLASSIFICATION_MAX_TOKENS
+        messages,
+        task=task,
+        json_mode=True,
+        max_tokens=_CLASSIFICATION_MAX_TOKENS,
+        config=provider_config,
     )
 
     if llm_response.get("finish_reason") == "length":
@@ -126,7 +131,7 @@ async def _classify_label(
         llm_response["text"],
         task=task,
         validator=partial(validate_classification_label, expected_label_id=label_id),
-        chat_fn=chat,
+        chat_fn=partial(chat, config=provider_config),
         messages=messages,
         max_attempts=3,
         max_tokens=_CLASSIFICATION_MAX_TOKENS,
@@ -145,6 +150,7 @@ async def run_classification(
     questionnaire_run_key: str,
     classification_config_id: str = DEFAULT_CLASSIFICATION_CONFIG_ID,
     prompt_id: str = DEFAULT_CLASSIFICATION_PROMPT_ID,
+    provider_config: RuntimeConfig | None = None,
 ) -> dict[str, Any]:
     """Run risk & role label classification against completed questionnaire answers.
 
@@ -225,7 +231,10 @@ async def run_classification(
 
     # 5. Fan out — one LLM call per runnable label, all in parallel.
     label_results = await asyncio.gather(
-        *[_classify_label(label, scoped, system_prompt) for label, scoped in runnable],
+        *[
+            _classify_label(label, scoped, system_prompt, provider_config)
+            for label, scoped in runnable
+        ],
         return_exceptions=True,
     )
 

@@ -419,22 +419,17 @@ async def _run_prefill_background(
     async def _on_batch(batch_results: list) -> None:
         """Persist one batch's answers into the existing question_states rows.
 
-        High- and medium-confidence answers are auto-confirmed on behalf of the
-        system owner (matching the feature-branch behaviour): the owner can still
-        review, change, and re-confirm any question, but they don't need to
-        manually tick every pre-filled answer with a good confidence score.
-        Low-confidence and unanswered questions remain unconfirmed and are
-        flagged for attention.
+        All AI-prefilled answers remain unconfirmed regardless of confidence
+        band — a human must explicitly confirm each one. Low-confidence and
+        unanswered questions are additionally flagged for attention.
         """
         proposals = _proposals_from_results(batch_results)
         if not proposals:
             return
         async with SessionLocal() as session:
             row = await _get_system(session, system_id)
-            owner = _system_owner(row)
             answers = _answer_store(row)
             states = await _states_by_key(session, assessment_id)
-            now = datetime.now(timezone.utc)
             for q_key, prop in proposals.items():
                 ans = prop["answer"]
                 if not ans:
@@ -447,12 +442,6 @@ async def _run_prefill_background(
                     st.confidence = prop["confidence"]
                     st.ai_references = prop["references"] or None
                     st.ai_explanation = prop["explanation"] or None
-                    # Auto-confirm high/medium confidence answers on behalf of the
-                    # owner so they don't need to click through every pre-filled
-                    # question. Low confidence stays unconfirmed (needs attention).
-                    if prop["confidence"] in ("high", "medium") and owner:
-                        st.confirmed_at = now
-                        st.confirmed_by = owner
             row.questionnaire_answers = answers
             await session.commit()
             logger.info(
@@ -516,6 +505,7 @@ async def _run_prefill_background(
                         "assessment_sources": _shared.get("sources", []),
                     },
                     consumed=_shared.get("consumed"),
+                    provider=questionnaire_output.get("provider"),
                 )
                 await session.commit()
         except Exception as exc:  # noqa: BLE001
@@ -585,8 +575,7 @@ async def open_assessment(
         assessment = await _ensure_assessment(session, row)
         existing = await _states_by_key(session, assessment.id)
         if existing:
-            # Retry after a background failure or a lost in-flight task (pod restart).
-            if assessment.llm_status in ("failed", "pending"):
+            if assessment.llm_status in ("failed", "pending", "stub"):
                 assessment.llm_status = "pending"
                 await session.commit()
                 background_tasks.add_task(
@@ -801,6 +790,7 @@ async def _build_state(
         prefilled=bool(states),
         prefill_pending=assessment.llm_status == "pending",
         prefill_failed=assessment.llm_status == "failed",
+        prefill_stub=assessment.llm_status == "stub",
     )
 
 

@@ -43,8 +43,8 @@ export default function AssessmentStartPage() {
       <p className="mt-3 text-muted-foreground">
         Our AI reviewed your {state.source_documents.length} uploaded document
         {state.source_documents.length === 1 ? "" : "s"} and pre-filled{" "}
-        {state.questions.filter((q) => q.answer_source === "ai_prefilled" && q.answer).length} answers. Review the
-        risk classification below, then check the answers the AI was least sure about.
+        {state.questions.filter((q) => q.answer_source === "ai_prefilled" && q.answer).length} answers. Check the
+        preliminary risk classification, then review and confirm each AI-proposed answer before submitting.
       </p>
 
       {state.prefill_pending && (

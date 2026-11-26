@@ -19,6 +19,31 @@ FAKE_Q = {"run_key": "questionnaire-results/SYS-TEST/ai-questionnaire/t.json", "
 FAKE_C = {"run_key": "classification-results/SYS-TEST/risk_role_classification_config/t.json", "result": {}, "presigned_url": ""}
 
 
+@pytest.fixture(autouse=True)
+def _stub_provider():
+    """Pin the provider the orchestrator resolves once per run (no DB in unit tests)."""
+    from app.llm.client import RuntimeConfig
+
+    stub_cfg = RuntimeConfig(
+        base_url="stub", api_token="", model="m", source="thalamus"
+    )
+    with patch(
+        "app.assessment_prefill_pipeline.resolve_runtime_config",
+        new_callable=AsyncMock,
+        return_value=stub_cfg,
+    ):
+        yield
+
+
+def _patch(questionnaire: AsyncMock, classification: AsyncMock):
+    return (
+        patch(
+            "app.assessment_prefill_pipeline.run_questionnaire_pipeline", questionnaire
+        ),
+        patch("app.assessment_prefill_pipeline.run_classification", classification),
+    )
+
+
 @pytest.mark.asyncio
 async def test_on_classification_done_called_with_classification_result():
     """on_classification_done receives the classification dict on success."""
