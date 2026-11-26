@@ -217,7 +217,7 @@ export default function Overview() {
           onClick={() => navigateTo("/home/ai-system-registry", REGISTRY_URL)} />
         <KpiTile label="Compliance Score" value={`${avg_compliance}%`} color={complianceColor}
           icon={Gauge} sub="average across all systems"
-          onClick={() => navigateTo("/home/assessments", COMPLIANCE_URL)} />
+          onClick={() => navigateTo("/home/ai-system-registry", REGISTRY_URL)} />
         <KpiTile label="Open Obligations" value={openObligations ?? "—"} color={oblColor}
           icon={ClipboardList} sub="applicable + in progress + overdue"
           onClick={() => navigateTo("/home/obligations", COMPLIANCE_URL)} />
@@ -247,7 +247,7 @@ export default function Overview() {
         <ComplianceTrend
           assessments={assessments}
           windowDays={dateRange.days}
-          onClick={() => navigateTo("/home/assessments", COMPLIANCE_URL)}
+          onClick={() => navigateTo("/home/ai-system-registry", REGISTRY_URL)}
         />
         <AlertFeed alerts={activeAlerts} loading={loading && activeAlerts.length === 0} />
       </div>
