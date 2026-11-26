@@ -225,7 +225,7 @@ async def test_resolve_labels_override_sets_source_user(client):
     assert risk["labelId"] != "HIGH_RISK" or risk["result"] is False
     # The overridden label has source="user" and confidence=100
     all_labels = [body["risk"]] + body["roles"]
-    high_risk = next((l for l in all_labels if l["labelId"] == "HIGH_RISK"), None)
+    high_risk = next((lbl for lbl in all_labels if lbl["labelId"] == "HIGH_RISK"), None)
     if high_risk:
         assert high_risk["source"] == "user"
         assert high_risk["confidence"] == 100

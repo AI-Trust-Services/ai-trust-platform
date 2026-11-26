@@ -12,7 +12,7 @@ its transaction (``async with SessionLocal()``), per the repo convention.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from typing import Any
 
 from ai_trust_authorization import require_permission
@@ -42,7 +42,6 @@ from app.assessment_catalogue import (
 from app.assessment_prefill_pipeline import run_assessment_prefill_pipeline
 from app.dossier import create_dossier_in_session, write_ai_output_in_session
 from app.hierarchy_solver import label_to_tier, org_role_from_roles, solve
-from app.schemas.hierarchy_solver import LabelOverrides
 from app.ids import new_id
 from app.llm import LLMParseError
 from app.questionnaire_gating import get_all_gated_question_ids, is_gated
@@ -63,6 +62,7 @@ from app.schemas.assessment import (
     SubmitRequest,
     _validate_question_key,
 )
+from app.schemas.hierarchy_solver import LabelOverrides
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy import func, select
 
@@ -459,6 +459,7 @@ async def _run_prefill_background(
         proposals = _proposals_from_results(results)
         _shared["results"] = results
         _shared["consumed"] = questionnaire_output.get("consumed")
+        _shared["provider"] = questionnaire_output.get("provider")
         _shared["sources"] = [s.model_dump() for s in _sources_from_proposals(proposals)]
         async with SessionLocal() as session:
             row = await _get_system(session, system_id)
@@ -505,7 +506,7 @@ async def _run_prefill_background(
                         "assessment_sources": _shared.get("sources", []),
                     },
                     consumed=_shared.get("consumed"),
-                    provider=questionnaire_output.get("provider"),
+                    provider=_shared.get("provider"),
                 )
                 await session.commit()
         except Exception as exc:  # noqa: BLE001
@@ -974,7 +975,7 @@ async def confirm_question(
                     "A comment explaining the change is required before confirming",
                 )
 
-        state.confirmed_at = datetime.now(timezone.utc)
+        state.confirmed_at = datetime.now(UTC)
         state.confirmed_by = user
         await session.commit()
 
@@ -1163,7 +1164,7 @@ async def delete_comment(
             raise HTTPException(404, "Comment not found")
         if user != comment.author_username and user != _system_owner(row):
             raise HTTPException(403, "You may only delete your own comments")
-        comment.deleted_at = datetime.now(timezone.utc)
+        comment.deleted_at = datetime.now(UTC)
         await session.commit()
 
 
@@ -1213,7 +1214,7 @@ async def assign_question(
             session.add(state)
         state.assignee_username = body.assignee_username
         state.assigned_by_username = user
-        state.assigned_at = datetime.now(timezone.utc)
+        state.assigned_at = datetime.now(UTC)
         system_name = row.name
         await session.commit()
         count = (await _comment_counts(session, assessment.id)).get(question_key, 0)
@@ -1586,7 +1587,7 @@ async def start_new_assessment(
             return await open_assessment(system_id, request, background_tasks)
         # Archive the approved cycle (frozen; its states/comments stay attached).
         current.status = "inactive"
-        current.updated_at = datetime.now(timezone.utc)
+        current.updated_at = datetime.now(UTC)
         # Reset the live classification so the fresh cycle re-prefills from scratch.
         # Mirror compliance /historicize (tier=pending, workflow=draft); the other
         # fields are reset to their column defaults — basis is NOT NULL (""),
