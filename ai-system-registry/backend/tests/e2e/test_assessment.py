@@ -692,14 +692,16 @@ async def test_ai_original_answer_stays_null_when_ai_never_answered(
         headers=_hdr(_OWNER),
     )
     assert r.status_code == 200, r.text
-    # The POST response reports manual provenance with no AI original to attribute.
-    assert r.json()["answer_source"] == "manual"
+    # The AI never answered (null confidence/original), so filling it manually is
+    # NOT a "changed AI answer" (#478): provenance stays "ai_prefilled" and no AI
+    # original is attributed. The point of this test is the null original below.
+    assert r.json()["answer_source"] == "ai_prefilled"
     assert r.json()["ai_original_answer"] is None
     st = await client.get(
         f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
     )
     q_now = next(x for x in st.json()["questions"] if x["question_key"] == qkey)
-    assert q_now["answer_source"] == "manual"
+    assert q_now["answer_source"] == "ai_prefilled"
     # Must stay null — not overwritten with the manual answer.
     assert q_now["ai_original_answer"] is None
 

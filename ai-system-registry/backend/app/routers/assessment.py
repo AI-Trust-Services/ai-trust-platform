@@ -962,7 +962,12 @@ async def save_answer(
                 system_id=system_id,
                 question_key=question_key,
                 answer=body.answer or None,
-                answer_source="manual",
+                # No prior state ⇒ the AI never answered this question (null
+                # ai_original / confidence), so there is nothing to have "changed":
+                # "ai_prefilled" keeps this consistent with confirm_question's
+                # _changed_from_ai (which returns False here) so the frontend does
+                # not show the change-warning or gate Confirm on a comment (#478).
+                answer_source="ai_prefilled",
                 ai_original_answer=None,
                 answer_changed_at=change_ts,
             )
