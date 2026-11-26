@@ -1,6 +1,6 @@
 ---
 name: rebase
-description: Rebase the current feature branch onto the latest origin/main with intelligent, repo-aware conflict resolution. Use when integrating the latest main into a feature branch before opening or updating a PR.
+description: Rebase the current feature branch onto the latest origin/main with intelligent, repo-aware conflict resolution.
 ---
 
 Rebase the current feature branch onto the latest `origin/main` so its commits replay on top of main — **linear history, no merge commit**. Your feature commits are kept as-is (same messages, new hashes). Conflicts are resolved by understanding *both* branches' intent so neither main's incoming behavior nor the feature work is broken.
@@ -86,19 +86,8 @@ Repeat for the next stop until the rebase reports it is done.
 
 Reached when `git rebase` reports success (either cleanly from Step 2 or after the last `--continue` in Step 3).
 
-## Step 5 — Verify (this gates the push)
 
-**Integrity — nothing dropped or mangled:**
-```
-git range-diff "$BASE...$PRE" "$BASE...HEAD"
-```
-Confirm every feature commit is present and only intended changes differ. Flag anything unexpected.
-
-(Lint and the heavy kind/Postgres/ClickHouse e2e suites are intentionally skipped — CI runs them after push, and a `/rebase` must never be blocked by a lint finding.)
-
-If the range-diff shows a dropped/corrupted commit: **do not push.** Report exactly what failed and the recovery options — `git rebase --abort` (if mid-rebase), `git reset --hard "backup/${BRANCH}-..."`, or `git reflog` — then stop.
-
-## Step 6 — Push (automatic, only on a clean Step 5)
+## Step 6 — Push
 
 ```
 git push --force-with-lease

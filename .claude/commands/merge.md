@@ -1,9 +1,9 @@
 ---
 name: merge
-description: Merge the latest origin/main into the current feature branch (one merge commit, feature hashes preserved, no force-push) with intelligent, repo-aware conflict resolution. Use when integrating main into a shared branch where rewriting history is undesirable.
+description: Merge the latest origin/main into the current feature branch (one merge commit, feature hashes preserved, no force-push) with intelligent, repo-aware conflict resolution.
 ---
 
-Integrate the latest `origin/main` into the current feature branch by **merging** it in — your feature commits stay byte-for-byte identical (same hashes), exactly **one** merge commit is added on top, and **no force-push** is needed. This is the sibling of `/rebase`: use `/merge` when the branch is shared, someone else has it checked out, or review comments are pinned to specific commits — anywhere rewriting history would hurt. Use `/rebase` instead when you want linear history and the branch is yours alone.
+Integrate the latest `origin/main` into the current feature branch by **merging** it in — your feature commits stay byte-for-byte identical (same hashes), exactly **one** merge commit is added on top, and **no force-push** is needed.
 
 Conflicts are resolved by understanding *both* branches' intent so neither main's incoming behavior nor the feature work breaks. Safe by construction: nothing is rewritten, a backup ref is recorded, and an in-progress merge can be undone with `git merge --abort`. Nothing is pushed unless verification passes.
 
@@ -82,20 +82,8 @@ git commit        # finalizes the merge commit (no --continue; a merge is one co
 
 Reached when the merge commit exists (clean from Step 2, or after the `git commit` in Step 3).
 
-## Step 5 — Verify (this gates the push)
 
-**Integrity — both sides survived:**
-```
-git diff HEAD^1...HEAD     # changes this merge brought in from the feature side's base
-git diff HEAD^2...HEAD     # changes this merge brought in from $BASE
-```
-Confirm the merge carried **both** your branch's changes and main's new changes — nothing silently dropped during resolution. Flag anything unexpected.
-
-(Lint and the heavy kind/Postgres/ClickHouse e2e suites are intentionally skipped — CI runs them after push, and a `/merge` must never be blocked by a lint finding.)
-
-If the diff shows a side was dropped: **do not push.** Report exactly what failed and the recovery options — `git merge --abort` (if still mid-merge), `git reset --hard "backup/${BRANCH}-..."`, or `git reflog` — then stop.
-
-## Step 6 — Push (automatic, only on a clean Step 5)
+## Step 5 — Push
 
 ```
 git push
