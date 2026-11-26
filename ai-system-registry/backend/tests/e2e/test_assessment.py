@@ -1054,6 +1054,61 @@ async def test_issue_coerces_pending_org_role_to_provider(client: httpx.AsyncCli
 
 
 @pytest.mark.asyncio
+async def test_start_new_resets_org_role_to_pending(client: httpx.AsyncClient):
+    """Edge case (#436, cycle 2): start-new must reset org_role to "pending" (like
+    tier), so a second cycle whose classifier stays silent does not snapshot the
+    previous cycle's stale, not-freshly-determined role. Without the reset, the
+    issue-time pending→provider coercion would never fire and the stale role would
+    be carried forward silently.
+
+    The stub classifier always emits a concrete org_role, so to exercise the silent
+    case we patch the cycle-2 classify to return a rationale with no org_role — the
+    low-confidence / classifier-failure path `_finalize_tier` leaves untouched.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from ai_trust_persistence.database import engine
+    from ai_trust_persistence.models.ai_system import AISystem
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from app.classifier import classify_ai_questionnaire
+
+    system_id = await _submit_as_owner(client)
+    # Cycle 1 resolves and issues a concrete role.
+    await _issue_as_co(client, system_id, "high")
+    async with AsyncSession(engine) as s:
+        row = await s.get(AISystem, system_id)
+        assert row.org_role == "provider"
+
+    # Cycle 2's classifier is silent on org_role (stub normally isn't). Delegate to
+    # the real classifier, then strip org_role from the rationale so _finalize_tier
+    # takes its "role not resolved this run" branch.
+    async def _silent_role(row):
+        classification, rationale = await classify_ai_questionnaire(row)
+        rationale = {**rationale, "org_role": None}
+        return classification, rationale
+
+    with patch(
+        "app.routers.assessment.classify_ai_questionnaire",
+        new=AsyncMock(side_effect=_silent_role),
+    ):
+        r = await client.post(
+            f"/v1/systems/{system_id}/assessment/start-new", headers=_hdr(_OWNER)
+        )
+        assert r.status_code == 200, r.text
+
+    # start-new reset the role to "pending" and the silent cycle-2 classify did not
+    # overwrite it — so it is NOT the stale cycle-1 "provider". That is what lets the
+    # issue-time coercion re-fire on cycle 2 instead of carrying the stale role.
+    async with AsyncSession(engine) as s:
+        row = await s.get(AISystem, system_id)
+        assert row.org_role == "pending", (
+            "cycle 2 must start with a pending role so the issue-time coercion "
+            "can re-fire instead of carrying the stale cycle-1 'provider' role"
+        )
+
+
+@pytest.mark.asyncio
 async def test_issue_minimal_tier_generates_no_obligations(
     client: httpx.AsyncClient,
 ):

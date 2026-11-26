@@ -230,6 +230,19 @@ if BATCH_IMPORT_ENABLED:
                     )
                 )
                 continue
+            # Same invariant for org_role: "pending" is a valid VALID_ROLES member
+            # (so Pydantic no longer rejects it), but an approved row must carry a
+            # concrete role. The issue-time pending→provider coercion never runs for
+            # batch imports, so reject here rather than store an approved+pending row.
+            if target_status == "approved" and rec.org_role == "pending":
+                failed.append(
+                    ImportFailure(
+                        index=i,
+                        name=rec.name,
+                        error="org_role is pending; supply a resolved org_role to import as approved",
+                    )
+                )
+                continue
             ineligible = [
                 u for u in (rec.contributors or []) if u in blocked_contributors
             ]
