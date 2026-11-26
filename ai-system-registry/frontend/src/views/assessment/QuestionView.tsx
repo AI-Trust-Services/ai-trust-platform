@@ -130,7 +130,11 @@ export default function QuestionView() {
   // EVERY question at /open, so it alone does not mean the AI answered this one —
   // an unanswered question would otherwise claim "Pre-filled AI answer" (#383).
   // NOT_ENOUGH_INFORMATION / CONFLICT are the AI explicitly declining to answer;
-  // the control renders blank for them, so say what actually happened.
+  // the control renders blank for them, so say what actually happened. A declined
+  // (null-confidence) question the user then answers stays answer_source
+  // "ai_prefilled" (no change-gate), but is NOT a pre-fill — only a concrete AI
+  // answer (confidence set) is "Pre-filled AI answer"; anything else the user
+  // typed is "Manual entry".
   const answerSourceLabel = changedFromAi
     ? "Manual entry"
     : qState?.answer === "NOT_ENOUGH_INFORMATION" ||
@@ -138,9 +142,11 @@ export default function QuestionView() {
       ? "AI found no supporting evidence"
       : qState?.answer === "CONFLICT" || qState?.answer === '["CONFLICT"]'
         ? "AI found conflicting evidence"
-        : qState?.answer
-          ? "Pre-filled AI answer"
-          : "Not answered by AI";
+        : !qState?.answer
+          ? "Not answered by AI"
+          : qState?.confidence
+            ? "Pre-filled AI answer"
+            : "Manual entry";
   // Whether a comment that SATISFIES the backend change-gate exists — i.e. one
   // recorded at/after the last answer change. Backend-computed (mirrors the
   // confirm gate) so a stale pre-change comment doesn't enable a confirm the

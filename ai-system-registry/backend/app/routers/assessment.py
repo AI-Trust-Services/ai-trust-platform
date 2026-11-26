@@ -319,6 +319,35 @@ def _needs_attention(
     return answer is None or (isinstance(answer, str) and not answer.strip())
 
 
+def _norm_answer(val: str | None) -> str:
+    """Canonicalize an answer for change-detection. MULTISELECT answers are JSON
+    arrays, so compare them as sets (order-insensitive) and collapse "[]"/blank
+    to "" — otherwise toggling an option off and back on, or re-selecting the same
+    options in a different order, reads as a change when the net answer is identical."""
+    s = (val or "").strip()
+    if s.startswith("["):
+        try:
+            items = sorted(str(x) for x in json.loads(s))
+            return json.dumps(items) if items else ""
+        except (ValueError, TypeError):
+            pass
+    return s
+
+
+def _changed_from_ai(state: QuestionState, new_answer: str) -> bool:
+    """True only when the AI proposed a CONCRETE answer and the user's answer
+    differs from it — the trigger for the "changed AI answer" warning and the
+    mandatory-comment confirm gate.
+
+    ``confidence is None`` is the AI declining to answer (null / CONFLICT /
+    NOT_ENOUGH_INFORMATION): there is no answer to have "changed", so manual
+    input is free of the warning and comment requirement. A concrete band
+    (high/medium/low) keeps the existing behaviour."""
+    if state.confidence is None or not (state.ai_original_answer or "").strip():
+        return False
+    return _norm_answer(new_answer) != _norm_answer(state.ai_original_answer)
+
+
 def _may_edit(row: AISystem, state: QuestionState | None, user: str) -> bool:
     """Owner may edit any question; an assignee may edit theirs; a question with
     no assignee defaults to the owner."""
@@ -933,7 +962,12 @@ async def save_answer(
                 system_id=system_id,
                 question_key=question_key,
                 answer=body.answer or None,
-                answer_source="manual",
+                # No prior state ⇒ the AI never answered this question (null
+                # ai_original / confidence), so there is nothing to have "changed":
+                # "ai_prefilled" keeps this consistent with confirm_question's
+                # _changed_from_ai (which returns False here) so the frontend does
+                # not show the change-warning or gate Confirm on a comment (#478).
+                answer_source="ai_prefilled",
                 ai_original_answer=None,
                 answer_changed_at=change_ts,
             )
@@ -948,9 +982,7 @@ async def save_answer(
                 state.confirmed_at = None
                 state.confirmed_by = None
                 state.answer_source = (
-                    "manual"
-                    if new != (state.ai_original_answer or "").strip()
-                    else "ai_prefilled"
+                    "manual" if _changed_from_ai(state, new) else "ai_prefilled"
                 )
         await session.commit()
         count = (await _comment_counts(session, assessment.id)).get(question_key, 0)
@@ -996,10 +1028,7 @@ async def confirm_question(
             _read_answer(row, _answer_store(row), question_key) or ""
         )
         current = current.strip()
-        changed = (
-            state.answer_source == "manual"
-            and current != (state.ai_original_answer or "").strip()
-        )
+        changed = _changed_from_ai(state, current)
         if changed:
             # Require a non-deleted comment recorded AT/AFTER the answer change —
             # not merely that some comment exists (which an unrelated earlier
