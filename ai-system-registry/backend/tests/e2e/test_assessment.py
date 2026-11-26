@@ -581,6 +581,10 @@ async def test_state_exposes_ai_original_answer_after_override(
         headers=_hdr(_OWNER),
     )
     assert r.status_code == 200, r.text
+    # The POST /answer response itself carries the AI original (not only the later
+    # GET /state reload) — so an optimistic client patch keeps it (review: PR #477).
+    assert r.json()["answer_source"] == "manual"
+    assert r.json()["ai_original_answer"] == ai_original
     st = await client.get(
         f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
     )
@@ -589,6 +593,37 @@ async def test_state_exposes_ai_original_answer_after_override(
     assert q_now["answer"] == "A manually-entered answer."
     # The AI original survives the override — both answers remain available.
     assert q_now["ai_original_answer"] == ai_original
+
+
+@pytest.mark.asyncio
+async def test_ai_original_answer_stays_null_when_ai_never_answered(
+    client: httpx.AsyncClient,
+):
+    """#435 (review): a question the AI never answered keeps ai_original_answer=null
+    even after the owner fills it manually — the manual answer must NOT backfill it.
+
+    This is the case that triggers the misleading CO reviewer block: the reviewer's
+    "AI suggested answer" card is gated on a non-null ai_original_answer, so a null
+    original must stay null. Reached via the save_answer fresh-create path (answering
+    an ungated question before any prefill has seeded/answered it)."""
+    system_id = await _create_system(client)
+    qkey = "Scope_1"  # ungated → /answer is accepted without a prior prefill
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/answer",
+        json={"answer": "Manually filled; the AI never answered this one."},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    # The POST response reports manual provenance with no AI original to attribute.
+    assert r.json()["answer_source"] == "manual"
+    assert r.json()["ai_original_answer"] is None
+    st = await client.get(
+        f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
+    )
+    q_now = next(x for x in st.json()["questions"] if x["question_key"] == qkey)
+    assert q_now["answer_source"] == "manual"
+    # Must stay null — not overwritten with the manual answer.
+    assert q_now["ai_original_answer"] is None
 
 
 @pytest.mark.asyncio
