@@ -899,10 +899,10 @@ function AssessmentsTab({
                       )}
                     </TableCell>
                     <TableCell>
-                      {(a.tier ?? (isApproved ? system.tier : null)) ? (
+                      {a.status === "approved" && (a.tier ?? system.tier) ? (
                         <TierBadge
                           tier={(a.tier ?? system.tier) as typeof system.tier}
-                          workflowStatus={system.workflow_status}
+                          workflowStatus="approved"
                           isChatbot={system.is_chatbot}
                           generatesSyntheticContent={
                             a.tier != null

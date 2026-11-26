@@ -223,7 +223,7 @@ export default function Systems() {
     const q = search.trim().toLowerCase();
     return systems.filter((s) => {
       const matchSearch = !q || s.name.toLowerCase().includes(q) || ownerLabel(s).toLowerCase().includes(q);
-      const matchRisk = riskSel.size === 0 || riskSel.has(s.tier);
+      const matchRisk = riskSel.size === 0 || (s.workflow_status === "approved" && riskSel.has(s.tier));
       const matchRole = roleSel.size === 0 || roleSel.has(effectiveOrgRole(s.org_role, s.workflow_status));
       const matchOwner = ownerSel.size === 0 || ownerSel.has(ownerKey(s));
       return matchSearch && matchRisk && matchRole && matchOwner;
