@@ -184,6 +184,51 @@ async def create_dossier_in_session(session, row: AISystem, assessment_id: str) 
     )
 
 
+async def _dossier_id_for(session, assessment_id: str) -> str | None:
+    return (
+        await session.execute(
+            select(AssessmentDossier.id).where(
+                AssessmentDossier.assessment_id == assessment_id
+            )
+        )
+    ).scalar_one_or_none()
+
+
+async def write_output_layer_in_session(
+    session,
+    assessment_id: str,
+    layer: str,
+    payload: dict[str, Any],
+) -> None:
+    """Append one write-once output layer to the assessment's dossier.
+
+    The layers of a run — ``ai`` (#366), ``user_confirmed`` (#370), ``co_issued``
+    (#370) — are physically separate, immutable rows, never fields on one mutable
+    row, which is *why* a later layer can never overwrite the AI layer (#370's hard
+    requirement). Write-once: a duplicate layer is dropped via ON CONFLICT DO
+    NOTHING on ``UNIQUE(dossier_id, layer)``. No-op if the dossier is missing.
+    Never commits — the caller owns the txn.
+    """
+    dossier_id = await _dossier_id_for(session, assessment_id)
+    if not dossier_id:
+        logger.warning(
+            "assessment.dossier_missing_for_output",
+            extra={"assessment_id": assessment_id, "layer": layer},
+        )
+        return
+    stmt = (
+        pg_insert(AssessmentDossierOutput.__table__)
+        .values(
+            id=new_id("DOO"),
+            dossier_id=dossier_id,
+            layer=layer,
+            payload=payload,
+        )
+        .on_conflict_do_nothing(constraint="uq_dossier_output_layer")
+    )
+    await session.execute(stmt)
+
+
 async def write_ai_output_in_session(
     session,
     assessment_id: str,
@@ -210,32 +255,78 @@ async def write_ai_output_in_session(
     ``UNIQUE(dossier_id, layer)`` (so a pipeline retry can't duplicate). No-op if
     the dossier is missing. Never commits — the caller owns the txn.
     """
-    dossier_id = (
+    await write_output_layer_in_session(
+        session,
+        assessment_id,
+        "ai",
+        {
+            "answers": answers,
+            "classification": classification,
+            "consumed_inputs": consumed,
+            "provider": provider,
+        },
+    )
+
+
+async def build_co_issued_bundle(
+    session,
+    assessment_id: str,
+    co_decision: dict[str, Any],
+    user_confirmed: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Compose the standalone ``co_issued`` bundle written when the CO confirms (#370).
+
+    "Final dossier with ALL the information" — reads the frozen
+    inputs/config/prompts and the already-written ``ai`` output layer, and bundles
+    them with ``user_confirmed`` and the CO's binding decision so this single row
+    is a self-contained final record. Returns ``None`` (logged) if the dossier is
+    missing. A missing ``ai`` layer (e.g. the pipeline never completed) yields a
+    ``null`` for that key rather than blocking the issue.
+
+    ``user_confirmed`` is built by the caller from the **live** ``question_states``
+    at confirm time — i.e. the answers the CO is actually approving — NOT read from
+    the frozen ``user_confirmed`` output layer. This matters after a CO
+    reject→resubmit: the frozen layer is write-once and stays pinned to the owner's
+    FIRST submission, so it would understate a re-submitted answer set. Because
+    co_issued is generated exactly once (at confirm), live state at that instant is
+    the accurate final record. Consequence: in the no-reject happy path this equals
+    the standalone ``user_confirmed`` layer; after a bounce it can legitimately
+    differ (the layer = first submission, the bundle = final approved state).
+    """
+    dossier = (
         await session.execute(
-            select(AssessmentDossier.id).where(
-                AssessmentDossier.assessment_id == assessment_id
+            select(
+                AssessmentDossier.inputs,
+                AssessmentDossier.config_snapshot,
+                AssessmentDossier.prompt_snapshot,
+            ).where(AssessmentDossier.assessment_id == assessment_id)
+        )
+    ).one_or_none()
+    if dossier is None:
+        logger.warning(
+            "assessment.dossier_missing_for_co_issued",
+            extra={"assessment_id": assessment_id},
+        )
+        return None
+    inputs, config_snapshot, prompt_snapshot = dossier
+    ai_payload = (
+        await session.execute(
+            select(AssessmentDossierOutput.payload)
+            .join(
+                AssessmentDossier,
+                AssessmentDossier.id == AssessmentDossierOutput.dossier_id,
+            )
+            .where(
+                AssessmentDossier.assessment_id == assessment_id,
+                AssessmentDossierOutput.layer == "ai",
             )
         )
     ).scalar_one_or_none()
-    if not dossier_id:
-        logger.warning(
-            "assessment.dossier_missing_for_ai_output",
-            extra={"assessment_id": assessment_id},
-        )
-        return
-    stmt = (
-        pg_insert(AssessmentDossierOutput.__table__)
-        .values(
-            id=new_id("DOO"),
-            dossier_id=dossier_id,
-            layer="ai",
-            payload={
-                "answers": answers,
-                "classification": classification,
-                "consumed_inputs": consumed,
-                "provider": provider,
-            },
-        )
-        .on_conflict_do_nothing(constraint="uq_dossier_output_layer")
-    )
-    await session.execute(stmt)
+    return {
+        "inputs": inputs,
+        "config_snapshot": config_snapshot,
+        "prompt_snapshot": prompt_snapshot,
+        "ai": ai_payload,
+        "user_confirmed": user_confirmed,
+        "co_issued": co_decision,
+    }
