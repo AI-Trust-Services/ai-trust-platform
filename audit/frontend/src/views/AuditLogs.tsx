@@ -47,6 +47,10 @@ const ACTION_LABELS: Record<string, string> = {
   "evidence.approved": "Approved",
   "evidence.rejected": "Rejected",
   "evidence.deleted": "Deleted",
+  "llm_provider.updated": "Updated",
+  "llm_provider.tested": "Tested",
+  "llm_provider.activated": "Activated",
+  "llm_provider.deactivated": "Deactivated",
 };
 
 const ACTION_COLORS: Record<string, string> = {
@@ -62,12 +66,17 @@ const ACTION_COLORS: Record<string, string> = {
   "evidence.approved": "bg-[#d5f5e3] text-[#1a5c35]",
   "evidence.rejected": "bg-[#fde8e8] text-[#8b0000]",
   "evidence.deleted": "bg-[#fde8e8] text-[#8b0000]",
+  "llm_provider.updated": "bg-[#e8f0fb] text-[#0a4a9e]",
+  "llm_provider.tested": "bg-[#f0e8fb] text-[#5a0a9e]",
+  "llm_provider.activated": "bg-[#d5f5e3] text-[#1a5c35]",
+  "llm_provider.deactivated": "bg-[#fde8d0] text-[#8b3a00]",
 };
 
 const RESOURCE_TYPE_LABELS: Record<string, string> = {
   ai_system: "AI System",
   assessment: "Assessment",
   evidence: "Evidence",
+  llm_provider_config: "LLM Provider",
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -139,29 +148,42 @@ function ChangesDiff({ changes }: { changes: AuditEventDetail["changes"] }) {
   const entries = Object.entries(changes);
   if (!entries.length) return <span className="text-xs text-muted-foreground">No changes recorded</span>;
 
+  // A change entry is either a {before, after} diff (system/evidence actions) or
+  // a flat value (llm_provider actions record changes as plain field→value).
+  const isDiff = (v: unknown): v is { before?: unknown; after?: unknown } =>
+    typeof v === "object" && v !== null && ("before" in v || "after" in v);
+  const fmt = (v: unknown) => (v === null || v === "" ? "—" : String(v));
+
   return (
     <div className="flex flex-col gap-2">
-      {entries.map(([field, diff]) => (
+      {entries.map(([field, value]) => (
         <div key={field} className="rounded-md border border-border bg-muted/40 p-2.5">
           <div className="mb-1 text-xs font-semibold text-foreground capitalize">
             {field.replace(/_/g, " ")}
           </div>
           <div className="flex flex-col gap-0.5 text-xs">
-            {diff.before !== undefined && (
-              <div className="flex gap-1.5 items-start">
-                <span className="shrink-0 w-12 text-[#8b0000] font-medium">Before:</span>
-                <span className="font-mono text-muted-foreground break-all">
-                  {diff.before === null ? "—" : String(diff.before)}
-                </span>
-              </div>
-            )}
-            {diff.after !== undefined && (
-              <div className="flex gap-1.5 items-start">
-                <span className="shrink-0 w-12 text-[#1a5c35] font-medium">After:</span>
-                <span className="font-mono text-foreground break-all">
-                  {diff.after === null ? "—" : String(diff.after)}
-                </span>
-              </div>
+            {isDiff(value) ? (
+              <>
+                {value.before !== undefined && (
+                  <div className="flex gap-1.5 items-start">
+                    <span className="shrink-0 w-12 text-[#8b0000] font-medium">Before:</span>
+                    <span className="font-mono text-muted-foreground break-all">
+                      {fmt(value.before)}
+                    </span>
+                  </div>
+                )}
+                {value.after !== undefined && (
+                  <div className="flex gap-1.5 items-start">
+                    <span className="shrink-0 w-12 text-[#1a5c35] font-medium">After:</span>
+                    <span className="font-mono text-foreground break-all">
+                      {fmt(value.after)}
+                    </span>
+                  </div>
+                )}
+              </>
+            ) : (
+              // Flat value (no before/after) — render it directly.
+              <span className="font-mono text-foreground break-all">{fmt(value)}</span>
             )}
           </div>
         </div>

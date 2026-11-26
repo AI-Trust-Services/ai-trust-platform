@@ -202,6 +202,10 @@ class AssessmentStateResponse(BaseModel):
     prefill_pending: bool = False
     # True if the background pipeline failed — client may retry by calling /open again.
     prefill_failed: bool = False
+    # True if the completed prefill ran on the offline stub (no live LLM configured),
+    # so answers are placeholder "not enough information" and not real analysis — the
+    # client shows a "contact your administrator" banner.
+    prefill_stub: bool = False
 
 
 class SubmitRequest(BaseModel):

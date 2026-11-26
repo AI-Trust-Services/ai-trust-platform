@@ -10,7 +10,11 @@ import type {
   BrandingUpdate,
   BrandingStatus,
   BrandingPublishResponse,
-  ExternalApiToken,
+  LLMProvider,
+  LLMProviderHealth,
+  LLMProviderUpdate,
+  LLMProviderTestRequest,
+  LLMProviderTestResponse,
 } from "../types";
 
 const API_BASE = import.meta.env.VITE_ADMIN_API_BASE as string;
@@ -74,9 +78,6 @@ export const api = {
   getStats: (): Promise<AdminStats> =>
     request<AdminStats>("/stats"),
 
-  getExternalApiToken: (): Promise<ExternalApiToken> =>
-    request<ExternalApiToken>("/external-api/token"),
-
   // ── Branding ─────────────────────────────────────────────────────────────
 
   getBranding: (mode: "published" | "draft" = "published"): Promise<Branding> =>
@@ -109,4 +110,23 @@ export const api = {
 
   getBrandingAssetUrl: (assetKey: string): string =>
     `${API_BASE}/branding/asset/${assetKey}`,
+
+  // Bring-your-own-LLM provider (issue #406)
+  getLLMProvider: (): Promise<LLMProvider> =>
+    request<LLMProvider>("/llm-provider"),
+
+  getLLMProviderHealth: (): Promise<LLMProviderHealth> =>
+    request<LLMProviderHealth>("/llm-provider/health"),
+
+  updateLLMProvider: (data: LLMProviderUpdate): Promise<LLMProvider> =>
+    request<LLMProvider>("/llm-provider", json("PUT", data)),
+
+  testLLMProvider: (data: LLMProviderTestRequest): Promise<LLMProviderTestResponse> =>
+    request<LLMProviderTestResponse>("/llm-provider/test", json("POST", data)),
+
+  activateLLMProvider: (): Promise<LLMProvider> =>
+    request<LLMProvider>("/llm-provider/activate", { method: "POST" }),
+
+  deactivateLLMProvider: (): Promise<LLMProvider> =>
+    request<LLMProvider>("/llm-provider/deactivate", { method: "POST" }),
 };

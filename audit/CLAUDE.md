@@ -11,6 +11,6 @@ Immutable audit trail — records who did what and when across all platform acti
 - `GET /v1/systems` — distinct AI systems present in audit log, filtered by same params as list (used to populate the UI dropdown)
 - `GET /v1/stats` — KPI counts with trend vs. previous equal-length window: `total`, `system_events` (resource_type=ai_system), `risk_and_compliance` (assessment/evidence/requirement/obligation)
 
-**Authorization** — all endpoints require `audit:read` (OpenFGA). Assigned to `platform_administrator`, `ai_compliance_officer`, `auditor`, `ai_engineer`.
+**Authorization** — all endpoints require `audit:read` (OpenFGA). Held by `ai_engineer`, `ai_compliance_officer`, `auditor`, `business_owner`, and `executive` (the BO is an accountable system owner and the executive an oversight role; both need visibility of the trail). The source of truth is `ai_trust_authorization.constants.ROLE_PERMISSIONS`.
 
 **audit-flush-worker/** — standalone asyncio worker (no HTTP port). `AUDIT_FLUSH_INTERVAL` (default 5s), `AUDIT_FLUSH_BATCH_SIZE` (default 500). On ClickHouse failure the exception is caught in the main loop, logged, and retried next cycle — rows stay in Postgres safely.
