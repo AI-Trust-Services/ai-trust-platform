@@ -17,7 +17,6 @@ function labelDisplay(labelId: string): string {
 
 const CLASSIFICATION_TABS = [
   { key: "minimal", label: "Minimal or no risk", labelIds: ["MINIMAL"] },
-  { key: "limited", label: "Transparency Obligations", labelIds: ["TRANSPARENCY"] },
   { key: "high", label: "High-risk", labelIds: ["HIGH_RISK"] },
   { key: "prohibited", label: "Prohibited practice", labelIds: ["PROHIBITED"] },
 ];
@@ -26,7 +25,6 @@ function activeTab(labelId: string | null): string {
   if (!labelId) return "";
   if (labelId.includes("PROHIBITED")) return "prohibited";
   if (labelId.includes("HIGH_RISK")) return "high";
-  if (labelId.includes("TRANSPARENCY")) return "limited";
   return "minimal";
 }
 
