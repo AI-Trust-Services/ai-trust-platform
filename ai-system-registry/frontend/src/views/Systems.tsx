@@ -332,7 +332,7 @@ export default function Systems() {
                       ) : "—"}
                     </TableCell>
                     <TableCell><TierBadge tier={s.tier} workflowStatus={s.workflow_status} isChatbot={s.is_chatbot} generatesSyntheticContent={s.generates_synthetic_content} /></TableCell>
-                    <TableCell>{s.workflow_status === "approved" && s.org_role ? <RoleBadge role={s.org_role} /> : <span className="text-[13px] text-muted-foreground">—</span>}</TableCell>
+                    <TableCell>{s.workflow_status === "approved" && s.org_role ? <RoleBadge role={s.org_role} /> : <Badge className="rounded-full font-medium bg-[#eaecee] text-[#556b82]">Pending</Badge>}</TableCell>
                     <TableCell className="text-[13px]">
                       {(() => {
                         const e = indexing[s.id];
