@@ -115,6 +115,11 @@ export interface QuestionState {
     quote?: string | null;
   }>;
   ai_explanation: string | null;
+  // The AI's originally-proposed answer, retained even after the owner overrides
+  // it (answer_source flips to "manual"); null when the AI did not answer. Confidence
+  // and references describe THIS answer, so the reviewer can see both the AI
+  // suggestion and the user's answer (#435).
+  ai_original_answer: string | null;
   // True while the background prefill pipeline is running and this question
   // has not yet received an AI answer. Clears when the batch covering it completes.
   llm_pending: boolean;

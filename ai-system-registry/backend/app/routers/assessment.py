@@ -706,6 +706,7 @@ async def _build_state(
                 can_edit=can_edit,
                 ai_references=(st.ai_references or []) if st else [],
                 ai_explanation=st.ai_explanation if st else None,
+                ai_original_answer=st.ai_original_answer if st else None,
                 llm_pending=llm_pending,
             )
         )

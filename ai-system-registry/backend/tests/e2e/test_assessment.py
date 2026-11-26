@@ -402,6 +402,40 @@ async def test_revert_to_ai_original_clears_confirmation(client: httpx.AsyncClie
 
 
 @pytest.mark.asyncio
+async def test_state_exposes_ai_original_answer_after_override(
+    client: httpx.AsyncClient,
+):
+    """#435: the AI's originally-proposed answer is retained and exposed on /state
+    even after the owner overrides it, so the reviewer can show both the AI answer
+    (with its confidence/references) and the user's answer."""
+    system_id = await _create_system(client)
+    state = await _open(client, system_id)
+    q = next(
+        q
+        for q in state["questions"]
+        if q["answer"] and q["answer_source"] == "ai_prefilled"
+    )
+    qkey, ai_original = q["question_key"], q["answer"]
+    # Before any override the field mirrors the AI answer.
+    assert q["ai_original_answer"] == ai_original
+    # Override it with a manual answer.
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/answer",
+        json={"answer": "A manually-entered answer."},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    st = await client.get(
+        f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
+    )
+    q_now = next(x for x in st.json()["questions"] if x["question_key"] == qkey)
+    assert q_now["answer_source"] == "manual"
+    assert q_now["answer"] == "A manually-entered answer."
+    # The AI original survives the override — both answers remain available.
+    assert q_now["ai_original_answer"] == ai_original
+
+
+@pytest.mark.asyncio
 async def test_state_exposes_owner_username(client: httpx.AsyncClient):
     system_id = await _create_system(client)
     state = await _open(client, system_id)
