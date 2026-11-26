@@ -52,6 +52,9 @@ export default function CoIssueView() {
     if (coTouched || !solverResult) return;
     const derived = mapLabelToTier(solverResult.risk.labelId);
     if (derived) setTier(derived);
+    // Transparency is orthogonal to the risk tier — mirror the solver's
+    // TRANSPARENCY label into the checkbox (null = not assessed → leave off).
+    setTransparency(solverResult.transparency?.result ?? false);
   }, [solverResult, coTouched]);
   const [note, setNote] = useState("");
   const [confirmed, setConfirmed] = useState(false);
@@ -183,7 +186,10 @@ export default function CoIssueView() {
             <input
               type="checkbox"
               checked={transparency}
-              onChange={(e) => setTransparency(e.target.checked)}
+              onChange={(e) => {
+                setCoTouched(true);
+                setTransparency(e.target.checked);
+              }}
             />
             <span>Also issue transparency obligations (Art. 50)</span>
           </label>

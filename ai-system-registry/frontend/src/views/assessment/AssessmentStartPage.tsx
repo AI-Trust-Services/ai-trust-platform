@@ -136,6 +136,14 @@ export default function AssessmentStartPage() {
                 ))}
               </div>
             )}
+            {solverResult.transparency !== null && (
+              <div className="mt-3 flex items-center gap-2 text-sm">
+                <span className="font-medium text-muted-foreground">Transparency:</span>
+                <span className="font-semibold">
+                  {solverResult.transparency.result ? "True" : "False"}
+                </span>
+              </div>
+            )}
           </>
         )}
 
