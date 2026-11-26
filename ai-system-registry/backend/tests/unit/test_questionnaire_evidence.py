@@ -27,7 +27,6 @@ _FORBIDDEN = {
     "version": "1.0.0",
     "provider": "Acme Corp",
     "org_name": "Acme Corp",
-    "description": "a description nobody can edit in the UI",
     "department": "Retail Banking",
     "use_case": "Loan scoring",
     "people_affected": "Applicants",
@@ -44,6 +43,7 @@ def _row(**overrides) -> AISystem:
     row = AISystem(
         id="SYS-TEST0001",
         name="Loan Scoring Bot",
+        description="A technical description of the loan bot.",
         intended_purpose="Scores retail loan applications.",
         lifecycle="development",
         planned_rollout_date=date(2026, 6, 1),
@@ -59,6 +59,7 @@ def test_allowlisted_fields_are_present():
     block = _system_evidence(_row())
     assert block.startswith("Registration Data — AI System Inventory")
     assert "name: Loan Scoring Bot" in block
+    assert "description: A technical description of the loan bot." in block
     assert "intended_purpose: Scores retail loan applications." in block
     assert "lifecycle: development" in block
     assert "planned_rollout_date: 2026-06-01" in block
@@ -99,8 +100,14 @@ def test_empty_and_null_allowlisted_fields_are_omitted():
     """An unset optional field must be absent rather than rendered as an empty
     statement of fact."""
     block = _system_evidence(
-        _row(intended_purpose="", planned_rollout_date=None, git_repo_url=None)
+        _row(
+            description="",
+            intended_purpose="",
+            planned_rollout_date=None,
+            git_repo_url=None,
+        )
     )
+    assert "description:" not in block
     assert "intended_purpose" not in block
     assert "planned_rollout_date" not in block
     assert "git_repo_url" not in block

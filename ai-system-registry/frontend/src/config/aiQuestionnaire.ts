@@ -6,6 +6,26 @@ export interface MultiselectOption {
   value: string;
   code: string;
   label: string;
+  /** Per-option descriptive text from the questionnaire (v2). Shown above the
+   *  per-selection context group in the Context tab. */
+  optionSemantics?: string;
+  /** Grouping label for the option (e.g. "Annex I Section A"). */
+  group?: string;
+  /** Owner-facing context for this specific selection. A MULTISELECT lead
+   *  question (e.g. Prohibited_1) consolidates what were individual questions in
+   *  the previous questionnaire; each option carries the context of the question
+   *  it replaced, shown — grouped per selected option — in the Context tab when
+   *  that option is selected. Absent for options with no mapped context. */
+  ownerContext?: string;
+  /** Compliance-officer-facing legal context for this specific selection.
+   *  Same grouping/selection logic as `ownerContext`. */
+  coContext?: string;
+  /** Illustrative examples for this specific selection (same text for both
+   *  roles), shown inside the option's context group. */
+  examples?: string;
+  /** Additional secondary-source examples for this selection, rendered under an
+   *  "Extended examples" sub-heading inside the option's context group. */
+  extendedExamples?: string;
 }
 
 /** A single leaf condition inside an appliesWhen node. */
@@ -30,6 +50,27 @@ export interface AiQuestionDef {
   type: QuestionType;
   allowedAnswers: string[] | MultiselectOption[];
   appliesWhen?: AppliesWhenNode;
+  /** Owner-facing EU AI Act context shown display-only in the assessment
+   *  companion's Context tab (issue #410). Absent for questions with no
+   *  mapped context text. */
+  ownerContext?: string;
+  /** Compliance-officer-facing legal context shown display-only in the
+   *  companion's Context tab for the CO (issue #409). Longer, structured legal
+   *  text (Summary / provisions / recitals) with inline external source links.
+   *  Absent for questions with no mapped CO context. */
+  coContext?: string;
+  /** Illustrative examples for this question, shown to both the owner and the
+   *  CO as a collapsible "Examples" section in the Context tab (below the
+   *  context sections, above the CO's Sources list). Same text for both roles.
+   *  A bullet list transcribed from the questionnaire's "Example(s)" column;
+   *  absent for questions with no examples. */
+  examples?: string;
+  /** Additional examples from secondary sources (academic commentary, case
+   *  law, boundary cases), transcribed from the questionnaire's "Extended
+   *  Examples" column. Rendered below `examples` in the same "Examples" section
+   *  under an "Extended examples" sub-heading. Same text for both roles; absent
+   *  for questions with no extended examples. */
+  extendedExamples?: string;
 }
 
 const rawQuestions = (questionnaireJson as { questions: AiQuestionDef[] }).questions;

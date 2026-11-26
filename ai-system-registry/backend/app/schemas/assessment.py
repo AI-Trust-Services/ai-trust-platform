@@ -58,6 +58,11 @@ class QuestionStateResponse(BaseModel):
     # Evidence references and explanation from the questionnaire-run pipeline.
     ai_references: list[dict] = []
     ai_explanation: str | None = None
+    # The AI's originally-proposed answer. Retained even after the owner overrides
+    # it (answer_source flips to "manual"); null when the AI did not answer / the
+    # row is a blank seed. Confidence/references describe THIS answer, so the
+    # reviewer can see both the AI suggestion and the user's answer (#435).
+    ai_original_answer: str | None = None
     # True while the background prefill pipeline is running and this question has
     # not yet received an AI answer. Clears automatically once the batch that
     # covers this question completes.

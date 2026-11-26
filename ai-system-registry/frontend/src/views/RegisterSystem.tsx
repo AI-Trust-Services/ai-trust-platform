@@ -58,7 +58,8 @@ export default function RegisterSystem() {
   const { username: owner } = usePermissions();
 
   const [name, setName] = useState("");
-  const [purpose, setPurpose] = useState("");
+  const [description, setDescription] = useState("");
+  const [intendedPurpose, setIntendedPurpose] = useState("");
   const [lifecycle, setLifecycle] = useState<LifecycleKey | "">("");
   const [rolloutDate, setRolloutDate] = useState("");
   const [gitRepoUrl, setGitRepoUrl] = useState("");
@@ -117,7 +118,7 @@ export default function RegisterSystem() {
     [users, owner, contributors],
   );
 
-  const canRegister = name.trim().length > 0 && purpose.trim().length > 0 && !loading;
+  const canRegister = name.trim().length > 0 && intendedPurpose.trim().length > 0 && !loading;
 
   function addContributor() {
     if (!pendingUser) return;
@@ -129,7 +130,11 @@ export default function RegisterSystem() {
     if (draftIdRef.current) return draftIdRef.current;
     if (!draftPromiseRef.current) {
       draftPromiseRef.current = api
-        .intake({ name: name.trim() || "Untitled system", intended_purpose: purpose.trim() || "" })
+        .intake({
+          name: name.trim() || "Untitled system",
+          description: description.trim() || "",
+          intended_purpose: intendedPurpose.trim() || "",
+        })
         .then((sys) => {
           draftIdRef.current = sys.id;
           return sys.id;
@@ -225,7 +230,8 @@ export default function RegisterSystem() {
     setLoading(true);
     const fields = {
       name: name.trim(),
-      intended_purpose: purpose.trim(),
+      description: description.trim(),
+      intended_purpose: intendedPurpose.trim(),
       lifecycle: lifecycle || undefined,
       planned_rollout_date: rolloutDate || null,
       contributors,
@@ -280,10 +286,18 @@ export default function RegisterSystem() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="reg_purpose">System Description <span className="text-[var(--danger-fg)]">*</span></Label>
-              <Textarea id="reg_purpose" rows={3} value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder="Describe the AI system — what it does and how it is used." />
+              <Label htmlFor="reg_purpose">Intended purpose under the EU AI Act <span className="text-[var(--danger-fg)]">*</span></Label>
+              <Textarea id="reg_purpose" rows={3} value={intendedPurpose} onChange={(e) => setIntendedPurpose(e.target.value)} placeholder="What is the intended purpose of this AI system under the EU AI Act?" />
               <p className="text-xs text-muted-foreground">
-                Please provide a description of the AI system — what it does and how it is used.
+                This forms the basis for the EU AI Act risk classification — describe the intended purpose carefully.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="reg_description">System description</Label>
+              <Textarea id="reg_description" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the AI system — what it does and how it is used." />
+              <p className="text-xs text-muted-foreground">
+                A technical description of the AI system for the compliance officer. Optional.
               </p>
             </div>
 

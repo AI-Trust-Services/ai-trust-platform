@@ -320,6 +320,35 @@ def _needs_attention(
     return answer is None or (isinstance(answer, str) and not answer.strip())
 
 
+def _norm_answer(val: str | None) -> str:
+    """Canonicalize an answer for change-detection. MULTISELECT answers are JSON
+    arrays, so compare them as sets (order-insensitive) and collapse "[]"/blank
+    to "" — otherwise toggling an option off and back on, or re-selecting the same
+    options in a different order, reads as a change when the net answer is identical."""
+    s = (val or "").strip()
+    if s.startswith("["):
+        try:
+            items = sorted(str(x) for x in json.loads(s))
+            return json.dumps(items) if items else ""
+        except (ValueError, TypeError):
+            pass
+    return s
+
+
+def _changed_from_ai(state: QuestionState, new_answer: str) -> bool:
+    """True only when the AI proposed a CONCRETE answer and the user's answer
+    differs from it — the trigger for the "changed AI answer" warning and the
+    mandatory-comment confirm gate.
+
+    ``confidence is None`` is the AI declining to answer (null / CONFLICT /
+    NOT_ENOUGH_INFORMATION): there is no answer to have "changed", so manual
+    input is free of the warning and comment requirement. A concrete band
+    (high/medium/low) keeps the existing behaviour."""
+    if state.confidence is None or not (state.ai_original_answer or "").strip():
+        return False
+    return _norm_answer(new_answer) != _norm_answer(state.ai_original_answer)
+
+
 def _may_edit(row: AISystem, state: QuestionState | None, user: str) -> bool:
     """Owner may edit any question; an assignee may edit theirs; a question with
     no assignee defaults to the owner."""
@@ -773,6 +802,7 @@ async def _build_state(
                 can_edit=can_edit,
                 ai_references=(st.ai_references or []) if st else [],
                 ai_explanation=st.ai_explanation if st else None,
+                ai_original_answer=st.ai_original_answer if st else None,
                 llm_pending=llm_pending,
             )
         )
@@ -939,7 +969,12 @@ async def save_answer(
                 system_id=system_id,
                 question_key=question_key,
                 answer=body.answer or None,
-                answer_source="manual",
+                # No prior state ⇒ the AI never answered this question (null
+                # ai_original / confidence), so there is nothing to have "changed":
+                # "ai_prefilled" keeps this consistent with confirm_question's
+                # _changed_from_ai (which returns False here) so the frontend does
+                # not show the change-warning or gate Confirm on a comment (#478).
+                answer_source="ai_prefilled",
                 ai_original_answer=None,
                 answer_changed_at=change_ts,
             )
@@ -954,9 +989,7 @@ async def save_answer(
                 state.confirmed_at = None
                 state.confirmed_by = None
                 state.answer_source = (
-                    "manual"
-                    if new != (state.ai_original_answer or "").strip()
-                    else "ai_prefilled"
+                    "manual" if _changed_from_ai(state, new) else "ai_prefilled"
                 )
         await session.commit()
         count = (await _comment_counts(session, assessment.id)).get(question_key, 0)
@@ -964,6 +997,7 @@ async def save_answer(
             question_key=question_key,
             answer=body.answer,
             answer_source=state.answer_source,
+            ai_original_answer=state.ai_original_answer,
             confidence=state.confidence,
             confirmed=bool(state.confirmed_at),
             assignee_username=state.assignee_username,
@@ -1001,10 +1035,7 @@ async def confirm_question(
             _read_answer(row, _answer_store(row), question_key) or ""
         )
         current = current.strip()
-        changed = (
-            state.answer_source == "manual"
-            and current != (state.ai_original_answer or "").strip()
-        )
+        changed = _changed_from_ai(state, current)
         if changed:
             # Require a non-deleted comment recorded AT/AFTER the answer change —
             # not merely that some comment exists (which an unrelated earlier
@@ -1288,6 +1319,7 @@ async def assign_question(
         # Same fallback as _build_state for a not-yet-answered state.
         answer=state.answer or _read_answer(row, answers, question_key),
         answer_source=state.answer_source,
+        ai_original_answer=state.ai_original_answer,
         confidence=state.confidence,
         confirmed=bool(state.confirmed_at),
         assignee_username=state.assignee_username,
@@ -1497,6 +1529,13 @@ async def issue_classification(
         row.basis = f"Risk classification issued by compliance officer {user}."
         row.workflow_status = "approved"
         row.assignee_username = None
+        # org_role stays "pending" until an assessment resolves it (normally set by
+        # the prefill classifier). If it never resolved — e.g. the classifier returned
+        # no role — fall back to the conservative EU AI Act default so a *completed*
+        # classification always carries a concrete role, never "pending", and still
+        # generates its governance chain below (provider = the broadest obligation set).
+        if row.org_role == "pending":
+            row.org_role = "provider"
         assessment = await _current_assessment(session, system_id)
         if assessment is not None:
             assessment.status = "approved"
@@ -1723,6 +1762,12 @@ async def start_new_assessment(
         row.workflow_status = "draft"
         row.basis = ""
         row.annex_iii_area = None
+        # Reset org_role to "pending" too (symmetric with tier): the role is
+        # re-determined by this cycle's classifier, and if it stays silent the
+        # issue-time pending→provider coercion must have the same chance to fire as
+        # on cycle 1. Leaving the previous cycle's role would snapshot a stale,
+        # not-freshly-determined role onto the new cycle.
+        row.org_role = "pending"
         row.co_issued_transparency = False
         row.classification_rationale = None
         row.assessment_sources = None

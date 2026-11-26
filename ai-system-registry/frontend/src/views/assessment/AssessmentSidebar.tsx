@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2, Circle, Loader2, Lock } from "lucide-react
 import type { AssessmentState, QuestionState } from "../../types";
 import { AI_SECTIONS, ORDERED_QUESTION_IDS, QUESTION_DEF_BY_ID, isGated } from "../../config/aiQuestionnaire";
 import { TierBadge } from "../../components/Badges";
+import { orgRoleLabel } from "../../constants/orgRoles";
 import { cn } from "@/lib/utils";
 
 /** Ordered sections → question keys, derived from ai-questionnaire.json
@@ -49,7 +50,22 @@ export function AssessmentSidebar({
     [state.questions],
   );
 
-  // With ~96 questions the active one is often outside the visible scroll area.
+  // Attention count shown in the header. Derived on the frontend (not from
+  // state.attention_count) so it is scoped to the current questionnaire and its
+  // gating: count only questions that exist in the v2 config, are not gated out,
+  // and still need attention — matching exactly the ⚠️ markers rendered per
+  // question below. The backend value can lag (e.g. an in-progress assessment
+  // opened against the old 96-question set).
+  const attentionCount = useMemo(
+    () =>
+      ORDERED_QUESTION_KEYS.filter((k) => !isGated(k, currentAnswers)).filter((k) => {
+        const q = stateByKey[k];
+        return q?.needs_attention && !q?.owner_confirmed && !q?.llm_pending;
+      }).length,
+    [stateByKey, currentAnswers],
+  );
+
+  // With ~70 questions the active one is often outside the visible scroll area.
   // Scroll the sidebar (its nearest scroll container) to it whenever the active
   // question changes — including the initial deep link — so the list follows the
   // question being viewed. `block/inline: "nearest"` only scrolls when needed and
@@ -74,7 +90,7 @@ export function AssessmentSidebar({
         </div>
         {state.org_role && (
           <p className="mt-2 text-xs text-muted-foreground">
-            Role: <span className="text-foreground">{state.org_role}</span>
+            Role: <span className="text-foreground">{orgRoleLabel(state.org_role)}</span>
           </p>
         )}
         {/* Per-question progress: colored by confidence on load (green/amber/red,
@@ -88,9 +104,9 @@ export function AssessmentSidebar({
             />
           ))}
         </div>
-        {state.attention_count > 0 && (
+        {attentionCount > 0 && (
           <p className="mt-3 text-xs font-medium text-[#8b3a00]">
-            {state.attention_count} question{state.attention_count === 1 ? "" : "s"} require your attention
+            {attentionCount} question{attentionCount === 1 ? "" : "s"} require your attention
           </p>
         )}
       </div>

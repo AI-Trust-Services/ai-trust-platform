@@ -341,8 +341,14 @@ export default function AssessmentApp() {
             key={id}
             systemId={id}
             section={sectionForQuestion(activeQuestionKey)}
+            questionKey={activeQuestionKey}
+            activeAnswer={activeQuestionKey ? currentAnswers[activeQuestionKey] : null}
             expanded={advisorExpanded}
             onExpandedChange={setAdvisorExpanded}
+            // The Context tab is role-split: the compliance officer (reviewer,
+            // systems:approve) sees the CO legal context; owners/engineers see
+            // the owner context. Neither sees the other's text.
+            isComplianceOfficer={can("systems:approve")}
           />
         </div>
       </div>

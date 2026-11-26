@@ -39,7 +39,7 @@ export function TierBadge({
   generatesSyntheticContent?: boolean;
   transparency?: boolean;
 }) {
-  const effectiveTier = workflowStatus === "draft" ? "pending" : tier;
+  const effectiveTier = workflowStatus !== undefined && workflowStatus !== "approved" ? "pending" : tier;
   const meta = TIER_META[effectiveTier] || { label: tier };
   const alsoTransparency = transparency === true;
   return (

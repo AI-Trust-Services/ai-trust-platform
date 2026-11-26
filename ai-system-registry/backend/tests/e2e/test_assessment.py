@@ -102,9 +102,62 @@ async def _open(client: httpx.AsyncClient, system_id: str, user: str = _OWNER):
     return r2.json()
 
 
+async def _open_with_concrete(
+    client: httpx.AsyncClient,
+    system_id: str,
+    question_id: str = "Scope_1",
+    value: str = "YES",
+):
+    """Open a system with the AI prefill forced to a CONCRETE, HIGH-confidence
+    answer on ``question_id`` — the offline stub otherwise answers every question
+    NOT_ENOUGH_INFORMATION with null confidence, which the change-gate now treats
+    as 'no AI answer to change'. Returns the settled state."""
+    result = {
+        "results": [
+            {
+                "questionId": question_id,
+                "question": "injected",
+                "questionType": "PREDEFINED",
+                "answer": [
+                    {"value": value, "answerStrength": "HIGH", "reason": "test"}
+                ],
+                "explanation": "injected",
+                "references": [],
+            }
+        ]
+    }
+    import app.questionnaire_pipeline as _qp
+
+    original_parse = _qp.parse_with_retry
+
+    async def _patched(text, *, task, validator, chat_fn, messages, **kw):
+        import json as _json
+
+        try:
+            block = (
+                messages[-1]["content"]
+                .split("Questionnaire Configuration:\n", 1)[1]
+                .split("\n\nProvided Evidence:", 1)[0]
+            )
+            qids = [q["id"] for q in _json.loads(block).get("questions", [])]
+        except (IndexError, ValueError, KeyError):
+            qids = []
+        if question_id in qids:
+            return result
+        return await original_parse(
+            text,
+            task=task,
+            validator=validator,
+            chat_fn=chat_fn,
+            messages=messages,
+            **kw,
+        )
+
+    with patch("app.questionnaire_pipeline.parse_with_retry", new=_patched):
+        return await _open(client, system_id)
+
+
 # ── open / prefill ────────────────────────────────────────────────────────────
-
-
 @pytest.mark.asyncio
 async def test_open_prefills_from_questionnaire_pipeline(client: httpx.AsyncClient):
     """POST /open runs the prefill pipeline: every catalogue question gets a state,
@@ -432,13 +485,12 @@ async def test_confirm_changed_answer_blocked_without_comment(
     client: httpx.AsyncClient,
 ):
     system_id = await _create_system(client)
-    await _open(client, system_id)
-    state = await _open(client, system_id)
-    qkey = next(q["question_key"] for q in state["questions"] if q["answer"])
-    # Change the AI answer.
+    await _open_with_concrete(client, system_id)  # Scope_1 → HIGH "YES"
+    qkey = "Scope_1"
+    # Change the concrete AI answer.
     r = await client.post(
         f"/v1/systems/{system_id}/assessment/questions/{qkey}/answer",
-        json={"answer": "Owner-edited answer differing from the AI proposal."},
+        json={"answer": "NO"},
         headers=_hdr(_OWNER),
     )
     assert r.status_code == 200, r.text
@@ -471,8 +523,8 @@ async def test_confirm_change_requires_comment_after_the_change(
     """A comment that predates the change must NOT satisfy the gate — the comment
     has to be recorded at/after the answer change (audit of the override)."""
     system_id = await _create_system(client)
-    state = await _open(client, system_id)
-    qkey = next(q["question_key"] for q in state["questions"] if q["answer"])
+    await _open_with_concrete(client, system_id)  # Scope_1 → HIGH "YES"
+    qkey = "Scope_1"
     # A pre-existing comment, before any change.
     r = await client.post(
         f"/v1/systems/{system_id}/assessment/questions/{qkey}/comments",
@@ -483,7 +535,7 @@ async def test_confirm_change_requires_comment_after_the_change(
     # Now change the answer.
     r = await client.post(
         f"/v1/systems/{system_id}/assessment/questions/{qkey}/answer",
-        json={"answer": "Owner-edited value that differs from the AI proposal."},
+        json={"answer": "NO"},
         headers=_hdr(_OWNER),
     )
     assert r.status_code == 200, r.text
@@ -500,6 +552,31 @@ async def test_confirm_change_requires_comment_after_the_change(
         headers=_hdr(_OWNER),
     )
     assert r.status_code == 200, r.text
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/confirm",
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+
+
+@pytest.mark.asyncio
+async def test_change_declined_ai_answer_needs_no_comment(client: httpx.AsyncClient):
+    """When the AI declined to answer (NOT_ENOUGH_INFORMATION / CONFLICT / null —
+    here the offline stub's null-confidence answer), manually entering an answer is
+    NOT a 'changed AI answer': no comment is required and Confirm passes directly."""
+    system_id = await _create_system(client)
+    state = await _open(client, system_id)
+    qkey = "Scope_1"  # root question, never gated; stub gives it null confidence
+    scope_1 = next(q for q in state["questions"] if q["question_key"] == qkey)
+    assert scope_1["confidence"] is None
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/answer",
+        json={"answer": "A manually entered answer the AI never proposed."},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["answer_source"] == "ai_prefilled"  # not "manual"
+    # Confirm succeeds with no comment.
     r = await client.post(
         f"/v1/systems/{system_id}/assessment/questions/{qkey}/confirm",
         headers=_hdr(_OWNER),
@@ -555,6 +632,78 @@ async def test_revert_to_ai_original_clears_confirmation(client: httpx.AsyncClie
     q_now = next(x for x in st.json()["questions"] if x["question_key"] == qkey)
     assert q_now["confirmed"] is False
     assert q_now["owner_confirmed"] is False
+
+
+@pytest.mark.asyncio
+async def test_state_exposes_ai_original_answer_after_override(
+    client: httpx.AsyncClient,
+):
+    """#435: the AI's originally-proposed answer is retained and exposed on /state
+    even after the owner overrides it, so the reviewer can show both the AI answer
+    (with its confidence/references) and the user's answer.
+
+    Uses a CONCRETE AI answer: #478 makes overriding a declined (null-confidence)
+    answer non-manual, so retention must be exercised on an answer the AI actually
+    established — which is also the reviewer-card scenario #435 targets."""
+    system_id = await _create_system(client)
+    state = await _open_with_concrete(client, system_id)  # Scope_1 → HIGH "YES"
+    qkey, ai_original = "Scope_1", "YES"
+    q = next(x for x in state["questions"] if x["question_key"] == qkey)
+    assert q["answer"] == ai_original
+    # Before any override the field mirrors the AI answer.
+    assert q["ai_original_answer"] == ai_original
+    # Override it with a different concrete answer.
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/answer",
+        json={"answer": "NO"},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    # The POST /answer response itself carries the AI original (not only the later
+    # GET /state reload) — so an optimistic client patch keeps it (review: PR #477).
+    assert r.json()["answer_source"] == "manual"
+    assert r.json()["ai_original_answer"] == ai_original
+    st = await client.get(
+        f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
+    )
+    q_now = next(x for x in st.json()["questions"] if x["question_key"] == qkey)
+    assert q_now["answer_source"] == "manual"
+    assert q_now["answer"] == "NO"
+    # The AI original survives the override — both answers remain available.
+    assert q_now["ai_original_answer"] == ai_original
+
+
+@pytest.mark.asyncio
+async def test_ai_original_answer_stays_null_when_ai_never_answered(
+    client: httpx.AsyncClient,
+):
+    """#435 (review): a question the AI never answered keeps ai_original_answer=null
+    even after the owner fills it manually — the manual answer must NOT backfill it.
+
+    This is the case that triggers the misleading CO reviewer block: the reviewer's
+    "AI suggested answer" card is gated on a non-null ai_original_answer, so a null
+    original must stay null. Reached via the save_answer fresh-create path (answering
+    an ungated question before any prefill has seeded/answered it)."""
+    system_id = await _create_system(client)
+    qkey = "Scope_1"  # ungated → /answer is accepted without a prior prefill
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/answer",
+        json={"answer": "Manually filled; the AI never answered this one."},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    # The AI never answered (null confidence/original), so filling it manually is
+    # NOT a "changed AI answer" (#478): provenance stays "ai_prefilled" and no AI
+    # original is attributed. The point of this test is the null original below.
+    assert r.json()["answer_source"] == "ai_prefilled"
+    assert r.json()["ai_original_answer"] is None
+    st = await client.get(
+        f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
+    )
+    q_now = next(x for x in st.json()["questions"] if x["question_key"] == qkey)
+    assert q_now["answer_source"] == "ai_prefilled"
+    # Must stay null — not overwritten with the manual answer.
+    assert q_now["ai_original_answer"] is None
 
 
 @pytest.mark.asyncio
@@ -1173,6 +1322,95 @@ async def test_issue_high_tier_generates_obligations_and_requirements(
     obligations, requirements = await _count_governance(system_id)
     assert obligations > 0, "high-risk issue must generate obligations"
     assert requirements > 0, "high-risk issue must generate requirements"
+
+
+@pytest.mark.asyncio
+async def test_issue_coerces_pending_org_role_to_provider(client: httpx.AsyncClient):
+    """Edge case (#436): if the prefill never resolved an organisation role, it is
+    still "pending" when the CO issues. A *completed* classification must never
+    carry "pending" — the issue handler coerces it to the conservative EU AI Act
+    default (provider) so the row shows a concrete role and still generates its
+    governance chain."""
+    from ai_trust_persistence.database import engine
+    from ai_trust_persistence.models.ai_system import AISystem
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    system_id = await _submit_as_owner(client)
+    # Force the unresolved-role case: reset the live role to "pending" while locked.
+    async with AsyncSession(engine) as s:
+        row = await s.get(AISystem, system_id)
+        row.org_role = "pending"
+        await s.commit()
+
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/issue",
+        json={"tier": "high", "transparency": True, "confirmed": True},
+        headers=_hdr(_CO),
+    )
+    assert r.status_code == 200, r.text
+
+    async with AsyncSession(engine) as s:
+        row = await s.get(AISystem, system_id)
+        assert row.org_role == "provider", (
+            "a completed assessment must not stay 'pending'"
+        )
+    obligations, _ = await _count_governance(system_id)
+    assert obligations > 0, "coerced provider role must still generate obligations"
+
+
+@pytest.mark.asyncio
+async def test_start_new_resets_org_role_to_pending(client: httpx.AsyncClient):
+    """Edge case (#436, cycle 2): start-new must reset org_role to "pending" (like
+    tier), so a second cycle whose classifier stays silent does not snapshot the
+    previous cycle's stale, not-freshly-determined role. Without the reset, the
+    issue-time pending→provider coercion would never fire and the stale role would
+    be carried forward silently.
+
+    The stub classifier always emits a concrete org_role, so to exercise the silent
+    case we patch the cycle-2 classify to return a rationale with no org_role — the
+    low-confidence / classifier-failure path `_finalize_tier` leaves untouched.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from ai_trust_persistence.database import engine
+    from ai_trust_persistence.models.ai_system import AISystem
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from app.classifier import classify_ai_questionnaire
+
+    system_id = await _submit_as_owner(client)
+    # Cycle 1 resolves and issues a concrete role.
+    await _issue_as_co(client, system_id, "high")
+    async with AsyncSession(engine) as s:
+        row = await s.get(AISystem, system_id)
+        assert row.org_role == "provider"
+
+    # Cycle 2's classifier is silent on org_role (stub normally isn't). Delegate to
+    # the real classifier, then strip org_role from the rationale so _finalize_tier
+    # takes its "role not resolved this run" branch.
+    async def _silent_role(row):
+        classification, rationale = await classify_ai_questionnaire(row)
+        rationale = {**rationale, "org_role": None}
+        return classification, rationale
+
+    with patch(
+        "app.routers.assessment.classify_ai_questionnaire",
+        new=AsyncMock(side_effect=_silent_role),
+    ):
+        r = await client.post(
+            f"/v1/systems/{system_id}/assessment/start-new", headers=_hdr(_OWNER)
+        )
+        assert r.status_code == 200, r.text
+
+    # start-new reset the role to "pending" and the silent cycle-2 classify did not
+    # overwrite it — so it is NOT the stale cycle-1 "provider". That is what lets the
+    # issue-time coercion re-fire on cycle 2 instead of carrying the stale role.
+    async with AsyncSession(engine) as s:
+        row = await s.get(AISystem, system_id)
+        assert row.org_role == "pending", (
+            "cycle 2 must start with a pending role so the issue-time coercion "
+            "can re-fire instead of carrying the stale cycle-1 'provider' role"
+        )
 
 
 @pytest.mark.asyncio

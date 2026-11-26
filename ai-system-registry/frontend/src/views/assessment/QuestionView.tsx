@@ -96,7 +96,7 @@ export default function QuestionView() {
   // shadcn Dialog rather than window.confirm(), which is unreliable in the Luigi
   // iframe (a sandbox without allow-modals silently returns false).
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const { username: currentUser } = usePermissions();
+  const { username: currentUser, can } = usePermissions();
 
   const idx = questionKey ? ORDERED_QUESTION_KEYS.indexOf(questionKey) : -1;
   // Skip gated questions when navigating prev/next so the user never lands on
@@ -117,11 +117,24 @@ export default function QuestionView() {
       : null;
 
   const changedFromAi = qState?.answer_source === "manual";
+  // The compliance reviewer is any user with systems:approve. This mirrors the
+  // branch in AssessmentApp (line ~108) which checks can("systems:approve") first,
+  // before can("systems:write") — the CO role actually holds both, so the
+  // `!can("systems:write")` guard would incorrectly exclude them (#435).
+  // In this view confidence/references stay attributed to the AI answer and the
+  // AI's original answer is shown alongside the user's; the owner/writer view
+  // (no systems:approve) instead greys the indicator out once the AI answer is
+  // overridden.
+  const isComplianceReviewer = can("systems:approve");
   // Provenance line under the input. `answer_source` is seeded "ai_prefilled" for
   // EVERY question at /open, so it alone does not mean the AI answered this one —
   // an unanswered question would otherwise claim "Pre-filled AI answer" (#383).
   // NOT_ENOUGH_INFORMATION / CONFLICT are the AI explicitly declining to answer;
-  // the control renders blank for them, so say what actually happened.
+  // the control renders blank for them, so say what actually happened. A declined
+  // (null-confidence) question the user then answers stays answer_source
+  // "ai_prefilled" (no change-gate), but is NOT a pre-fill — only a concrete AI
+  // answer (confidence set) is "Pre-filled AI answer"; anything else the user
+  // typed is "Manual entry".
   const answerSourceLabel = changedFromAi
     ? "Manual entry"
     : qState?.answer === "NOT_ENOUGH_INFORMATION" ||
@@ -129,9 +142,11 @@ export default function QuestionView() {
       ? "AI found no supporting evidence"
       : qState?.answer === "CONFLICT" || qState?.answer === '["CONFLICT"]'
         ? "AI found conflicting evidence"
-        : qState?.answer
-          ? "Pre-filled AI answer"
-          : "Not answered by AI";
+        : !qState?.answer
+          ? "Not answered by AI"
+          : qState?.confidence
+            ? "Pre-filled AI answer"
+            : "Manual entry";
   // Whether a comment that SATISFIES the backend change-gate exists — i.e. one
   // recorded at/after the last answer change. Backend-computed (mirrors the
   // confirm gate) so a stale pre-change comment doesn't enable a confirm the
@@ -327,6 +342,29 @@ export default function QuestionView() {
     saveAnswer(serialized);
   };
 
+  // Human-readable rendering of a raw stored answer (PREDEFINED value, MULTISELECT
+  // JSON array, or DESCRIPTIVE free text). Used to show the AI's original answer
+  // alongside the user's in the compliance-reviewer view (#435).
+  const formatAnswerForDisplay = (raw: string | null): string => {
+    if (!raw) return "Not answered by AI";
+    if (raw === "NOT_ENOUGH_INFORMATION" || raw === '["NOT_ENOUGH_INFORMATION"]')
+      return "AI found no supporting evidence";
+    if (raw === "CONFLICT" || raw === '["CONFLICT"]') return "AI found conflicting evidence";
+    if (isMultiselect(def)) {
+      try {
+        const vals = JSON.parse(raw) as string[];
+        return (
+          vals.map((v) => def.allowedAnswers.find((o) => o.value === v)?.label ?? v).join(", ") ||
+          "Not answered by AI"
+        );
+      } catch {
+        return raw;
+      }
+    }
+    if (isPredefined(def)) return optionLabel(raw);
+    return raw;
+  };
+
   return (
     <div className="mx-auto max-w-3xl px-8 py-8">
       <div className="rounded-xl border border-border bg-card p-6">
@@ -385,13 +423,50 @@ export default function QuestionView() {
 
         <h1 className="mt-1 text-2xl font-bold">{def.question}</h1>
 
-        <div className="mt-3">
-          <ConfidenceIndicator
-            level={qState?.confidence ?? null}
-            references={qState?.ai_references?.length ?? 0}
-            onClick={() => setConfModalOpen(true)}
-          />
-        </div>
+        {/* Confidence + references belong to the AI-generated answer only (#435).
+            - Answer unchanged from the AI → the active answer IS the AI answer, so
+              the indicator applies directly.
+            - Compliance reviewer (read-only) & overridden & the AI actually answered
+              (ai_original_answer present) → show the AI's original answer as its own
+              block with the indicator attached, so both answers are visible and the
+              confidence is unambiguously tied to the AI answer.
+            - Otherwise overridden (owner/writer, or a reviewer where the AI never
+              answered) → grey the indicator out with a note. Guarding the reviewer
+              block on ai_original_answer avoids a misleading "AI suggested answer /
+              Not answered by AI" card when the owner manually filled a question the
+              AI skipped (answer_source flips to manual even with no AI original). */}
+        {!changedFromAi ? (
+          <div className="mt-3">
+            <ConfidenceIndicator
+              level={qState?.confidence ?? null}
+              references={qState?.ai_references?.length ?? 0}
+              onClick={() => setConfModalOpen(true)}
+            />
+          </div>
+        ) : isComplianceReviewer && qState?.ai_original_answer ? (
+          <div className="mt-3 rounded-md border border-border bg-[var(--muted)]/20 p-3">
+            <p className="text-xs font-medium text-muted-foreground">AI suggested answer</p>
+            <p className="mt-1 text-sm">{formatAnswerForDisplay(qState?.ai_original_answer ?? null)}</p>
+            <div className="mt-2">
+              <ConfidenceIndicator
+                level={qState?.confidence ?? null}
+                references={qState?.ai_references?.length ?? 0}
+                onClick={() => setConfModalOpen(true)}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="mt-3 opacity-60">
+            <ConfidenceIndicator
+              level={qState?.confidence ?? null}
+              references={qState?.ai_references?.length ?? 0}
+              onClick={() => setConfModalOpen(true)}
+            />
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Applies to the AI&rsquo;s suggested answer, not your answer.
+            </p>
+          </div>
+        )}
 
         {llmPending && (
           <div className="mt-4 flex items-center gap-2 rounded-md border border-[#e0a008]/40 bg-[#fffbeb] px-4 py-2.5 text-sm text-[#854d0e]">

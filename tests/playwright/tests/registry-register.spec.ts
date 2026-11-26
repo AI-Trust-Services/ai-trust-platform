@@ -5,12 +5,12 @@ import { readRun } from "../src/run";
 /**
  * Deep flow: an ai_engineer registers a new AI system end-to-end through the registry UI.
  *
- * Minimal deterministic path — name + description only (no document upload, no AI mode), so the
- * flow never depends on Thalamus/LLM and lands as a `pending`-tier stub. The system name carries
- * the run suffix so the cleanup teardown can find and delete it.
+ * Minimal deterministic path — name + intended purpose only (no document upload, no AI mode), so
+ * the flow never depends on Thalamus/LLM and lands as a `pending`-tier stub. The system name
+ * carries the run suffix so the cleanup teardown can find and delete it.
  *
  * Form per ai-system-registry/frontend/src/views/RegisterSystem.tsx: the submit button is enabled
- * only once name + description are non-empty; success shows a toast and redirects to the list.
+ * only once name + intended purpose are non-empty; success shows a toast and redirects to the list.
  */
 test.use({ storageState: ENGINEER.storageState });
 
@@ -23,7 +23,7 @@ test("engineer registers a new AI system end-to-end", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Register an AI System" })).toBeVisible();
 
   await page.getByLabel(/Name of AI system/).fill(systemName);
-  await page.getByLabel(/System Description/).fill("Playwright end-to-end smoke registration.");
+  await page.getByLabel(/Intended purpose under the EU AI Act/).fill("Playwright end-to-end smoke registration.");
 
   const submit = page.getByRole("button", { name: "Register AI System" });
   await expect(submit).toBeEnabled();

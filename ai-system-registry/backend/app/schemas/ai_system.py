@@ -21,6 +21,9 @@ VALID_LIFECYCLES = frozenset(
 )
 VALID_ROLES = frozenset(
     {
+        # "pending" = no organisation role determined yet. Set at registration and
+        # held until an assessment resolves the real role — mirrors tier="pending".
+        "pending",
         "provider",
         "deployer",
         "both",
@@ -134,7 +137,10 @@ class AISystemCreate(BaseModel):
     planned_rollout_date: date | None = None
 
     registration_mode: Literal["ai", "manual_questionnaire", "full_manual"] = "ai"
-    org_role: str = "provider"
+    # Default "pending": the EU AI Act organisation role is only determined during
+    # the assessment (like the risk tier), so a freshly registered system carries no
+    # role yet. An explicit role in the body (e.g. "deployer") still passes through.
+    org_role: str = "pending"
     # Full-manual override: creator supplies the tier directly (validated against VALID_TIERS
     # in the router) and names the compliance officer.
     tier: str | None = None
