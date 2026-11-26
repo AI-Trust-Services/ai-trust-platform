@@ -150,7 +150,6 @@ def test_answer_override_revives_skipped_high_risk_supported_operator():
 def test_label_to_tier_all_cases():
     assert hierarchy_solver.label_to_tier("PROHIBITED") == "prohibited"
     assert hierarchy_solver.label_to_tier("HIGH_RISK") == "high"
-    assert hierarchy_solver.label_to_tier("TRANSPARENCY") == "limited"
     assert hierarchy_solver.label_to_tier("MINIMAL") == "minimal"
 
 
@@ -243,3 +242,31 @@ def test_org_role_none():
 
 def test_org_role_empty():
     assert hierarchy_solver.org_role_from_roles([]) is None
+
+
+# ---------------------------------------------------------------------------
+# Transparency is orthogonal — not a risk winner, separate field on response
+# ---------------------------------------------------------------------------
+
+
+def test_transparency_separate_from_risk_winner():
+    pipeline_result = {
+        "questionnaire_run_key": "questionnaire-results/SYS-TESTTEST/ai-questionnaire/2026-01-01T00-00-00Z.json",
+        "config_id": "risk_role_classification_config",
+        "config_version": "1.0.0",
+        "prompt_id": "risk_role_classification",
+        "classifications": [
+            {"labelId": "HIGH_RISK", "result": True, "confidence": 85.0, "explanation": ""},
+            {"labelId": "TRANSPARENCY", "result": True, "confidence": 75.0, "explanation": ""},
+            {"labelId": "MINIMAL", "result": False, "confidence": 20.0, "explanation": ""},
+        ],
+        "skipped_labels": [],
+    }
+
+    resp = hierarchy_solver.solve(pipeline_result, None, None)
+
+    assert resp.risk.label_id == "HIGH_RISK"
+    assert resp.risk.result is True
+    assert resp.transparency is not None
+    assert resp.transparency.label_id == "TRANSPARENCY"
+    assert resp.transparency.result is True
