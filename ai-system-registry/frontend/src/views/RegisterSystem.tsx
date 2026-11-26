@@ -286,18 +286,18 @@ export default function RegisterSystem() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="reg_description">System description</Label>
-              <Textarea id="reg_description" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the AI system — what it does and how it is used." />
-              <p className="text-xs text-muted-foreground">
-                A technical description of the AI system for the compliance officer. Optional.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
               <Label htmlFor="reg_purpose">Intended purpose under the EU AI Act <span className="text-[var(--danger-fg)]">*</span></Label>
               <Textarea id="reg_purpose" rows={3} value={intendedPurpose} onChange={(e) => setIntendedPurpose(e.target.value)} placeholder="What is the intended purpose of this AI system under the EU AI Act?" />
               <p className="text-xs text-muted-foreground">
                 This forms the basis for the EU AI Act risk classification — describe the intended purpose carefully.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="reg_description">System description</Label>
+              <Textarea id="reg_description" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the AI system — what it does and how it is used." />
+              <p className="text-xs text-muted-foreground">
+                A technical description of the AI system for the compliance officer. Optional.
               </p>
             </div>
 
