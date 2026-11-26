@@ -21,7 +21,9 @@ from app.llm.parsing import LLMParseError
 from app.questionnaire_pipeline import (
     DEFAULT_QUESTIONNAIRE_ID,
     DEFAULT_QUESTIONNAIRE_PROMPT_ID,
+    _build_user_message,
     _split_by_dependency_groups,
+    _strip_display_fields,
     run_questionnaire_pipeline,
 )
 from app.llm.templates import load_questionnaire
@@ -317,3 +319,92 @@ async def test_persistently_invalid_batch_fails_after_three_attempts():
 
     assert chat.await_count == 3  # 1 call + 2 retries
     put_json.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# _strip_display_fields — the frontend-only context fields (Context tab) must
+# never reach the answering LLM: they bloat the prompt and, in the CO case,
+# carry legal citations the model must not answer from (questionnaire_answer.md
+# §7). answerSemantics/optionSemantics are genuine answering guidance and stay.
+# ---------------------------------------------------------------------------
+
+_DISPLAY_QUESTIONNAIRE = {
+    "id": "ai-questionnaire",
+    "version": "2.0.0",
+    "questions": [
+        {
+            "id": "Q1",
+            "question": "A descriptive question?",
+            "type": "PREDEFINED",
+            "allowedAnswers": ["YES", "NO"],
+            "answerSemantics": "Answer YES if X.",
+            "ownerContext": "owner text",
+            "coContext": "CO legal text https://eur-lex.europa.eu",
+            "examples": "- [Prohibited] an example",
+            "extendedExamples": "- a boundary case",
+        },
+        {
+            "id": "Q2",
+            "question": "A multiselect lead?",
+            "type": "MULTISELECT",
+            "allowedAnswers": [
+                {
+                    "value": "a",
+                    "code": "a",
+                    "label": "Option A",
+                    "optionSemantics": "pick a when …",
+                    "group": "Annex I",
+                    "ownerContext": "opt owner text",
+                    "coContext": "opt CO text",
+                    "examples": "- [High-risk] opt example",
+                    "extendedExamples": "- opt boundary case",
+                }
+            ],
+        },
+    ],
+}
+
+
+def test_strip_display_fields_removes_context_from_questions_and_options():
+    stripped = _strip_display_fields(_DISPLAY_QUESTIONNAIRE)
+
+    q1, q2 = stripped["questions"]
+    for field in ("ownerContext", "coContext", "examples", "extendedExamples"):
+        assert field not in q1
+    opt = q2["allowedAnswers"][0]
+    for field in ("ownerContext", "coContext", "examples", "extendedExamples"):
+        assert field not in opt
+
+
+def test_strip_display_fields_keeps_answering_guidance_and_structure():
+    stripped = _strip_display_fields(_DISPLAY_QUESTIONNAIRE)
+
+    q1, q2 = stripped["questions"]
+    # Genuine answering guidance survives.
+    assert q1["answerSemantics"] == "Answer YES if X."
+    assert q1["allowedAnswers"] == ["YES", "NO"]  # string options untouched
+    opt = q2["allowedAnswers"][0]
+    assert opt["optionSemantics"] == "pick a when …"
+    assert opt["group"] == "Annex I"
+    assert opt["value"] == "a" and opt["code"] == "a" and opt["label"] == "Option A"
+    # Top-level metadata is preserved.
+    assert stripped["id"] == "ai-questionnaire"
+    assert stripped["version"] == "2.0.0"
+
+
+def test_strip_display_fields_does_not_mutate_input():
+    _strip_display_fields(_DISPLAY_QUESTIONNAIRE)
+    # The original still carries every display field (deep, including the option).
+    assert _DISPLAY_QUESTIONNAIRE["questions"][0]["ownerContext"] == "owner text"
+    assert "coContext" in _DISPLAY_QUESTIONNAIRE["questions"][1]["allowedAnswers"][0]
+
+
+def test_build_user_message_excludes_display_only_context():
+    msg = _build_user_message(_DISPLAY_QUESTIONNAIRE, "Registration Data: none", [])
+    # Legal citations / owner context never reach the LLM payload …
+    assert "eur-lex.europa.eu" not in msg
+    assert "owner text" not in msg
+    assert "opt CO text" not in msg
+    # … while answering guidance and the evidence block do.
+    assert "Answer YES if X." in msg
+    assert "Registration Data: none" in msg

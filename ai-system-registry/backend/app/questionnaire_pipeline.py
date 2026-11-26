@@ -187,6 +187,38 @@ async def _retrieve_rag_documents(system_id: str, username: str) -> list[dict]:
         return []
 
 
+# Display-only context fields consumed by the frontend Context tab (the
+# assessment companion). They are never sent to the answering LLM: they bloat the
+# prompt and, in the CO case, carry legal citations the model must not answer from
+# (questionnaire_answer.md §7). `answerSemantics`/`optionSemantics` are kept — they
+# are genuine answering guidance.
+_DISPLAY_ONLY_FIELDS = (
+    "ownerContext",
+    "coContext",
+    "examples",
+    "extendedExamples",
+)
+
+
+def _strip_display_fields(questionnaire: dict) -> dict:
+    """Return a copy of the questionnaire with frontend-only context fields
+    removed from every question and every MULTISELECT option."""
+
+    def clean(obj: dict) -> dict:
+        out = {k: v for k, v in obj.items() if k not in _DISPLAY_ONLY_FIELDS}
+        options = out.get("allowedAnswers")
+        if isinstance(options, list):
+            out["allowedAnswers"] = [
+                clean(o) if isinstance(o, dict) else o for o in options
+            ]
+        return out
+
+    return {
+        **{k: v for k, v in questionnaire.items() if k != "questions"},
+        "questions": [clean(q) for q in questionnaire.get("questions", [])],
+    }
+
+
 def _build_user_message(
     questionnaire: dict,
     registration_evidence: str,
@@ -195,7 +227,7 @@ def _build_user_message(
     """Assemble the user message: questionnaire config + all evidence."""
     parts = [
         "Questionnaire Configuration:",
-        json.dumps(questionnaire, indent=2),
+        json.dumps(_strip_display_fields(questionnaire), indent=2),
         "",
         "Provided Evidence:",
         "",
