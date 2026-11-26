@@ -539,6 +539,14 @@ async def _run_prefill_background(
                 if assessment:
                     assessment.llm_status = "failed"
                 await session.commit()
+        else:
+            provider = _shared.get("provider") or {}
+            final_status = "stub" if provider.get("stub") else None
+            async with SessionLocal() as session:
+                assessment = await _current_assessment(session, system_id)
+                if assessment:
+                    assessment.llm_status = final_status
+                await session.commit()
     except Exception as exc:  # noqa: BLE001
         logger.error(
             "assessment.prefill_background_failed",
