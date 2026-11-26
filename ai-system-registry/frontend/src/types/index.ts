@@ -552,6 +552,7 @@ export interface ResolvedLabel {
 
 export interface ResolveResponse {
   risk: ResolvedLabel;
+  transparency: ResolvedLabel | null;
   roles: ResolvedLabel[];
 }
 

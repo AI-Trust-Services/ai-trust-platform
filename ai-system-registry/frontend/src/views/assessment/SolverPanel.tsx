@@ -61,6 +61,21 @@ export function SolverPanel({ solverResult }: SolverPanelProps) {
               ))}
             </div>
           )}
+          {solverResult.transparency !== null && (
+            <div className="mt-4 flex items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground">Transparency obligations (Art. 50):</span>
+              <span
+                className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${
+                  solverResult.transparency.result
+                    ? "border-[#bbf7d0] bg-[#f0fdf4] text-[#1a9d5c]"
+                    : "border-border text-muted-foreground"
+                } ${solverResult.transparency.source === "user" ? "border-[#c4b5fd] bg-[#f5f3ff] text-[#6d28d9]" : ""}`}
+              >
+                {solverResult.transparency.result ? "Yes" : "No"}
+                {solverResult.transparency.source === "user" && " · override"}
+              </span>
+            </div>
+          )}
         </>
       )}
     </div>
