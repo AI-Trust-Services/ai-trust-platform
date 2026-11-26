@@ -7,30 +7,62 @@ const BAND_CLS: Record<string, string> = {
   Low: "text-[#d14343] bg-[#fef2f2] border-[#fecaca]",
 };
 
+const CLASSIFICATION_TABS = [
+  { key: "minimal", label: "Minimal or no risk" },
+  { key: "high", label: "High-risk" },
+  { key: "prohibited", label: "Prohibited practice" },
+];
+
 function labelDisplay(labelId: string): string {
   return labelId.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-interface SolverPanelProps {
-  solverResult: ResolveResponse | null;
+function activeTab(labelId: string): string {
+  if (labelId.includes("PROHIBITED")) return "prohibited";
+  if (labelId.includes("HIGH_RISK")) return "high";
+  return "minimal";
 }
 
-export function SolverPanel({ solverResult }: SolverPanelProps) {
+interface SolverPanelProps {
+  solverResult: ResolveResponse | null;
+  pending?: boolean;
+}
+
+export function SolverPanel({ solverResult, pending }: SolverPanelProps) {
   return (
     <div className="rounded-xl border border-border bg-card p-6">
-      <span className="rounded-full bg-[#eef3ff] px-3 py-1 text-xs font-medium text-[#1147E9]">
-        Rule-based · updates on each confirm
-      </span>
-      <h2 className="mt-4 text-xl font-bold">Solver Classification</h2>
-      {!solverResult ? (
-        <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
+      <div className="flex items-center gap-2">
+          <span className="rounded-full bg-[#eaecee] px-3 py-1 text-xs font-medium text-[#556b82]">
+            AI-generated · not final
+          </span>
+          <span className="rounded-full bg-[#eef3ff] px-3 py-1 text-xs font-medium text-[#1147E9]">
+            Rule-based · updates on each confirm
+          </span>
+        </div>
+
+      {pending || !solverResult ? (
+        <div className="mt-4 flex items-center gap-1.5 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
           <span>Computing…</span>
         </div>
       ) : (
         <>
-          <div className="mt-4 flex items-center gap-3">
-            <span className="text-lg font-semibold">{labelDisplay(solverResult.risk.labelId)}</span>
+          <div className="mt-4 grid grid-cols-4 gap-2">
+            {CLASSIFICATION_TABS.map((t) => (
+              <div
+                key={t.key}
+                className={
+                  "rounded-md border px-3 py-2 text-center text-sm " +
+                  (t.key === activeTab(solverResult.risk.labelId)
+                    ? "border-[#1147E9] font-semibold text-[#1147E9]"
+                    : "border-border text-muted-foreground")
+                }
+              >
+                {t.label}
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex items-center gap-3">
             {solverResult.risk.confidenceBand && (
               <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${BAND_CLS[solverResult.risk.confidenceBand] ?? ""}`}>
                 {solverResult.risk.confidenceBand} confidence
@@ -43,17 +75,15 @@ export function SolverPanel({ solverResult }: SolverPanelProps) {
             )}
           </div>
           {solverResult.risk.explanation && (
-            <p className="mt-2 text-sm text-muted-foreground">{solverResult.risk.explanation}</p>
+            <p className="mt-3 text-sm text-muted-foreground">{solverResult.risk.explanation}</p>
           )}
           {solverResult.roles.filter((r) => r.result).length > 0 && (
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               {solverResult.roles.filter((r) => r.result).map((r) => (
                 <span
                   key={r.labelId}
                   className={`rounded-full border px-2.5 py-0.5 text-xs ${
-                    r.source === "user"
-                      ? "border-[#c4b5fd] text-[#6d28d9]"
-                      : "border-border text-muted-foreground"
+                    r.source === "user" ? "border-[#c4b5fd] text-[#6d28d9]" : "border-border text-muted-foreground"
                   }`}
                 >
                   {labelDisplay(r.labelId)}
@@ -62,17 +92,10 @@ export function SolverPanel({ solverResult }: SolverPanelProps) {
             </div>
           )}
           {solverResult.transparency !== null && (
-            <div className="mt-4 flex items-center gap-2">
-              <span className="text-sm font-medium text-muted-foreground">Transparency obligations (Art. 50):</span>
-              <span
-                className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${
-                  solverResult.transparency.result
-                    ? "border-[#bbf7d0] bg-[#f0fdf4] text-[#1a9d5c]"
-                    : "border-border text-muted-foreground"
-                } ${solverResult.transparency.source === "user" ? "border-[#c4b5fd] bg-[#f5f3ff] text-[#6d28d9]" : ""}`}
-              >
-                {solverResult.transparency.result ? "Yes" : "No"}
-                {solverResult.transparency.source === "user" && " · override"}
+            <div className="mt-3 flex items-center gap-2 text-sm">
+              <span className="font-medium text-muted-foreground">Transparency:</span>
+              <span className="font-semibold">
+                {solverResult.transparency.result ? "True" : "False"}
               </span>
             </div>
           )}

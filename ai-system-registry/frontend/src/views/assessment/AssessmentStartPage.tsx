@@ -4,29 +4,7 @@ import { useAssessment } from "./AssessmentApp";
 import { ORDERED_QUESTION_KEYS } from "./AssessmentSidebar";
 import { usePermissions } from "../../hooks/usePermissions";
 import { isGated } from "../../config/aiQuestionnaire";
-
-const BAND_CLS: Record<string, string> = {
-  High: "text-[#1a9d5c] bg-[#f0fdf4] border-[#bbf7d0]",
-  Medium: "text-[#b57e00] bg-[#fffbeb] border-[#fde68a]",
-  Low: "text-[#d14343] bg-[#fef2f2] border-[#fecaca]",
-};
-
-function labelDisplay(labelId: string): string {
-  return labelId.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-const CLASSIFICATION_TABS = [
-  { key: "minimal", label: "Minimal or no risk", labelIds: ["MINIMAL"] },
-  { key: "high", label: "High-risk", labelIds: ["HIGH_RISK"] },
-  { key: "prohibited", label: "Prohibited practice", labelIds: ["PROHIBITED"] },
-];
-
-function activeTab(labelId: string | null): string {
-  if (!labelId) return "";
-  if (labelId.includes("PROHIBITED")) return "prohibited";
-  if (labelId.includes("HIGH_RISK")) return "high";
-  return "minimal";
-}
+import { SolverPanel } from "./SolverPanel";
 
 export default function AssessmentStartPage() {
   const { id } = useParams();
@@ -47,8 +25,7 @@ export default function AssessmentStartPage() {
     ORDERED_QUESTION_KEYS.find((k) => !isGated(k, currentAnswers)) ??
     ORDERED_QUESTION_KEYS[0];
 
-  const solverLabel = solverResult ? labelDisplay(solverResult.risk.labelId) : null;
-  const active = activeTab(solverResult?.risk.labelId ?? null);
+  const solverLabel = solverResult ? solverResult.risk.labelId.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : null;
 
   return (
     <div className="mx-auto max-w-4xl px-8 py-8">
@@ -68,81 +45,12 @@ export default function AssessmentStartPage() {
         </div>
       )}
 
+      <div className="mt-6">
+        <SolverPanel solverResult={solverResult} pending={state.prefill_pending} />
+      </div>
+
       <div className="mt-6 rounded-xl border border-border bg-card p-6">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2">
-            <span className="rounded-full bg-[#eaecee] px-3 py-1 text-xs font-medium text-[#556b82]">
-              AI-generated · not final
-            </span>
-            <span className="rounded-full bg-[#eef3ff] px-3 py-1 text-xs font-medium text-[#1147E9]">
-              Rule-based · updates on each confirm
-            </span>
-          </div>
-        </div>
-
-        <h2 className="mt-4 text-xl font-bold">
-          Risk Classification:{" "}
-          {state.prefill_pending || !solverResult ? (
-            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
-              <span>Computing…</span>
-            </span>
-          ) : (
-            <span className="text-[#8b3a00]">{solverLabel}</span>
-          )}
-        </h2>
-
-        {solverResult && (
-          <>
-            <div className="mt-4 grid grid-cols-4 gap-2">
-              {CLASSIFICATION_TABS.map((t) => (
-                <div
-                  key={t.key}
-                  className={
-                    "rounded-md border px-3 py-2 text-center text-sm " +
-                    (!state.prefill_pending && t.key === active
-                      ? "border-[#1147E9] font-semibold text-[#1147E9]"
-                      : "border-border text-muted-foreground")
-                  }
-                >
-                  {t.label}
-                </div>
-              ))}
-            </div>
-            <div className="mt-3 flex items-center gap-3">
-              {solverResult.risk.confidenceBand && (
-                <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${BAND_CLS[solverResult.risk.confidenceBand] ?? ""}`}>
-                  {solverResult.risk.confidenceBand} confidence
-                </span>
-              )}
-            </div>
-            {solverResult.risk.explanation && (
-              <p className="mt-3 text-sm text-muted-foreground">{solverResult.risk.explanation}</p>
-            )}
-            {solverResult.roles.filter((r) => r.result).length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {solverResult.roles.filter((r) => r.result).map((r) => (
-                  <span
-                    key={r.labelId}
-                    className={`rounded-full border px-2.5 py-0.5 text-xs ${r.source === "user" ? "border-[#c4b5fd] text-[#6d28d9]" : "border-border text-muted-foreground"}`}
-                  >
-                    {labelDisplay(r.labelId)}
-                  </span>
-                ))}
-              </div>
-            )}
-            {solverResult.transparency !== null && (
-              <div className="mt-3 flex items-center gap-2 text-sm">
-                <span className="font-medium text-muted-foreground">Transparency:</span>
-                <span className="font-semibold">
-                  {solverResult.transparency.result ? "True" : "False"}
-                </span>
-              </div>
-            )}
-          </>
-        )}
-
-        <h3 className="mt-6 text-lg font-semibold">How confident the assessment was answered</h3>
+        <h3 className="text-lg font-semibold">How confident the assessment was answered</h3>
         <div className="mt-3 flex h-2 overflow-hidden rounded-full">
           <div className="bg-[#1a9d5c]" style={{ width: `${(counts.high / total) * 100}%` }} />
           <div className="bg-[#e0a008]" style={{ width: `${(counts.medium / total) * 100}%` }} />

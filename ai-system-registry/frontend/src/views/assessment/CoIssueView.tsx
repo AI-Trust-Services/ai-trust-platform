@@ -4,7 +4,6 @@ import { ChevronLeft, Save, XCircle } from "lucide-react";
 import { useAssessment } from "./AssessmentApp";
 import { ORDERED_QUESTION_KEYS } from "./AssessmentSidebar";
 import { api } from "../../api/client";
-import { TIER_META } from "../../utils";
 import { cn } from "@/lib/utils";
 import { SolverPanel } from "./SolverPanel";
 
@@ -15,7 +14,6 @@ function mapLabelToTier(labelId: string | undefined): string {
   return "";
 }
 
-
 // Tiers the CO may issue (the dropdown options). gpai-* are not CO-issuable.
 const ISSUABLE: { value: string; label: string }[] = [
   { value: "minimal", label: "Minimal or no risk" },
@@ -23,23 +21,11 @@ const ISSUABLE: { value: string; label: string }[] = [
   { value: "prohibited", label: "Prohibited practice" },
 ];
 
-const PRELIM_TABS = [
-  { key: "minimal", label: "Minimal or no risk" },
-  { key: "high", label: "High-risk" },
-  { key: "prohibited", label: "Prohibited practice" },
-];
-
-function activeTab(tier: string): string {
-  if (tier === "prohibited") return "prohibited";
-  if (tier === "high" || tier.startsWith("gpai")) return "high";
-  return "minimal";
-}
-
 /** #348 — Compliance Officer "Issue a Risk Classification" end view. */
 export default function CoIssueView() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { state, solverResult } = useAssessment();
+  const { solverResult } = useAssessment();
 
   const [tier, setTier] = useState<string>("");
   const [coTouched, setCoTouched] = useState(false);
@@ -62,8 +48,6 @@ export default function CoIssueView() {
   const [error, setError] = useState<string | null>(null);
 
   const lastQuestionKey = ORDERED_QUESTION_KEYS[ORDERED_QUESTION_KEYS.length - 1];
-  const prelimLabel = TIER_META[state.tier]?.label ?? state.tier;
-  const active = activeTab(state.tier);
 
   // Transparency is allowed for all tiers except prohibited.
   const transparencyAllowed = tier !== "" && tier !== "prohibited";
@@ -113,48 +97,8 @@ export default function CoIssueView() {
         contributors of this AI System.
       </p>
 
-      {/* Preliminary (AI-generated) classification — display only */}
-      <div className="mt-6 rounded-xl border border-border bg-card p-6">
-        <div className="flex items-start justify-between">
-          <span className="rounded-full bg-[#eaecee] px-3 py-1 text-xs font-medium text-[#556b82]">
-            AI-generated · not final
-          </span>
-          {state.org_role && (
-            <span className="text-sm text-muted-foreground">
-              Role: <span className="text-foreground">{state.org_role}</span>
-            </span>
-          )}
-        </div>
-        <h2 className="mt-4 text-xl font-bold">
-          Preliminary Risk Classification: <span className="text-[#8b3a00]">{prelimLabel}</span>
-        </h2>
-        <div className="mt-4 grid grid-cols-4 gap-2">
-          {PRELIM_TABS.map((t) => (
-            <div
-              key={t.key}
-              className={cn(
-                "rounded-md border px-3 py-2 text-center text-sm",
-                t.key === active
-                  ? "border-[#1147E9] font-semibold text-[#1147E9]"
-                  : "border-border text-muted-foreground",
-              )}
-            >
-              {t.label}
-            </div>
-          ))}
-        </div>
-        {state.source_documents.length > 0 && (
-          <p className="mt-4 text-sm text-muted-foreground">
-            Based on:{" "}
-            {state.source_documents
-              .map((d) => (d.page != null ? `${d.name} (p. ${d.page})` : d.name))
-              .join(", ")}
-          </p>
-        )}
-      </div>
-
-      {/* Hierarchy solver result — read-only for the CO */}
-      <div className="mt-4">
+      {/* Solver result — read-only for the CO */}
+      <div className="mt-6">
         <SolverPanel solverResult={solverResult} />
       </div>
 
