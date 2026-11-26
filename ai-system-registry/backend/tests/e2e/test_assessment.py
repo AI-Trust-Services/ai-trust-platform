@@ -145,7 +145,12 @@ async def _open_with_concrete(
         if question_id in qids:
             return result
         return await original_parse(
-            text, task=task, validator=validator, chat_fn=chat_fn, messages=messages, **kw
+            text,
+            task=task,
+            validator=validator,
+            chat_fn=chat_fn,
+            messages=messages,
+            **kw,
         )
 
     with patch("app.questionnaire_pipeline.parse_with_retry", new=_patched):
