@@ -82,9 +82,19 @@ def _row():
 def _env(row=True):
     """Fake DB row + no RAG + mocked MinIO; yields the ``put_json`` mock."""
     system_row = _row() if row else None
+    from app.llm.client import RuntimeConfig
+
+    stub_cfg = RuntimeConfig(
+        base_url="stub", api_token="", model="m", source="thalamus"
+    )
     with (
         patch(
             "app.questionnaire_pipeline.SessionLocal", lambda: _FakeSession(system_row)
+        ),
+        patch(
+            "app.questionnaire_pipeline.resolve_runtime_config",
+            new_callable=AsyncMock,
+            return_value=stub_cfg,
         ),
         patch(
             "app.questionnaire_pipeline._retrieve_rag_documents",

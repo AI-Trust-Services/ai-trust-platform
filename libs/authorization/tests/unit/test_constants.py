@@ -90,6 +90,7 @@ def test_business_owner_permissions():
         EVIDENCE_WRITE,
         EVIDENCE_APPROVE,
         ALERTS_READ,
+        AUDIT_READ,
     }
 
 
@@ -110,6 +111,7 @@ def test_executive_permissions():
         ASSESSMENTS_READ,
         MONITORING_READ,
         ALERTS_READ,
+        AUDIT_READ,
     }
 
 

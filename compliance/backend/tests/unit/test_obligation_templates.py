@@ -90,6 +90,30 @@ def test_eu_high_distributor_is_empty():
     assert obligations_for("FRM-EU-AI-ACT", "high", "distributor") == []
 
 
+def test_eu_high_both_is_union_of_provider_and_deployer():
+    # An organisation that both develops and uses the system carries both roles'
+    # obligations — the generated set is the union of the provider + deployer sets.
+    both = obligations_for("FRM-EU-AI-ACT", "high", "both")
+    provider = obligations_for("FRM-EU-AI-ACT", "high", "provider")
+    deployer = obligations_for("FRM-EU-AI-ACT", "high", "deployer")
+    assert len(both) == len(provider) + len(deployer) == 25
+    both_ids = {ob["cluster_id"] for ob in both}
+    assert both_ids == {ob["cluster_id"] for ob in provider} | {
+        ob["cluster_id"] for ob in deployer
+    }
+    # Both provider-only (Art. 9) and deployer-only (Art. 27 FRIA) clusters appear.
+    refs = {ob["article_ref"] for ob in both}
+    assert "Art. 9 EU AI Act" in refs
+    assert "Art. 27 EU AI Act" in refs
+
+
+def test_eu_limited_both_is_union_of_provider_and_deployer():
+    both = obligations_for("FRM-EU-AI-ACT", "limited", "both")
+    provider = obligations_for("FRM-EU-AI-ACT", "limited", "provider")
+    deployer = obligations_for("FRM-EU-AI-ACT", "limited", "deployer")
+    assert len(both) == len(provider) + len(deployer) == 3
+
+
 def test_eu_limited_provider_count():
     obs = obligations_for("FRM-EU-AI-ACT", "limited")
     assert len(obs) == 2

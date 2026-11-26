@@ -235,6 +235,7 @@ async def write_ai_output_in_session(
     answers: list[dict[str, Any]],
     classification: dict[str, Any],
     consumed: dict[str, Any] | None = None,
+    provider: dict[str, Any] | None = None,
 ) -> None:
     """Append the ``ai`` output layer once the pipeline completes.
 
@@ -245,6 +246,14 @@ async def write_ai_output_in_session(
     produced *this* output — which can differ (a doc that finished indexing after
     open, a retry, a live-row edit in the window). Together they close the
     "frozen inputs don't constrain the run" gap (#366).
+
+    ``provider`` records the LLM provider pinned for the run (model id + endpoint
+    host + source, never the token) — the #406 "retain the model identifier with
+    generated results" audit requirement.
+
+    Write-once: a second ``ai`` layer is dropped via ON CONFLICT DO NOTHING on
+    ``UNIQUE(dossier_id, layer)`` (so a pipeline retry can't duplicate). No-op if
+    the dossier is missing. Never commits — the caller owns the txn.
     """
     await write_output_layer_in_session(
         session,
@@ -254,6 +263,7 @@ async def write_ai_output_in_session(
             "answers": answers,
             "classification": classification,
             "consumed_inputs": consumed,
+            "provider": provider,
         },
     )
 

@@ -117,6 +117,7 @@ ROLE_PERMISSIONS = {
         EVIDENCE_WRITE,
         EVIDENCE_APPROVE,
         ALERTS_READ,
+        AUDIT_READ,
     ],
     "auditor": [
         SYSTEMS_READ,
@@ -131,6 +132,7 @@ ROLE_PERMISSIONS = {
         ASSESSMENTS_READ,
         ALERTS_READ,
         MONITORING_READ,
+        AUDIT_READ,
     ],
 }
 

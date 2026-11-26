@@ -52,10 +52,11 @@ async def generate_obligations_in_session(
     if (
         assessment.framework_id == "FRM-EU-AI-ACT"
         and system.tier in ("high", "limited")
-        and org_role not in ("provider", "deployer")
+        and org_role not in ("provider", "deployer", "both")
     ):
-        # Only provider/deployer obligation sets are defined for EU high/limited;
-        # importer/distributor yield no obligations (templates is already []).
+        # Only provider/deployer (and their union, "both") obligation sets are
+        # defined for EU high/limited; importer/distributor yield no obligations
+        # (templates is already []).
         logger.warning(
             "assessment.unsupported_org_role",
             extra={

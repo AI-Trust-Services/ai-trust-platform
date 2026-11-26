@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
-import LuigiClient from "@luigi-project/client";
 import {
   ChevronLeft, ChevronDown, MoreVertical, Trash2, Download, Upload,
   CheckCircle2, FileText, RefreshCw, AlertTriangle,
@@ -541,7 +540,7 @@ function OverviewTab({
                 <Button size="sm" variant="outline"
                   disabled={!mayWriteAssessments}
                   title={mayWriteAssessments ? undefined : "Requires permission: assessments:write"}
-                  onClick={() => navigate(`/systems/${system.id}/assessment`)}>
+                  onClick={() => navigate(`/systems/${system.id}/assessment`, { state: { from: `/systems/${system.id}` } })}>
                   {assessments.length === 0 ? "Start" : "Continue"}
                 </Button>
               </div>
@@ -739,10 +738,6 @@ function AssessmentsTab({
     setSubmitting(false);
   }
 
-  function goToCompliance() {
-    LuigiClient.linkManager().navigate("/home/assessments");
-  }
-
   // "View results" — open a SPECIFIC assessment cycle read-only in the single-page
   // screen (by id in the route path), not the compliance list.
   function viewResults(a: ComplianceAssessment) {
@@ -778,7 +773,7 @@ function AssessmentsTab({
               <Button size="sm" className="ml-auto shrink-0"
                 disabled={!mayWriteAssessments}
                 title={mayWriteAssessments ? undefined : "Requires permission: assessments:write"}
-                onClick={() => navigate(`/systems/${system.id}/assessment`)}>
+                onClick={() => navigate(`/systems/${system.id}/assessment`, { state: { from: `/systems/${system.id}` } })}>
                 Start assessment
               </Button>
             </div>
@@ -827,8 +822,8 @@ function AssessmentsTab({
               <RefreshCw className="size-4 shrink-0 text-[var(--brand,#1147E9)]" />
               <p className="text-sm">
                 Assessment under review —{" "}
-                <button className="text-primary underline underline-offset-2" onClick={goToCompliance}>
-                  Continue in Compliance
+                <button className="text-primary underline underline-offset-2" onClick={() => navigate(`/systems/${system.id}/assessment`, { state: { from: `/systems/${system.id}` } })}>
+                  View in Assessment
                 </button>
               </p>
             </div>
@@ -925,7 +920,7 @@ function AssessmentsTab({
                               className="gap-1"
                               disabled={!mayWriteAssessments}
                               title={mayWriteAssessments ? undefined : "Requires permission: assessments:write"}
-                              onClick={goToCompliance}
+                              onClick={() => navigate(`/systems/${system.id}/assessment`, { state: { from: `/systems/${system.id}` } })}
                             >
                               <PencilLine className="size-3" /> Edit
                             </Button>
@@ -939,7 +934,7 @@ function AssessmentsTab({
                                 <DropdownMenuItem onSelect={() => submitToCompliance(a)} disabled={submitting || !mayWriteAssessments}>
                                   Submit to compliance officer
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onSelect={goToCompliance} disabled={!mayWriteAssessments}>
+                                <DropdownMenuItem onSelect={() => navigate(`/systems/${system.id}/assessment`, { state: { from: `/systems/${system.id}` } })} disabled={!mayWriteAssessments}>
                                   Edit
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
@@ -966,7 +961,7 @@ function AssessmentsTab({
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onSelect={goToCompliance} disabled={!mayWriteAssessments}>
+                                  <DropdownMenuItem onSelect={() => navigate(`/systems/${system.id}/assessment`, { state: { from: `/systems/${system.id}` } })} disabled={!mayWriteAssessments}>
                                     Edit
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator />
@@ -1435,18 +1430,15 @@ export default function SystemDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [editMode, setEditMode] = useState(false);
 
-  // "Start new assessment" — the registry endpoint archives an approved cycle and
-  // begins a fresh one, or (if the current cycle is unapproved) just opens that
-  // one. Then navigate into the single-page app for the current cycle.
-  async function startNew() {
+  // "Start new assessment" — route through method selection first. The method
+  // page archives an approved cycle (or opens the current one) via /start-new on
+  // the user's choice; the `newCycle` flag tells it to begin a fresh cycle rather
+  // than bounce to an already-opened one.
+  function startNew() {
     if (!id) return;
-    try {
-      await api.startNewAssessment(id);
-    } catch (e) {
-      showToast(`Could not start a new assessment: ${(e as Error).message}`, true);
-      return;
-    }
-    navigate(`/systems/${id}/assessment`);
+    navigate(`/systems/${id}/assessment/method`, {
+      state: { from: `/systems/${id}`, newCycle: true },
+    });
   }
 
   const loadAll = useCallback(async () => {
@@ -1618,7 +1610,7 @@ export default function SystemDetailPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem disabled={!mayWriteAssessments} onSelect={() => navigate(`/systems/${system.id}/assessment`)}>
+                <DropdownMenuItem disabled={!mayWriteAssessments} onSelect={() => navigate(`/systems/${system.id}/assessment`, { state: { from: `/systems/${system.id}` } })}>
                   Start assessment
                 </DropdownMenuItem>
                 <DropdownMenuItem disabled={!mayWrite} onSelect={() => setRolesOpen(true)}>
