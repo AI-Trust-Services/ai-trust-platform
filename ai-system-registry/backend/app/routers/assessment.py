@@ -229,7 +229,12 @@ def _confirmed_answers(states: dict[str, QuestionState]) -> list[dict[str, Any]]
             "confirmed_at": st.confirmed_at.isoformat() if st.confirmed_at else None,
             "changed_from_ai": st.answer_source == "manual",
         }
-        for key, st in sorted(states.items())
+        for key, st in sorted(
+            states.items(),
+            key=lambda kv: ASSESSMENT_QUESTION_KEYS.index(kv[0])
+            if kv[0] in ASSESSMENT_QUESTION_KEYS
+            else 9999,
+        )
     ]
 
 
