@@ -41,7 +41,7 @@ export function TierBadge({
    *  overrides the isChatbot/generatesSyntheticContent derivation. */
   transparency?: boolean;
 }) {
-  const effectiveTier = workflowStatus !== "approved" ? "pending" : tier;
+  const effectiveTier = workflowStatus !== undefined && workflowStatus !== "approved" ? "pending" : tier;
   const meta = TIER_META[effectiveTier] || { label: tier };
   // EU AI Act: Art. 50 transparency stacks on top of a high-risk classification —
   // the only tier pair that co-applies. The classifier waterfall only records the
