@@ -640,21 +640,22 @@ async def test_state_exposes_ai_original_answer_after_override(
 ):
     """#435: the AI's originally-proposed answer is retained and exposed on /state
     even after the owner overrides it, so the reviewer can show both the AI answer
-    (with its confidence/references) and the user's answer."""
+    (with its confidence/references) and the user's answer.
+
+    Uses a CONCRETE AI answer: #478 makes overriding a declined (null-confidence)
+    answer non-manual, so retention must be exercised on an answer the AI actually
+    established — which is also the reviewer-card scenario #435 targets."""
     system_id = await _create_system(client)
-    state = await _open(client, system_id)
-    q = next(
-        q
-        for q in state["questions"]
-        if q["answer"] and q["answer_source"] == "ai_prefilled"
-    )
-    qkey, ai_original = q["question_key"], q["answer"]
+    state = await _open_with_concrete(client, system_id)  # Scope_1 → HIGH "YES"
+    qkey, ai_original = "Scope_1", "YES"
+    q = next(x for x in state["questions"] if x["question_key"] == qkey)
+    assert q["answer"] == ai_original
     # Before any override the field mirrors the AI answer.
     assert q["ai_original_answer"] == ai_original
-    # Override it with a manual answer.
+    # Override it with a different concrete answer.
     r = await client.post(
         f"/v1/systems/{system_id}/assessment/questions/{qkey}/answer",
-        json={"answer": "A manually-entered answer."},
+        json={"answer": "NO"},
         headers=_hdr(_OWNER),
     )
     assert r.status_code == 200, r.text
@@ -667,7 +668,7 @@ async def test_state_exposes_ai_original_answer_after_override(
     )
     q_now = next(x for x in st.json()["questions"] if x["question_key"] == qkey)
     assert q_now["answer_source"] == "manual"
-    assert q_now["answer"] == "A manually-entered answer."
+    assert q_now["answer"] == "NO"
     # The AI original survives the override — both answers remain available.
     assert q_now["ai_original_answer"] == ai_original
 
