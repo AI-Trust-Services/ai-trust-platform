@@ -227,11 +227,14 @@ export default function AssessmentApp() {
     }
   }, [id]);
 
-  // Initial solver call once the prefill pipeline finishes and confirmed answers exist.
+  // Initial solver call once the prefill pipeline finishes and answers exist.
   const initialSolverDone = useRef(false);
   useEffect(() => {
     if (!state || state.prefill_pending || initialSolverDone.current) return;
-    if (!state.questions.some((q) => q.owner_confirmed && q.answer)) return;
+    // Resolve as soon as any question has an answer — AI-prefilled answers are
+    // unconfirmed by default (#439), so gating on owner_confirmed left the panel
+    // stuck on "Computing…" until the first manual confirm.
+    if (!state.questions.some((q) => q.answer)) return;
     initialSolverDone.current = true;
     fetchSolverResult();
   }, [state?.prefill_pending, fetchSolverResult]);
