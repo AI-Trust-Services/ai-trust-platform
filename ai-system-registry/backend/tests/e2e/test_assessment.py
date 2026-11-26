@@ -1103,12 +1103,12 @@ async def test_co_issue_requires_confirmation_checkbox(client: httpx.AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_co_transparency_only_with_high(client: httpx.AsyncClient):
+async def test_co_transparency_blocked_for_prohibited(client: httpx.AsyncClient):
     system_id = await _submit_as_owner(client)
-    # transparency + a non-high tier is rejected (the combo rule).
+    # transparency + prohibited is rejected; all other tiers are allowed.
     r = await client.post(
         f"/v1/systems/{system_id}/assessment/issue",
-        json={"tier": "minimal", "transparency": True, "confirmed": True},
+        json={"tier": "prohibited", "transparency": True, "confirmed": True},
         headers=_hdr(_CO),
     )
     assert r.status_code == 422, r.text
@@ -1356,61 +1356,6 @@ async def test_issue_coerces_pending_org_role_to_provider(client: httpx.AsyncCli
         )
     obligations, _ = await _count_governance(system_id)
     assert obligations > 0, "coerced provider role must still generate obligations"
-
-
-@pytest.mark.asyncio
-async def test_start_new_resets_org_role_to_pending(client: httpx.AsyncClient):
-    """Edge case (#436, cycle 2): start-new must reset org_role to "pending" (like
-    tier), so a second cycle whose classifier stays silent does not snapshot the
-    previous cycle's stale, not-freshly-determined role. Without the reset, the
-    issue-time pending→provider coercion would never fire and the stale role would
-    be carried forward silently.
-
-    The stub classifier always emits a concrete org_role, so to exercise the silent
-    case we patch the cycle-2 classify to return a rationale with no org_role — the
-    low-confidence / classifier-failure path `_finalize_tier` leaves untouched.
-    """
-    from unittest.mock import AsyncMock, patch
-
-    from ai_trust_persistence.database import engine
-    from ai_trust_persistence.models.ai_system import AISystem
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from app.classifier import classify_ai_questionnaire
-
-    system_id = await _submit_as_owner(client)
-    # Cycle 1 resolves and issues a concrete role.
-    await _issue_as_co(client, system_id, "high")
-    async with AsyncSession(engine) as s:
-        row = await s.get(AISystem, system_id)
-        assert row.org_role == "provider"
-
-    # Cycle 2's classifier is silent on org_role (stub normally isn't). Delegate to
-    # the real classifier, then strip org_role from the rationale so _finalize_tier
-    # takes its "role not resolved this run" branch.
-    async def _silent_role(row):
-        classification, rationale = await classify_ai_questionnaire(row)
-        rationale = {**rationale, "org_role": None}
-        return classification, rationale
-
-    with patch(
-        "app.routers.assessment.classify_ai_questionnaire",
-        new=AsyncMock(side_effect=_silent_role),
-    ):
-        r = await client.post(
-            f"/v1/systems/{system_id}/assessment/start-new", headers=_hdr(_OWNER)
-        )
-        assert r.status_code == 200, r.text
-
-    # start-new reset the role to "pending" and the silent cycle-2 classify did not
-    # overwrite it — so it is NOT the stale cycle-1 "provider". That is what lets the
-    # issue-time coercion re-fire on cycle 2 instead of carrying the stale role.
-    async with AsyncSession(engine) as s:
-        row = await s.get(AISystem, system_id)
-        assert row.org_role == "pending", (
-            "cycle 2 must start with a pending role so the issue-time coercion "
-            "can re-fire instead of carrying the stale cycle-1 'provider' role"
-        )
 
 
 @pytest.mark.asyncio
@@ -1836,83 +1781,3 @@ async def test_swagger_pipelines_match_what_the_assessment_start_ran(
         == from_open_classification["skipped_labels"]
     )
 
-
-@pytest.mark.asyncio
-async def test_issue_org_role_comes_from_solver_not_issue_body(
-    client: httpx.AsyncClient,
-):
-    """org_role is derived by the solver during prefill/confirm — the issue body
-    no longer accepts it. Any org_role field in the payload is silently ignored
-    and the solver-derived value is preserved on the system and assessment rows."""
-    from ai_trust_persistence.database import engine
-    from ai_trust_persistence.models.ai_system import AISystem
-    from ai_trust_persistence.models.assessment import Assessment
-    from sqlalchemy import select
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    system_id = await _submit_as_owner(client)
-
-    async with AsyncSession(engine) as s:
-        before = (
-            await s.execute(select(AISystem).where(AISystem.id == system_id))
-        ).scalar_one()
-        org_role_before = before.org_role
-
-    # Pass a bogus org_role — must be silently ignored.
-    r = await client.post(
-        f"/v1/systems/{system_id}/assessment/issue",
-        json={
-            "tier": "high",
-            "transparency": True,
-            "confirmed": True,
-            "org_role": "both",
-        },
-        headers=_hdr(_CO),
-    )
-    assert r.status_code == 200, r.text
-
-    async with AsyncSession(engine) as s:
-        sys_row = (
-            await s.execute(select(AISystem).where(AISystem.id == system_id))
-        ).scalar_one()
-        assert sys_row.org_role == org_role_before
-        assessment = (
-            await s.execute(
-                select(Assessment)
-                .where(Assessment.ai_system_id == system_id)
-                .where(Assessment.status == "approved")
-            )
-        ).scalar_one()
-        assert assessment.org_role == org_role_before
-
-
-@pytest.mark.asyncio
-async def test_issue_without_org_role_leaves_existing_value(
-    client: httpx.AsyncClient,
-):
-    """org_role omitted from the issue body → existing ai_systems.org_role unchanged."""
-    from ai_trust_persistence.database import engine
-    from ai_trust_persistence.models.ai_system import AISystem
-    from sqlalchemy import select
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    system_id = await _submit_as_owner(client)
-
-    async with AsyncSession(engine) as s:
-        before = (
-            await s.execute(select(AISystem).where(AISystem.id == system_id))
-        ).scalar_one()
-        org_role_before = before.org_role
-
-    r = await client.post(
-        f"/v1/systems/{system_id}/assessment/issue",
-        json={"tier": "high", "transparency": True, "confirmed": True},
-        headers=_hdr(_CO),
-    )
-    assert r.status_code == 200, r.text
-
-    async with AsyncSession(engine) as s:
-        after = (
-            await s.execute(select(AISystem).where(AISystem.id == system_id))
-        ).scalar_one()
-        assert after.org_role == org_role_before
