@@ -419,11 +419,15 @@ export default function QuestionView() {
         {/* Confidence + references belong to the AI-generated answer only (#435).
             - Answer unchanged from the AI → the active answer IS the AI answer, so
               the indicator applies directly.
-            - Compliance reviewer (read-only) & overridden → show the AI's original
-              answer as its own block with the indicator attached, so both answers
-              are visible and the confidence is unambiguously tied to the AI answer.
-            - Owner/writer & overridden → grey the indicator out with a note (it
-              describes the AI suggestion, not the user's answer). */}
+            - Compliance reviewer (read-only) & overridden & the AI actually answered
+              (ai_original_answer present) → show the AI's original answer as its own
+              block with the indicator attached, so both answers are visible and the
+              confidence is unambiguously tied to the AI answer.
+            - Otherwise overridden (owner/writer, or a reviewer where the AI never
+              answered) → grey the indicator out with a note. Guarding the reviewer
+              block on ai_original_answer avoids a misleading "AI suggested answer /
+              Not answered by AI" card when the owner manually filled a question the
+              AI skipped (answer_source flips to manual even with no AI original). */}
         {!changedFromAi ? (
           <div className="mt-3">
             <ConfidenceIndicator
@@ -432,7 +436,7 @@ export default function QuestionView() {
               onClick={() => setConfModalOpen(true)}
             />
           </div>
-        ) : isComplianceReviewer ? (
+        ) : isComplianceReviewer && qState?.ai_original_answer ? (
           <div className="mt-3 rounded-md border border-border bg-[var(--muted)]/20 p-3">
             <p className="text-xs font-medium text-muted-foreground">AI suggested answer</p>
             <p className="mt-1 text-sm">{formatAnswerForDisplay(qState?.ai_original_answer ?? null)}</p>
