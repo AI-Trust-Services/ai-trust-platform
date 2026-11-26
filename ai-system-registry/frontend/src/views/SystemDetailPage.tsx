@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
-import LuigiClient from "@luigi-project/client";
 import {
   ChevronLeft, ChevronDown, MoreVertical, Trash2, Download, Upload,
   CheckCircle2, FileText, RefreshCw, AlertTriangle,
@@ -739,10 +738,6 @@ function AssessmentsTab({
     setSubmitting(false);
   }
 
-  function goToCompliance() {
-    LuigiClient.linkManager().navigate("/home/assessments");
-  }
-
   // "View results" — open a SPECIFIC assessment cycle read-only in the single-page
   // screen (by id in the route path), not the compliance list.
   function viewResults(a: ComplianceAssessment) {
@@ -827,8 +822,8 @@ function AssessmentsTab({
               <RefreshCw className="size-4 shrink-0 text-[var(--brand,#1147E9)]" />
               <p className="text-sm">
                 Assessment under review —{" "}
-                <button className="text-primary underline underline-offset-2" onClick={goToCompliance}>
-                  Continue in Compliance
+                <button className="text-primary underline underline-offset-2" onClick={() => navigate(`/systems/${system.id}/assessment`, { state: { from: `/systems/${system.id}` } })}>
+                  View in Assessment
                 </button>
               </p>
             </div>
@@ -925,7 +920,7 @@ function AssessmentsTab({
                               className="gap-1"
                               disabled={!mayWriteAssessments}
                               title={mayWriteAssessments ? undefined : "Requires permission: assessments:write"}
-                              onClick={goToCompliance}
+                              onClick={() => navigate(`/systems/${system.id}/assessment`, { state: { from: `/systems/${system.id}` } })}
                             >
                               <PencilLine className="size-3" /> Edit
                             </Button>
@@ -939,7 +934,7 @@ function AssessmentsTab({
                                 <DropdownMenuItem onSelect={() => submitToCompliance(a)} disabled={submitting || !mayWriteAssessments}>
                                   Submit to compliance officer
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onSelect={goToCompliance} disabled={!mayWriteAssessments}>
+                                <DropdownMenuItem onSelect={() => navigate(`/systems/${system.id}/assessment`, { state: { from: `/systems/${system.id}` } })} disabled={!mayWriteAssessments}>
                                   Edit
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
@@ -966,7 +961,7 @@ function AssessmentsTab({
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onSelect={goToCompliance} disabled={!mayWriteAssessments}>
+                                  <DropdownMenuItem onSelect={() => navigate(`/systems/${system.id}/assessment`, { state: { from: `/systems/${system.id}` } })} disabled={!mayWriteAssessments}>
                                     Edit
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator />
