@@ -44,4 +44,5 @@ class ResolvedLabel(BaseModel):
 
 class ResolveResponse(BaseModel):
     risk: ResolvedLabel
+    transparency: ResolvedLabel | None = None
     roles: list[ResolvedLabel]

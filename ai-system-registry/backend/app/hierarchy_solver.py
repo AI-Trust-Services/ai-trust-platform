@@ -16,8 +16,10 @@ from app.schemas.hierarchy_solver import LabelOverrides, ResolvedLabel, ResolveR
 logger = logging.getLogger(__name__)
 
 # Risk labels in descending priority order. First true one wins; MINIMAL is the fallback.
-_RISK_HIERARCHY = ["PROHIBITED", "HIGH_RISK", "TRANSPARENCY", "MINIMAL"]
+_RISK_HIERARCHY = ["PROHIBITED", "HIGH_RISK", "MINIMAL"]
 _RISK_LABEL_IDS = frozenset(_RISK_HIERARCHY)
+
+_TRANSPARENCY_LABEL_ID = "TRANSPARENCY"
 
 _DEFAULT_THRESHOLDS = {"high": 90, "medium": 60}
 
@@ -107,7 +109,7 @@ def _minimal_label(combined: dict[str, ResolvedLabel]) -> ResolvedLabel:
     # weakest counterargument"; upgrade to §8/§9 tree eval if MINIMAL gets its own rules.
     other_confidences = [
         combined[rid].confidence
-        for rid in _RISK_HIERARCHY[:-1]
+        for rid in ("PROHIBITED", "HIGH_RISK")
         if rid in combined and combined[rid].confidence is not None
     ]
     confidence = min(other_confidences) if other_confidences else None
@@ -183,7 +185,7 @@ def solve(
         ):  # direct label override revives skipped
             combined[lid] = _user_label(lid, overrides.labels[lid])
         elif (
-            lid in answer_results and answer_results[lid]
+            answer_results.get(lid)
         ):  # answer override revives skipped
             combined[lid] = _user_label(lid, answer_results[lid])
         # else: stays out of combined — skipped and not revived
@@ -207,7 +209,10 @@ def solve(
         if lbl.get("activate", False) and lbl["id"] in combined
     ]
 
-    return ResolveResponse(risk=risk, roles=roles)
+    # Transparency: resolved independently of risk hierarchy.
+    transparency = combined.get(_TRANSPARENCY_LABEL_ID)
+
+    return ResolveResponse(risk=risk, transparency=transparency, roles=roles)
 
 
 # ---------------------------------------------------------------------------
@@ -217,7 +222,6 @@ def solve(
 _LABEL_TO_TIER: dict[str, str] = {
     "PROHIBITED": "prohibited",
     "HIGH_RISK": "high",
-    "TRANSPARENCY": "limited",
     "MINIMAL": "minimal",
 }
 
