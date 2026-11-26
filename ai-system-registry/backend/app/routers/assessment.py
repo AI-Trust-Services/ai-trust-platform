@@ -41,7 +41,12 @@ from app.assessment_catalogue import (
 )
 from app.assessment_prefill_pipeline import run_assessment_prefill_pipeline
 from app.classifier import classify_ai_questionnaire
-from app.dossier import create_dossier_in_session, write_ai_output_in_session
+from app.dossier import (
+    build_co_issued_bundle,
+    create_dossier_in_session,
+    write_ai_output_in_session,
+    write_output_layer_in_session,
+)
 from app.ids import new_id
 from app.llm import LLMParseError
 from app.questionnaire_gating import get_all_gated_question_ids, is_gated
@@ -207,6 +212,51 @@ async def _states_by_key(session, assessment_id: str) -> dict[str, QuestionState
         select(QuestionState).where(QuestionState.assessment_id == assessment_id)
     )
     return {s.question_key: s for s in result.scalars().all()}
+
+
+def _confirmed_answers(states: dict[str, QuestionState]) -> list[dict[str, Any]]:
+    """The per-question confirmed answers frozen into the dossier's
+    ``user_confirmed`` layer at submit (#370): one entry per question with who
+    confirmed it, whether it is a manual override of the AI pre-fill, and the
+    confidence band."""
+    return [
+        {
+            "question_key": key,
+            "answer": st.answer,
+            "answer_source": st.answer_source,
+            "confidence": st.confidence,
+            "confirmed_by": st.confirmed_by,
+            "confirmed_at": st.confirmed_at.isoformat() if st.confirmed_at else None,
+            "changed_from_ai": st.answer_source == "manual",
+        }
+        for key, st in sorted(
+            states.items(),
+            key=lambda kv: ASSESSMENT_QUESTION_KEYS.index(kv[0])
+            if kv[0] in ASSESSMENT_QUESTION_KEYS
+            else 9999,
+        )
+    ]
+
+
+def _user_confirmed_payload(
+    row: AISystem, states: dict[str, QuestionState]
+) -> dict[str, Any]:
+    """The ``user_confirmed`` dossier payload (#370): the per-question confirmed
+    answers + the classification *as-shown* at this moment (the live row values,
+    no LLM re-run). Shared by the ``user_confirmed`` layer (written at /submit) and
+    the ``user_confirmed`` slice embedded in the ``co_issued`` bundle (at /issue),
+    so both describe a submission identically."""
+    return {
+        "answers": _confirmed_answers(states),
+        "classification": {
+            "tier": row.tier,
+            "basis": row.basis,
+            "annex_iii_area": row.annex_iii_area,
+            "org_role": row.org_role,
+            "rationale": row.classification_rationale,
+            "assessment_sources": row.assessment_sources,
+        },
+    }
 
 
 async def _comment_counts(session, assessment_id: str) -> dict[str, int]:
@@ -1321,8 +1371,37 @@ async def submit_assessment(
             )
         )
         await session.commit()
+        assessment_id = assessment.id if assessment is not None else None
         row = await _get_system(session, system_id)
-        return await _build_state(session, row, user, assessment)
+        state = await _build_state(session, row, user, assessment)
+
+    # #370: freeze the user-confirmed output layer (per-question confirmed answers
+    # + the classification in effect at submit) into the dossier — in parallel to
+    # the `ai` layer, never overwriting it. Best-effort in its own txn (like the
+    # `ai` layer): an append-only audit write must never roll back the lock above.
+    if assessment_id:
+        try:
+            async with SessionLocal() as session:
+                row = await _get_system(session, system_id)
+                states = await _states_by_key(session, assessment_id)
+                await write_output_layer_in_session(
+                    session,
+                    assessment_id,
+                    "user_confirmed",
+                    _user_confirmed_payload(row, states),
+                )
+                await session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "assessment.dossier_user_confirmed_failed",
+                extra={"system_id": system_id, "error": str(exc)},
+            )
+    else:
+        logger.warning(
+            "assessment.dossier_user_confirmed_skipped_no_assessment",
+            extra={"system_id": system_id},
+        )
+    return state
 
 
 # ── compliance officer: issue / reject (#348) ────────────────────────────────
@@ -1433,9 +1512,55 @@ async def issue_classification(
         )
         recipients = _notify_recipients(row)
         system_name = row.name
+        assessment_id = assessment.id if assessment is not None else None
+        co_decision = {
+            "tier": row.tier,
+            "transparency": row.co_issued_transparency,
+            "basis": row.basis,
+            "org_role": row.org_role,
+            "annex_iii_area": row.annex_iii_area,
+            "rationale": row.classification_rationale,
+            "assessment_sources": row.assessment_sources,
+            "issued_by": user,
+            "note": body.note,
+        }
         await session.commit()
         row = await _get_system(session, system_id)
         state = await _build_state(session, row, user)
+
+    # #370: write the final, self-contained `co_issued` dossier bundle (frozen
+    # inputs/config/prompts + the `ai` layer + the live owner-confirmed answers +
+    # the CO's binding decision) "as soon as the CO confirms". The confirmed
+    # answers are read from live question_states (not the frozen user_confirmed
+    # layer, which is write-once and pinned to the FIRST submit) so the final
+    # record is accurate even after a reject→resubmit. Best-effort in its own txn:
+    # an append-only audit write must never roll back the binding approve above.
+    if assessment_id:
+        try:
+            async with SessionLocal() as session:
+                row = await _get_system(session, system_id)
+                states = await _states_by_key(session, assessment_id)
+                bundle = await build_co_issued_bundle(
+                    session,
+                    assessment_id,
+                    co_decision,
+                    _user_confirmed_payload(row, states),
+                )
+                if bundle is not None:
+                    await write_output_layer_in_session(
+                        session, assessment_id, "co_issued", bundle
+                    )
+                    await session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "assessment.dossier_co_issued_failed",
+                extra={"system_id": system_id, "error": str(exc)},
+            )
+    else:
+        logger.warning(
+            "assessment.dossier_co_issued_skipped_no_assessment",
+            extra={"system_id": system_id},
+        )
 
     for uname in recipients:
         background_tasks.add_task(
