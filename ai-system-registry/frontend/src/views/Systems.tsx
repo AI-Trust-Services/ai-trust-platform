@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { Eye, Trash2, RefreshCw, MoreVertical, Play, ArrowRight, ChevronDown, Search } from "lucide-react";
-import LuigiClient from "@luigi-project/client";
 import { TierBadge, FormattedDate } from "../components/Badges";
 import InitialsAvatar from "../components/InitialsAvatar";
 import { api } from "../api/client";
@@ -36,12 +35,10 @@ function docProgress(status: string, stage: string | null): number {
 }
 
 // "start"/"continue" open the single-page EU AI Act assessment app in the
-// registry itself (/systems/:id/assessment). "view" hands an APPROVED assessment
-// off to the compliance MFE's governance detail via the localStorage flag it
-// consumes (obligations/evidence live there).
+// registry itself (/systems/:id/assessment). "view" opens the APPROVED cycle
+// read-only in the registry's own per-system assessment view.
 function goToAssessments(
   systemId: string,
-  systemName: string,
   action: AssessmentAction,
   rows: AssessmentRow[],
   navigate: (path: string, opts?: { state?: unknown }) => void,
@@ -55,10 +52,8 @@ function goToAssessments(
     }
     return;
   }
-  localStorage.setItem("compliance.viewSystem", JSON.stringify({ systemId, systemName }));
   const approved = rows.find((r) => r.status === "approved");
-  if (approved) localStorage.setItem("compliance.openAssessment", JSON.stringify({ assessmentId: approved.id }));
-  LuigiClient.linkManager().navigate("/home/assessments");
+  navigate(approved ? `/systems/${systemId}/assessment/view/${approved.id}` : `/systems/${systemId}`);
 }
 
 const ACTION_LABEL: Record<AssessmentAction, string> = {
@@ -360,7 +355,7 @@ export default function Systems() {
                             <DropdownMenuItem
                               disabled={indexing[s.id]?.busy}
                               title={indexing[s.id]?.busy ? "Available once document processing is complete" : undefined}
-                              onSelect={() => goToAssessments(s.id, s.name, action, assessmentsBySystem[s.id] ?? [], navigate)}>
+                              onSelect={() => goToAssessments(s.id, action, assessmentsBySystem[s.id] ?? [], navigate)}>
                               {action === "start" ? <Play /> : <ArrowRight />}
                               {ACTION_LABEL[action]}
                             </DropdownMenuItem>

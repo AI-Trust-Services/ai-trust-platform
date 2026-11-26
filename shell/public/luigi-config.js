@@ -143,9 +143,13 @@
         navigationContext: "alerts",
       }, */
       {
+        // [hidden] Standalone Assessments page removed from nav — assessments now
+        // live under each AI System's view (registry /systems/:id/assessment...).
+        // Route kept alive (hideFromNav) so stray deep links don't 404.
         pathSegment: "assessments",
         label: "Assessments",
         icon: "task",
+        hideFromNav: true,
         viewUrl: "/compliance/#/assessments",
         navigationContext: "assessments",
       },
