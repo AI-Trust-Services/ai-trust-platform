@@ -756,6 +756,7 @@ async def _build_state(
                 can_edit=can_edit,
                 ai_references=(st.ai_references or []) if st else [],
                 ai_explanation=st.ai_explanation if st else None,
+                ai_original_answer=st.ai_original_answer if st else None,
                 llm_pending=llm_pending,
             )
         )
@@ -957,6 +958,7 @@ async def save_answer(
             question_key=question_key,
             answer=body.answer,
             answer_source=state.answer_source,
+            ai_original_answer=state.ai_original_answer,
             confidence=state.confidence,
             confirmed=bool(state.confirmed_at),
             assignee_username=state.assignee_username,
@@ -1252,6 +1254,7 @@ async def assign_question(
         # Same fallback as _build_state for a not-yet-answered state.
         answer=state.answer or _read_answer(row, answers, question_key),
         answer_source=state.answer_source,
+        ai_original_answer=state.ai_original_answer,
         confidence=state.confidence,
         confirmed=bool(state.confirmed_at),
         assignee_username=state.assignee_username,
