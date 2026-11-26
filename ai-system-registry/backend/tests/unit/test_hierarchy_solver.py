@@ -14,9 +14,10 @@ Postgres/MinIO is needed. The solver still loads the real
 ``risk_classification/risk_role_classification_config.json`` at call time, so
 these cases exercise the production rule trees and operators exactly.
 
-NOTE: both tests currently FAIL — the applied skipped-label fix is incomplete
-against the real config (see the companion bug report). They are kept as
-failing regression specs, not marked xfail, on purpose.
+NOTE: test_answer_override_revives_skipped_prohibited_social_scoring previously
+used an incomplete answer set (only Prohibited_8, missing Prohibited_1) that
+did not satisfy the SOCIAL_SCORING rule's ``all`` condition. Fixed to match the
+real config rule tree.
 """
 
 from __future__ import annotations
@@ -82,7 +83,7 @@ def test_answer_override_revives_skipped_prohibited_social_scoring():
             },
         ],
     }
-    overrides = LabelOverrides(answers={"Prohibited_8": ["YES"]})
+    overrides = LabelOverrides(answers={"Prohibited_1": ["SOCIAL_SCORING"], "Prohibited_8": ["YES"]})
 
     resp = hierarchy_solver.solve(pipeline_result, overrides, None)
 
