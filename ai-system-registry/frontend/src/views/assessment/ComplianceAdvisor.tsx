@@ -715,8 +715,10 @@ export function ComplianceAdvisor({
     >
       {/* Vertical tab rail (full height). The AI Act Companion (chat) tab is
           intentionally hidden — only the Context tab is exposed. The chat code
-          below stays in place (unreachable) so it can be re-enabled by restoring
-          the second RailTab. */}
+          below stays in place (unreachable) so it can be re-enabled by adding
+          the AI Act Companion RailTab back. Keep the Context RailTab too:
+          send() switches to the chat tab (setTab("chat")), so the Context tab
+          is the only way back and must stay in the rail. */}
       <nav className="flex w-9 shrink-0 flex-col border-r border-border bg-[#f8fafe]">
         <RailTab active={tab === "context"} onClick={() => setTab("context")}>
           Context
