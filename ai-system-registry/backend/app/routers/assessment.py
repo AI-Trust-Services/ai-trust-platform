@@ -1549,6 +1549,11 @@ async def issue_classification(
                 "assessment.dossier_co_issued_failed",
                 extra={"system_id": system_id, "error": str(exc)},
             )
+    else:
+        logger.warning(
+            "assessment.dossier_co_issued_skipped_no_assessment",
+            extra={"system_id": system_id},
+        )
 
     for uname in recipients:
         background_tasks.add_task(
