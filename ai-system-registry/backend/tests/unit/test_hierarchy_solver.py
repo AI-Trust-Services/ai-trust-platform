@@ -33,9 +33,8 @@ os.environ.setdefault(
 )
 os.environ.setdefault("ALLOWED_ORIGINS", "http://localhost")
 
-from app import hierarchy_solver  # noqa: E402
-from app.schemas.hierarchy_solver import LabelOverrides  # noqa: E402
-
+from app import hierarchy_solver
+from app.schemas.hierarchy_solver import LabelOverrides
 
 # ---------------------------------------------------------------------------
 # TEST 1 — the exact bug-report case: Prohibited_8 = YES revives a skipped
@@ -83,7 +82,9 @@ def test_answer_override_revives_skipped_prohibited_social_scoring():
             },
         ],
     }
-    overrides = LabelOverrides(answers={"Prohibited_1": ["SOCIAL_SCORING"], "Prohibited_8": ["YES"]})
+    overrides = LabelOverrides(
+        answers={"Prohibited_1": ["SOCIAL_SCORING"], "Prohibited_8": ["YES"]}
+    )
 
     resp = hierarchy_solver.solve(pipeline_result, overrides, None)
 
