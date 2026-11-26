@@ -786,15 +786,6 @@ async def _build_state(
     co_transparency = (
         assessment.co_issued_transparency if snap else row.co_issued_transparency
     )
-    # Transparency obligation also derives from the chatbot / synthetic-content
-    # flags; read the frozen snapshot for a historical cycle so a later edit to
-    # the live system row doesn't rewrite what the cycle was approved at.
-    is_chatbot = assessment.is_chatbot if snap else row.is_chatbot
-    gen_synthetic = (
-        assessment.generates_synthetic_content
-        if snap
-        else row.generates_synthetic_content
-    )
     rationale = (
         assessment.classification_rationale if snap else row.classification_rationale
     ) or {}
@@ -838,8 +829,7 @@ async def _build_state(
         basis=basis,
         org_role=org_role,
         reasoning=rationale.get("reasoning"),
-        transparency=tier == "high"
-        and bool(co_transparency or is_chatbot or gen_synthetic),
+        transparency=bool(co_transparency),
         confidence_counts=conf,
         attention_count=attention,
         # No flag→question mapping exists for the ai-questionnaire.json ids, so the
@@ -1474,12 +1464,12 @@ async def issue_classification(
     _: str = Depends(require_permission(SYSTEMS_APPROVE)),
 ):
     """CO issues the final, binding risk classification. Only from pending_review;
-    the result is immutable. The only allowed tier combo is high + transparency."""
+    the result is immutable."""
     user = _current_user(request)
-    # Enforce the combo rule: transparency may only accompany 'high'.
-    if body.transparency and body.tier != "high":
+    # Transparency may accompany any tier except prohibited.
+    if body.transparency and body.tier == "prohibited":
         raise HTTPException(
-            422, "Transparency obligations may only be issued alongside 'high' risk"
+            422, "Transparency obligations cannot be issued alongside 'prohibited' risk"
         )
     if not body.confirmed:
         raise HTTPException(422, "The confirmation checkbox must be ticked to issue")
