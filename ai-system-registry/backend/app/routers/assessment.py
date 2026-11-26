@@ -460,7 +460,9 @@ async def _run_prefill_background(
         _shared["results"] = results
         _shared["consumed"] = questionnaire_output.get("consumed")
         _shared["provider"] = questionnaire_output.get("provider")
-        _shared["sources"] = [s.model_dump() for s in _sources_from_proposals(proposals)]
+        _shared["sources"] = [
+            s.model_dump() for s in _sources_from_proposals(proposals)
+        ]
         async with SessionLocal() as session:
             row = await _get_system(session, system_id)
             row.assessment_sources = _shared["sources"]
@@ -989,7 +991,9 @@ async def confirm_question(
             if st.answer_source == "manual" and st.answer:
                 try:
                     parsed = json.loads(st.answer)
-                    manual_answers[key] = parsed if isinstance(parsed, list) else [st.answer]
+                    manual_answers[key] = (
+                        parsed if isinstance(parsed, list) else [st.answer]
+                    )
                 except Exception:
                     manual_answers[key] = [st.answer]
         if manual_answers:

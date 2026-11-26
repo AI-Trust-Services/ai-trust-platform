@@ -191,7 +191,9 @@ async def list_latest_classification(system_id: str, config_id: str) -> Any:
     Returns ``None`` when no run exists yet (caller maps to 404).
     """
     try:
-        return await asyncio.to_thread(_list_latest_classification_sync, system_id, config_id)
+        return await asyncio.to_thread(
+            _list_latest_classification_sync, system_id, config_id
+        )
     except S3Error as exc:
         if exc.code in ("NoSuchKey", "NoSuchBucket"):
             return None

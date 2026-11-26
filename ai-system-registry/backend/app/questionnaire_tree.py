@@ -106,7 +106,9 @@ def eval_tree(when: dict, answers_by_qid: dict[str, list[str]]) -> bool:
         values = when.get("values", [])
         return any(v in values for v in eligible)
 
-    raise ValueError(f"Unknown operator '{operator}' in when-tree for questionId '{qid}'")
+    raise ValueError(
+        f"Unknown operator '{operator}' in when-tree for questionId '{qid}'"
+    )
 
 
 def eval_label(label: dict, answers_by_qid: dict[str, list[str]]) -> bool:
@@ -115,5 +117,3 @@ def eval_label(label: dict, answers_by_qid: dict[str, list[str]]) -> bool:
         if eval_tree(rule.get("when", {}), answers_by_qid):
             return True
     return False
-
-

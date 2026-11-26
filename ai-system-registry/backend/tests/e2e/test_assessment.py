@@ -1615,19 +1615,28 @@ async def test_issue_org_role_comes_from_solver_not_issue_body(
     system_id = await _submit_as_owner(client)
 
     async with AsyncSession(engine) as s:
-        before = (await s.execute(select(AISystem).where(AISystem.id == system_id))).scalar_one()
+        before = (
+            await s.execute(select(AISystem).where(AISystem.id == system_id))
+        ).scalar_one()
         org_role_before = before.org_role
 
     # Pass a bogus org_role — must be silently ignored.
     r = await client.post(
         f"/v1/systems/{system_id}/assessment/issue",
-        json={"tier": "high", "transparency": True, "confirmed": True, "org_role": "both"},
+        json={
+            "tier": "high",
+            "transparency": True,
+            "confirmed": True,
+            "org_role": "both",
+        },
         headers=_hdr(_CO),
     )
     assert r.status_code == 200, r.text
 
     async with AsyncSession(engine) as s:
-        sys_row = (await s.execute(select(AISystem).where(AISystem.id == system_id))).scalar_one()
+        sys_row = (
+            await s.execute(select(AISystem).where(AISystem.id == system_id))
+        ).scalar_one()
         assert sys_row.org_role == org_role_before
         assessment = (
             await s.execute(
@@ -1652,7 +1661,9 @@ async def test_issue_without_org_role_leaves_existing_value(
     system_id = await _submit_as_owner(client)
 
     async with AsyncSession(engine) as s:
-        before = (await s.execute(select(AISystem).where(AISystem.id == system_id))).scalar_one()
+        before = (
+            await s.execute(select(AISystem).where(AISystem.id == system_id))
+        ).scalar_one()
         org_role_before = before.org_role
 
     r = await client.post(
@@ -1663,5 +1674,7 @@ async def test_issue_without_org_role_leaves_existing_value(
     assert r.status_code == 200, r.text
 
     async with AsyncSession(engine) as s:
-        after = (await s.execute(select(AISystem).where(AISystem.id == system_id))).scalar_one()
+        after = (
+            await s.execute(select(AISystem).where(AISystem.id == system_id))
+        ).scalar_one()
         assert after.org_role == org_role_before

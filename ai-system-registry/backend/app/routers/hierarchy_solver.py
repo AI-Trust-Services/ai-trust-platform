@@ -27,7 +27,9 @@ router = APIRouter(tags=["assessment"])
     summary="Resolve risk/role classification with optional user overrides",
     responses={
         404: {"description": "System not found or no classification run exists yet."},
-        422: {"description": "Unknown label in overrides, riskWinner is not a risk label, or unknown questionId in answers."},
+        422: {
+            "description": "Unknown label in overrides, riskWinner is not a risk label, or unknown questionId in answers."
+        },
     },
     dependencies=[Depends(require_permission("systems:read"))],
 )
@@ -49,7 +51,9 @@ async def resolve_classification(
     if exists is None:
         raise HTTPException(404, f"AI system '{system_id}' not found")
 
-    pipeline_result = await minio_client.list_latest_classification(system_id, DEFAULT_CLASSIFICATION_CONFIG_ID)
+    pipeline_result = await minio_client.list_latest_classification(
+        system_id, DEFAULT_CLASSIFICATION_CONFIG_ID
+    )
     if pipeline_result is None:
         raise HTTPException(404, "No classification run found for this system")
 

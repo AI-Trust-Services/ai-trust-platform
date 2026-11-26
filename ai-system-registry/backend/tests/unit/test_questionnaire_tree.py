@@ -51,7 +51,13 @@ def test_get_question_ids_from_label_multiple_rules():
         "id": "HIGH_RISK",
         "rules": [
             {"when": {"questionId": "Q1", "operator": "EQUALS", "value": "YES"}},
-            {"when": {"questionId": "Q2", "operator": "CONTAINS", "value": "MACHINERY"}},
+            {
+                "when": {
+                    "questionId": "Q2",
+                    "operator": "CONTAINS",
+                    "value": "MACHINERY",
+                }
+            },
         ],
     }
     assert get_question_ids_from_label(label) == {"Q1", "Q2"}

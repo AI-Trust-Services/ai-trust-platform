@@ -34,7 +34,9 @@ class ResolvedLabel(BaseModel):
     # None when source="user" (override drops the pipeline value).
     confidence: float | None = Field()
 
-    confidence_band: Literal["High", "Medium", "Low"] | None = Field(default=None, alias="confidenceBand")
+    confidence_band: Literal["High", "Medium", "Low"] | None = Field(
+        default=None, alias="confidenceBand"
+    )
     explanation: str | None = None
 
     model_config = {"populate_by_name": True}

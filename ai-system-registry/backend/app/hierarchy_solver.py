@@ -23,9 +23,15 @@ _DEFAULT_THRESHOLDS = {"high": 90, "medium": 60}
 
 
 def _confidence_band(label_id: str, confidence: float) -> str:
-    thresholds = load_questionnaire("hierarchy_solver_config").get("confidence_thresholds", {}).get(label_id)
+    thresholds = (
+        load_questionnaire("hierarchy_solver_config")
+        .get("confidence_thresholds", {})
+        .get(label_id)
+    )
     if thresholds is None:
-        logger.warning("hierarchy_solver.missing_threshold_config", extra={"label_id": label_id})
+        logger.warning(
+            "hierarchy_solver.missing_threshold_config", extra={"label_id": label_id}
+        )
         thresholds = _DEFAULT_THRESHOLDS
     if confidence >= thresholds["high"]:
         return "High"
@@ -56,7 +62,10 @@ def _validate_overrides(
         if label_id not in known_label_ids:
             raise ValueError(f"Unknown labelId in overrides.labels: '{label_id}'")
 
-    if overrides.risk_winner is not None and overrides.risk_winner not in _RISK_LABEL_IDS:
+    if (
+        overrides.risk_winner is not None
+        and overrides.risk_winner not in _RISK_LABEL_IDS
+    ):
         raise ValueError(
             f"riskWinner '{overrides.risk_winner}' is not a valid risk label "
             f"(must be one of {sorted(_RISK_LABEL_IDS)})"
@@ -69,7 +78,9 @@ def _validate_overrides(
 
 def _pipeline_label(c: dict) -> ResolvedLabel:
     confidence = c.get("confidence")
-    band = _confidence_band(c["labelId"], confidence) if confidence is not None else None
+    band = (
+        _confidence_band(c["labelId"], confidence) if confidence is not None else None
+    )
     return ResolvedLabel(
         labelId=c["labelId"],
         result=c.get("result", False),
@@ -121,7 +132,9 @@ def solve(
     Override precedence (highest first): riskWinner > labels > answers re-eval > pipeline.
     """
     classifications: list[dict] = pipeline_result.get("classifications", [])
-    skipped_label_ids: set[str] = {e["labelId"] for e in pipeline_result.get("skipped_labels", [])}
+    skipped_label_ids: set[str] = {
+        e["labelId"] for e in pipeline_result.get("skipped_labels", [])
+    }
 
     config = load_questionnaire(DEFAULT_CLASSIFICATION_CONFIG_ID)
     all_labels = config.get("riskLabels", []) + config.get("roleLabels", [])
@@ -135,12 +148,16 @@ def solve(
     # Pre-compute answer-override results before the loop so the loop is pure lookup.
     answer_results: dict[str, bool] = {}
     if overrides and overrides.answers:
-        base_answers = _build_answers_map(questionnaire_result) if questionnaire_result else {}
+        base_answers = (
+            _build_answers_map(questionnaire_result) if questionnaire_result else {}
+        )
 
-        effective_answers = base_answers | overrides.answers  # overrides win on conflict
+        effective_answers = (
+            base_answers | overrides.answers
+        )  # overrides win on conflict
 
         # Re-evaluate all labels with merged answers;
-        # if new answer trigger a change of risk label or label, below it will be handeled 
+        # if new answer trigger a change of risk label or label, below it will be handeled
         # with answer_results
         for lbl in all_labels:
             answer_results[lbl["id"]] = eval_label(lbl, effective_answers)
@@ -161,9 +178,13 @@ def solve(
     for lid in skipped_label_ids:
         if lid in combined:
             continue
-        if overrides and lid in overrides.labels:  # direct label override revives skipped
+        if (
+            overrides and lid in overrides.labels
+        ):  # direct label override revives skipped
             combined[lid] = _user_label(lid, overrides.labels[lid])
-        elif lid in answer_results and answer_results[lid]:  # answer override revives skipped
+        elif (
+            lid in answer_results and answer_results[lid]
+        ):  # answer override revives skipped
             combined[lid] = _user_label(lid, answer_results[lid])
         # else: stays out of combined — skipped and not revived
 

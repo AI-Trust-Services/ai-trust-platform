@@ -130,7 +130,9 @@ def test_every_rule_question_id_exists_in_the_questionnaire():
 
 def test_active_labels_have_rules():
     for label in _active_labels():
-        assert _get_question_ids_from_label(label), f"{label['id']} has no rule questions"
+        assert _get_question_ids_from_label(label), (
+            f"{label['id']} has no rule questions"
+        )
 
 
 # ---------------------------------------------------------------------------
