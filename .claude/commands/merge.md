@@ -30,6 +30,7 @@ Conflicts are resolved by understanding *both* branches' intent so neither main'
 ```
 git merge --no-ff "$BASE"
 ```
+
 `--no-ff` guarantees exactly one explicit merge commit even if a fast-forward were possible, so the integration is always a single, visible commit.
 - Completes cleanly (no conflicts) → go to **Step 5**.
 - Stops on conflicts → go to **Step 3**.
@@ -57,6 +58,7 @@ git checkout --theirs <path/to/package-lock.json>
 (cd <that-frontend-dir> && npm install)
 git add <path/to/package-lock.json>
 ```
+
 This rebuilds the lockfile against the merged `package.json`.
 
 ### Normal code
@@ -65,6 +67,7 @@ Before editing, understand **both** sides' intent — do not blindly pick ours/t
 git log -p -n 3 "$BASE" -- <file>     # what main changed and why
 git log -p -n 3 HEAD    -- <file>     # what the feature branch changed and why
 ```
+
 Resolve so **both** behaviors survive (main's refactor/fix AND the feature's logic).
 - **Confident** resolution (clearly additive, non-overlapping, or one side is an obvious superset) → resolve and briefly state why.
 - **Ambiguous** resolution (either side could be right, or behavior could change either way) → **STOP**, show both sides with the history context above and a recommendation, and ask the user before continuing.
@@ -82,12 +85,12 @@ git commit        # finalizes the merge commit (no --continue; a merge is one co
 
 Reached when the merge commit exists (clean from Step 2, or after the `git commit` in Step 3).
 
-
 ## Step 5 — Push
 
 ```
 git push
 ```
+
 Plain push — **no force needed**. The merge only *added* a commit on top of your branch, so the remote fast-forwards; nothing was rewritten. No confirmation prompt — it runs only because verification passed.
 
 Then report:

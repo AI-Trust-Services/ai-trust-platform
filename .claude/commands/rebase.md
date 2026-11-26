@@ -32,6 +32,7 @@ This is safe: a rebase never edits your commits in place — it copies them. The
 ```
 git rebase "$BASE"
 ```
+
 - If it completes cleanly (no conflicts) → go to **Step 5**.
 - If it stops on a conflict → go to **Step 3**.
 
@@ -60,6 +61,7 @@ git checkout --theirs <path/to/package-lock.json>
 (cd <that-frontend-dir> && npm install)
 git add <path/to/package-lock.json>
 ```
+
 This rebuilds the lockfile against the merged `package.json`.
 
 ### Normal code
@@ -68,6 +70,7 @@ Before editing, understand **both** sides' intent — do not blindly pick ours/t
 git log -p -n 3 "$BASE" -- <file>     # what main changed and why
 git log -p -n 3 "$PRE"  -- <file>     # what the feature branch changed and why
 ```
+
 Resolve so **both** behaviors survive (main's refactor/fix AND the feature's logic).
 - **Confident** resolution (clearly additive, non-overlapping, or one side is an obvious superset) → resolve and briefly state why.
 - **Ambiguous** resolution (either side could be right, or behavior could change either way) → **STOP**, show both sides with the history context above and a recommendation, and ask the user before continuing.
@@ -78,6 +81,7 @@ Once every conflicted file for this stop is resolved and sanity-checked:
 git add <resolved paths>
 git rebase --continue
 ```
+
 Repeat for the next stop until the rebase reports it is done.
 
 **If anything becomes unrecoverable or the user wants out:** `git rebase --abort` restores the branch exactly as it was. The `backup/...` ref and `git reflog` are also available.
@@ -86,12 +90,12 @@ Repeat for the next stop until the rebase reports it is done.
 
 Reached when `git rebase` reports success (either cleanly from Step 2 or after the last `--continue` in Step 3).
 
-
-## Step 6 — Push
+## Step 5 — Push
 
 ```
 git push --force-with-lease
 ```
+
 `--force-with-lease` refuses to push if someone else pushed to the branch since the last fetch, so it cannot clobber a teammate's work. No confirmation prompt — it runs only because verification passed.
 
 Then report:
