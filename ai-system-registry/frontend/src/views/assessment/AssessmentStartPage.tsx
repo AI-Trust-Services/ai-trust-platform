@@ -78,11 +78,6 @@ export default function AssessmentStartPage() {
               Rule-based · updates on each confirm
             </span>
           </div>
-          {state.org_role && (
-            <span className="text-sm text-muted-foreground">
-              Role: <span className="text-foreground">{state.org_role}</span>
-            </span>
-          )}
         </div>
 
         <h2 className="mt-4 text-xl font-bold">
