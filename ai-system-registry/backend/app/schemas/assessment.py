@@ -10,10 +10,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from app.questionnaire_required import VALID_QUESTION_KEYS
 from fastapi import HTTPException
 from pydantic import BaseModel, field_validator
-
-from app.questionnaire_required import VALID_QUESTION_KEYS
 
 CONFIDENCE_LEVELS = frozenset({"high", "medium", "low"})
 
@@ -209,15 +208,15 @@ class SubmitRequest(BaseModel):
 
 # ── Compliance Officer end view (#348) ───────────────────────────────────────
 
-# Tiers the CO may issue, and the only allowed companion.
-ISSUABLE_TIERS = frozenset({"minimal", "limited", "high", "prohibited"})
+# Tiers the CO may issue.
+ISSUABLE_TIERS = frozenset({"minimal", "high", "prohibited"})
 
 
 class IssueRequest(BaseModel):
     """CO issues the final, binding risk classification."""
 
     tier: str
-    # The only allowed combo is high + transparency; true only valid with tier='high'.
+    # Transparency obligations (Art. 50) may accompany any tier except prohibited.
     transparency: bool = False
     note: str | None = None
     confirmed: bool = False
