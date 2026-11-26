@@ -69,4 +69,7 @@ async def resolve_classification(
             )
         questionnaire_result = await minio_client.get_json(questionnaire_run_key)
 
-    return solve(pipeline_result, body, questionnaire_result)
+    try:
+        return solve(pipeline_result, body, questionnaire_result)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
