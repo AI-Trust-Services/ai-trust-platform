@@ -119,10 +119,14 @@ export default function AssessmentApp() {
           });
           return;
         }
-        // A failed prefill still seeded question_states (prefilled=true), so GET
-        // /state alone would never retry. Re-POST /open to re-trigger the
-        // background pipeline (idempotent; clears llm_status=failed).
-        setState(s.prefill_failed ? await api.openAssessment(id) : s);
+        // A failed OR stub prefill still seeded question_states (prefilled=true),
+        // so GET /state alone would never retry. Re-POST /open to re-trigger the
+        // background pipeline (idempotent; backend re-runs when llm_status is
+        // failed or stub). This lets a stub cycle be re-analysed once a provider
+        // has been configured, instead of being stuck on the "contact admin" banner.
+        setState(
+          s.prefill_failed || s.prefill_stub ? await api.openAssessment(id) : s,
+        );
       } else {
         const s = await api.getAssessmentState(id);
         setState(s);
@@ -238,6 +242,14 @@ export default function AssessmentApp() {
         {state.prefill_failed && (
           <div className="flex shrink-0 items-center gap-2 border-b border-[#fca5a5]/40 bg-[#fef2f2] px-6 py-2 text-sm text-[#991b1b]">
             <span>AI pre-fill failed. Reload the page or start the assessment again to retry.</span>
+          </div>
+        )}
+        {state.prefill_stub && (
+          <div className="flex shrink-0 items-center gap-2 border-b border-[#fcd34d]/50 bg-[#fffbeb] px-6 py-2 text-sm text-[#92400e]">
+            <span>
+              No live AI model is configured, so this assessment was not analysed.
+              Please contact your platform administrator.
+            </span>
           </div>
         )}
         <header className="flex h-12 shrink-0 items-center justify-end gap-3 border-b border-border bg-card px-6 text-sm">

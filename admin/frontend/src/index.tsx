@@ -6,6 +6,7 @@ import MailServicePage from "./pages/MailServicePage";
 import SettingsPage from "./pages/SettingsPage";
 import AdminHomePage from "./pages/AdminHomePage";
 import BrandingPage from "./pages/BrandingPage";
+import LLMProviderPage from "./pages/LLMProviderPage";
 import { RequirePermission } from "./components/RequirePermission";
 
 const router = createHashRouter([
@@ -42,6 +43,14 @@ const router = createHashRouter([
         element: (
           <RequirePermission anyOf={["iam:manage"]}>
             <BrandingPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: "llm-provider",
+        element: (
+          <RequirePermission anyOf={["iam:manage"]}>
+            <LLMProviderPage />
           </RequirePermission>
         ),
       },

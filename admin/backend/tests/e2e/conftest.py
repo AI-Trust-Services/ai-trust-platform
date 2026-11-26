@@ -148,6 +148,8 @@ def _reset_platform_settings() -> None:
     )
     # Clear branding table (key-value store)
     cur.execute("DELETE FROM branding")
+    # Clear the BYO LLM provider config (issue #406)
+    cur.execute("DELETE FROM llm_provider_config")
     # Also truncate audit_events if it exists (for audit logging tests)
     cur.execute(
         """

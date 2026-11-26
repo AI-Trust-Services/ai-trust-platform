@@ -22,6 +22,7 @@ from ai_trust_persistence.models.evidence import (
     evidence_requirements,
 )
 from ai_trust_persistence.models.framework import Framework
+from ai_trust_persistence.models.llm_provider_config import LLMProviderConfig
 from ai_trust_persistence.models.model_card import ModelCard
 from ai_trust_persistence.models.model_card_metric import ModelCardMetric
 from ai_trust_persistence.models.model_card_source import ModelCardSource
@@ -61,6 +62,7 @@ __all__ = [
     "ModelCardFeatureStore",
     "ModelCardFeatureStoreGroup",
     "Framework",
+    "LLMProviderConfig",
     "Assessment",
     "AssessmentDossier",
     "AssessmentDossierOutput",

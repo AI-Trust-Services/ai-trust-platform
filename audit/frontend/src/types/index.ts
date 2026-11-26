@@ -16,7 +16,9 @@ export interface AuditEventSummary {
 }
 
 export interface AuditEventDetail extends AuditEventSummary {
-  changes: Record<string, { before: unknown; after: unknown }>;
+  // A change entry is either a before/after diff (system/evidence actions) or a
+  // flat value (e.g. llm_provider actions record changes as plain field→value).
+  changes: Record<string, { before?: unknown; after?: unknown } | unknown>;
 }
 
 export interface AuditEventListResponse {

@@ -70,6 +70,7 @@
     "mail-service": ["iam:manage"],
     "admin-settings": ["iam:manage"],
     "branding": ["iam:manage"],
+    "llm-provider": ["iam:manage"],
   };
   const canSee = (seg) =>
     !PAGE_PERMISSIONS[seg] || PAGE_PERMISSIONS[seg].some((p) => permissions.includes(p));
@@ -223,6 +224,14 @@
         icon: "action-settings",
         viewUrl: "/admin/#/admin-settings",
         navigationContext: "admin-settings",
+        viewGroup: "admin",
+      },
+      {
+        pathSegment: "llm-provider",
+        label: "LLM Provider",
+        icon: "machine",
+        viewUrl: "/admin/#/llm-provider",
+        navigationContext: "llm-provider",
         viewGroup: "admin",
       },
   ].filter((node) => canSee(node.pathSegment));
