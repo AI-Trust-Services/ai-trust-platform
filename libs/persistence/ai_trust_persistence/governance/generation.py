@@ -47,6 +47,13 @@ async def generate_obligations_in_session(
     if any owner/not_applicable values were carried forward from a prior assessment.
     """
     org_role = getattr(system, "org_role", "provider") or "provider"
+    # "pending" = the registry intake default, held until an assessment finalises
+    # the real role. Coerce it here (not only at the registry issue site) so EVERY
+    # caller — the compliance governance chain included — maps the unresolved role
+    # to the conservative EU AI Act default instead of silently producing zero
+    # obligations (obligations_for filters by role, and "pending" matches none).
+    if org_role == "pending":
+        org_role = "provider"
     templates = obligations_for(assessment.framework_id, system.tier, org_role)
 
     if (
@@ -154,6 +161,11 @@ async def generate_requirements_in_session(
     """
     if not obligations:
         return []
+
+    # Mirror generate_obligations_in_session: an unresolved "pending" role maps to
+    # the conservative default so requirements_for doesn't filter everything out.
+    if org_role == "pending":
+        org_role = "provider"
 
     ai_system_id = obligations[0].ai_system_id
     prior_owner_by_ref = await _prior_owners_by_ref(session, ai_system_id)

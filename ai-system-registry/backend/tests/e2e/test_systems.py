@@ -148,10 +148,12 @@ async def test_intake_persists_org_role(client: httpx.AsyncClient):
     assert body["system"]["org_role"] == "deployer"
 
 
-async def test_intake_defaults_org_role_to_provider(client: httpx.AsyncClient):
-    # org_role omitted -> defaults to provider.
+async def test_intake_defaults_org_role_to_pending(client: httpx.AsyncClient):
+    # org_role omitted -> defaults to "pending". The EU AI Act organisation role is
+    # only determined during the assessment (like the risk tier), so a freshly
+    # registered system carries no role yet (issue #436).
     body = await _create_system(client, _minimal_system())
-    assert body["system"]["org_role"] == "provider"
+    assert body["system"]["org_role"] == "pending"
 
 
 async def test_intake_rejects_invalid_org_role(client: httpx.AsyncClient):

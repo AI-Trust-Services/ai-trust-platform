@@ -5,6 +5,7 @@ import { ORDERED_QUESTION_KEYS } from "./AssessmentSidebar";
 import { usePermissions } from "../../hooks/usePermissions";
 import { TIER_META } from "../../utils";
 import { isGated } from "../../config/aiQuestionnaire";
+import { orgRoleLabel } from "../../constants/orgRoles";
 
 const CLASSIFICATION_TABS = [
   { key: "minimal", label: "Minimal or no risk" },
@@ -80,7 +81,7 @@ export default function AssessmentStartPage() {
           </span>
           {state.org_role && (
             <span className="text-sm text-muted-foreground">
-              Role: <span className="text-foreground">{state.org_role}</span>
+              Role: <span className="text-foreground">{orgRoleLabel(state.org_role)}</span>
             </span>
           )}
         </div>

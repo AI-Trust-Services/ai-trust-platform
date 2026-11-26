@@ -74,6 +74,7 @@ const RISK_OPTIONS: { label: string; value: string }[] = [
   { label: "Minimal or No Risk", value: "minimal" },
 ];
 const ROLE_OPTIONS: { label: string; value: string }[] = [
+  { label: "Pending", value: "pending" },
   { label: "TBD", value: "__tbd__" },
   { label: "Provider", value: "provider" },
   { label: "Deployer", value: "deployer" },
@@ -105,13 +106,23 @@ function filterLabel(defaultLabel: string, sel: Set<string>, options: { label: s
   return `${defaultLabel} (${sel.size})`;
 }
 
-function RoleBadge({ role }: { role: OrgRole }) {
+// The EU AI Act organisation role is only determined by an assessment (like the
+// risk tier), so until one is *completed* (workflow_status === "approved") the row
+// shows "Pending" regardless of the stored value — mirroring TierBadge's pending
+// mask, but held until approval (not merely until the system leaves "draft").
+function effectiveOrgRole(role: OrgRole | null | undefined, workflowStatus?: string): OrgRole {
+  if (workflowStatus !== "approved") return "pending";
+  return role ?? "pending";
+}
+
+function RoleBadge({ role, workflowStatus }: { role: OrgRole | null; workflowStatus?: string }) {
+  const effective = effectiveOrgRole(role, workflowStatus);
   const cls =
-    role === "provider" ? "bg-[#e8f0fb] text-[#1147E9]"
-    : role === "deployer" ? "bg-[#d5f5e3] text-[#1a5c35]"
+    effective === "provider" ? "bg-[#e8f0fb] text-[#1147E9]"
+    : effective === "deployer" ? "bg-[#d5f5e3] text-[#1a5c35]"
     : "bg-[#eaecee] text-[#556b82]";
   // Drop the article reference (e.g. "Provider (Art. 3(3))" → "Provider") for the compact table badge.
-  const label = (ORG_ROLE_LABELS[role] ?? role).replace(/\s*\(.*\)\s*$/, "");
+  const label = (ORG_ROLE_LABELS[effective] ?? effective).replace(/\s*\(.*\)\s*$/, "");
   return <Badge className={cn("rounded-full font-medium", cls)}>{label}</Badge>;
 }
 
@@ -213,7 +224,7 @@ export default function Systems() {
     return systems.filter((s) => {
       const matchSearch = !q || s.name.toLowerCase().includes(q) || ownerLabel(s).toLowerCase().includes(q);
       const matchRisk = riskSel.size === 0 || riskSel.has(s.tier);
-      const matchRole = roleSel.size === 0 || roleSel.has(s.org_role);
+      const matchRole = roleSel.size === 0 || roleSel.has(effectiveOrgRole(s.org_role, s.workflow_status));
       const matchOwner = ownerSel.size === 0 || ownerSel.has(ownerKey(s));
       return matchSearch && matchRisk && matchRole && matchOwner;
     });
@@ -327,7 +338,7 @@ export default function Systems() {
                       ) : "—"}
                     </TableCell>
                     <TableCell><TierBadge tier={s.tier} workflowStatus={s.workflow_status} isChatbot={s.is_chatbot} generatesSyntheticContent={s.generates_synthetic_content} /></TableCell>
-                    <TableCell>{s.org_role ? <RoleBadge role={s.org_role} /> : <span className="text-[13px] text-muted-foreground">—</span>}</TableCell>
+                    <TableCell><RoleBadge role={s.org_role} workflowStatus={s.workflow_status} /></TableCell>
                     <TableCell className="text-[13px]">
                       {(() => {
                         const e = indexing[s.id];

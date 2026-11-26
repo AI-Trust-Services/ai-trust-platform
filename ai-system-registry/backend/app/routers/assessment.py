@@ -1493,6 +1493,13 @@ async def issue_classification(
         row.basis = f"Risk classification issued by compliance officer {user}."
         row.workflow_status = "approved"
         row.assignee_username = None
+        # org_role stays "pending" until an assessment resolves it (normally set by
+        # the prefill classifier). If it never resolved — e.g. the classifier returned
+        # no role — fall back to the conservative EU AI Act default so a *completed*
+        # classification always carries a concrete role, never "pending", and still
+        # generates its governance chain below (provider = the broadest obligation set).
+        if row.org_role == "pending":
+            row.org_role = "provider"
         assessment = await _current_assessment(session, system_id)
         if assessment is not None:
             assessment.status = "approved"
@@ -1719,6 +1726,12 @@ async def start_new_assessment(
         row.workflow_status = "draft"
         row.basis = ""
         row.annex_iii_area = None
+        # Reset org_role to "pending" too (symmetric with tier): the role is
+        # re-determined by this cycle's classifier, and if it stays silent the
+        # issue-time pending→provider coercion must have the same chance to fire as
+        # on cycle 1. Leaving the previous cycle's role would snapshot a stale,
+        # not-freshly-determined role onto the new cycle.
+        row.org_role = "pending"
         row.co_issued_transparency = False
         row.classification_rationale = None
         row.assessment_sources = None
