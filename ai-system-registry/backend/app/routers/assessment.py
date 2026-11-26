@@ -1369,7 +1369,7 @@ async def submit_assessment(
             )
         )
         await session.commit()
-        assessment_id = assessment.id if assessment else None
+        assessment_id = assessment.id if assessment is not None else None
         row = await _get_system(session, system_id)
         state = await _build_state(session, row, user, assessment)
 
@@ -1394,6 +1394,11 @@ async def submit_assessment(
                 "assessment.dossier_user_confirmed_failed",
                 extra={"system_id": system_id, "error": str(exc)},
             )
+    else:
+        logger.warning(
+            "assessment.dossier_user_confirmed_skipped_no_assessment",
+            extra={"system_id": system_id},
+        )
     return state
 
 
