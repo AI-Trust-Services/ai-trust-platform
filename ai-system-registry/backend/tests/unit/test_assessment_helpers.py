@@ -163,3 +163,32 @@ def test_sources_are_distinct_in_first_seen_order():
         "a.pdf",
         "b.pdf",
     ]
+
+
+def _qstate(ai_original, confidence):
+    st = MagicMock()
+    st.ai_original_answer = ai_original
+    st.confidence = confidence
+    return st
+
+
+def test_changed_from_ai_declined_answers_are_free():
+    # No AI answer / CONFLICT / NOT_ENOUGH_INFORMATION all carry confidence=None.
+    for ai in (None, "", "CONFLICT", "NOT_ENOUGH_INFORMATION"):
+        st = _qstate(ai, None)
+        assert assessment._changed_from_ai(st, '["BIOMETRICS"]') is False
+
+
+def test_changed_from_ai_concrete_answer_detects_real_change():
+    st = _qstate('["BIOMETRICS"]', "high")
+    assert assessment._changed_from_ai(st, '["BIOMETRICS","LAW_ENFORCEMENT"]') is True
+
+
+def test_changed_from_ai_multiselect_order_and_toggle_back_not_a_change():
+    st = _qstate('["BIOMETRICS","LAW_ENFORCEMENT"]', "high")
+    # Same set, different order — not a change.
+    assert assessment._changed_from_ai(st, '["LAW_ENFORCEMENT","BIOMETRICS"]') is False
+
+
+def test_norm_answer_empty_forms_collapse():
+    assert assessment._norm_answer("[]") == assessment._norm_answer("") == ""

@@ -102,9 +102,57 @@ async def _open(client: httpx.AsyncClient, system_id: str, user: str = _OWNER):
     return r2.json()
 
 
+async def _open_with_concrete(
+    client: httpx.AsyncClient,
+    system_id: str,
+    question_id: str = "Scope_1",
+    value: str = "YES",
+):
+    """Open a system with the AI prefill forced to a CONCRETE, HIGH-confidence
+    answer on ``question_id`` — the offline stub otherwise answers every question
+    NOT_ENOUGH_INFORMATION with null confidence, which the change-gate now treats
+    as 'no AI answer to change'. Returns the settled state."""
+    result = {
+        "results": [
+            {
+                "questionId": question_id,
+                "question": "injected",
+                "questionType": "PREDEFINED",
+                "answer": [
+                    {"value": value, "answerStrength": "HIGH", "reason": "test"}
+                ],
+                "explanation": "injected",
+                "references": [],
+            }
+        ]
+    }
+    import app.questionnaire_pipeline as _qp
+
+    original_parse = _qp.parse_with_retry
+
+    async def _patched(text, *, task, validator, chat_fn, messages, **kw):
+        import json as _json
+
+        try:
+            block = (
+                messages[-1]["content"]
+                .split("Questionnaire Configuration:\n", 1)[1]
+                .split("\n\nProvided Evidence:", 1)[0]
+            )
+            qids = [q["id"] for q in _json.loads(block).get("questions", [])]
+        except (IndexError, ValueError, KeyError):
+            qids = []
+        if question_id in qids:
+            return result
+        return await original_parse(
+            text, task=task, validator=validator, chat_fn=chat_fn, messages=messages, **kw
+        )
+
+    with patch("app.questionnaire_pipeline.parse_with_retry", new=_patched):
+        return await _open(client, system_id)
+
+
 # ── open / prefill ────────────────────────────────────────────────────────────
-
-
 @pytest.mark.asyncio
 async def test_open_prefills_from_questionnaire_pipeline(client: httpx.AsyncClient):
     """POST /open runs the prefill pipeline: every catalogue question gets a state,
@@ -432,13 +480,12 @@ async def test_confirm_changed_answer_blocked_without_comment(
     client: httpx.AsyncClient,
 ):
     system_id = await _create_system(client)
-    await _open(client, system_id)
-    state = await _open(client, system_id)
-    qkey = next(q["question_key"] for q in state["questions"] if q["answer"])
-    # Change the AI answer.
+    await _open_with_concrete(client, system_id)  # Scope_1 → HIGH "YES"
+    qkey = "Scope_1"
+    # Change the concrete AI answer.
     r = await client.post(
         f"/v1/systems/{system_id}/assessment/questions/{qkey}/answer",
-        json={"answer": "Owner-edited answer differing from the AI proposal."},
+        json={"answer": "NO"},
         headers=_hdr(_OWNER),
     )
     assert r.status_code == 200, r.text
@@ -471,8 +518,8 @@ async def test_confirm_change_requires_comment_after_the_change(
     """A comment that predates the change must NOT satisfy the gate — the comment
     has to be recorded at/after the answer change (audit of the override)."""
     system_id = await _create_system(client)
-    state = await _open(client, system_id)
-    qkey = next(q["question_key"] for q in state["questions"] if q["answer"])
+    await _open_with_concrete(client, system_id)  # Scope_1 → HIGH "YES"
+    qkey = "Scope_1"
     # A pre-existing comment, before any change.
     r = await client.post(
         f"/v1/systems/{system_id}/assessment/questions/{qkey}/comments",
@@ -483,7 +530,7 @@ async def test_confirm_change_requires_comment_after_the_change(
     # Now change the answer.
     r = await client.post(
         f"/v1/systems/{system_id}/assessment/questions/{qkey}/answer",
-        json={"answer": "Owner-edited value that differs from the AI proposal."},
+        json={"answer": "NO"},
         headers=_hdr(_OWNER),
     )
     assert r.status_code == 200, r.text
@@ -500,6 +547,31 @@ async def test_confirm_change_requires_comment_after_the_change(
         headers=_hdr(_OWNER),
     )
     assert r.status_code == 200, r.text
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/confirm",
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+
+
+@pytest.mark.asyncio
+async def test_change_declined_ai_answer_needs_no_comment(client: httpx.AsyncClient):
+    """When the AI declined to answer (NOT_ENOUGH_INFORMATION / CONFLICT / null —
+    here the offline stub's null-confidence answer), manually entering an answer is
+    NOT a 'changed AI answer': no comment is required and Confirm passes directly."""
+    system_id = await _create_system(client)
+    state = await _open(client, system_id)
+    qkey = "Scope_1"  # root question, never gated; stub gives it null confidence
+    scope_1 = next(q for q in state["questions"] if q["question_key"] == qkey)
+    assert scope_1["confidence"] is None
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/answer",
+        json={"answer": "A manually entered answer the AI never proposed."},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["answer_source"] == "ai_prefilled"  # not "manual"
+    # Confirm succeeds with no comment.
     r = await client.post(
         f"/v1/systems/{system_id}/assessment/questions/{qkey}/confirm",
         headers=_hdr(_OWNER),
