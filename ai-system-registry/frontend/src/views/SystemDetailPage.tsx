@@ -463,6 +463,7 @@ function OverviewTab({
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: system.name,
+    description: system.description ?? "",
     intended_purpose: system.intended_purpose,
     lifecycle: system.lifecycle,
     planned_rollout_date: system.planned_rollout_date ?? "",
@@ -472,6 +473,7 @@ function OverviewTab({
   useEffect(() => {
     setForm({
       name: system.name,
+      description: system.description ?? "",
       intended_purpose: system.intended_purpose,
       lifecycle: system.lifecycle,
       planned_rollout_date: system.planned_rollout_date ?? "",
@@ -484,6 +486,7 @@ function OverviewTab({
     try {
       const updated = await api.updateSystem(system.id, {
         name: form.name,
+        description: form.description,
         intended_purpose: form.intended_purpose,
         lifecycle: form.lifecycle as AISystem["lifecycle"],
         planned_rollout_date: form.planned_rollout_date || null,
@@ -608,6 +611,14 @@ function OverviewTab({
                 <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
               </div>
               <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">System Description</label>
+                <Textarea
+                  value={form.description}
+                  rows={3}
+                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                />
+              </div>
+              <div>
                 <label className="mb-1 block text-xs font-medium text-muted-foreground">Intended Purpose</label>
                 <Textarea
                   value={form.intended_purpose}
@@ -653,6 +664,7 @@ function OverviewTab({
             <dl className="grid grid-cols-[160px_1fr] gap-x-4 gap-y-2 text-sm">
               {([
                 ["Name", system.name],
+                ["System Description", system.description || "—"],
                 ["Intended Purpose", system.intended_purpose],
                 ["Development Stage", LIFECYCLE_LABELS[system.lifecycle] ?? system.lifecycle],
                 ["Planned Roll-out", system.planned_rollout_date ? fmtDate(system.planned_rollout_date) : "—"],

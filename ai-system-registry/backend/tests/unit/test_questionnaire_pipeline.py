@@ -2,7 +2,7 @@
 
 No DB, no network: the system row is faked, RAG retrieval and MinIO are mocked, and
 the LLM is the offline stub unless a test replaces ``chat``. These run the *real*
-questionnaire (96 questions, many dependency batches) through the strict validator,
+questionnaire (71 questions, many dependency batches) through the strict validator,
 so they also pin that the stub output satisfies the answer contract.
 """
 
@@ -58,7 +58,7 @@ def _row():
         provider=None,
         org_name=None,
         org_role=None,
-        description=None,
+        description="Technical CV screening tool.",
         intended_purpose="Screens CVs.",
         department=None,
         use_case=None,
