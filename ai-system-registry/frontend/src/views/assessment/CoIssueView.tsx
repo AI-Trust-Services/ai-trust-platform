@@ -8,21 +8,9 @@ import { TIER_META } from "../../utils";
 import { cn } from "@/lib/utils";
 import { SolverPanel } from "./SolverPanel";
 
-// ═══════════════════════════════════════════════════════════════════════════
-// TODO(high+transparency) — KNOWN GAP, CURRENTLY IGNORED
-// The hierarchy solver returns a SINGLE risk winner, so it CANNOT represent the
-// one stacked combo the registry treats specially: high-risk + Art. 50
-// transparency (the "dual risk label"). If HIGH_RISK wins, TRANSPARENCY drops
-// out of the solver output entirely, and this mapping maps it away. We IGNORE
-// the stacked case here — the CO's transparency checkbox is handled
-// independently at issue time (co_issued_transparency). A real fix needs a
-// solver output that carries the transparency flag ALONGSIDE the risk winner.
-// See docs/bugs/co-view-high-transparency-not-representable-in-solver.md
-// ═══════════════════════════════════════════════════════════════════════════
 function mapLabelToTier(labelId: string | undefined): string {
   if (labelId === "HIGH_RISK") return "high";
   if (labelId === "PROHIBITED") return "prohibited";
-  if (labelId === "TRANSPARENCY") return "limited";
   if (labelId === "MINIMAL") return "minimal";
   return "";
 }
@@ -31,14 +19,12 @@ function mapLabelToTier(labelId: string | undefined): string {
 // Tiers the CO may issue (the dropdown options). gpai-* are not CO-issuable.
 const ISSUABLE: { value: string; label: string }[] = [
   { value: "minimal", label: "Minimal or no risk" },
-  { value: "limited", label: "Transparency obligations" },
   { value: "high", label: "High-risk" },
   { value: "prohibited", label: "Prohibited practice" },
 ];
 
 const PRELIM_TABS = [
   { key: "minimal", label: "Minimal or no risk" },
-  { key: "limited", label: "Transparency Obligations" },
   { key: "high", label: "High-risk" },
   { key: "prohibited", label: "Prohibited practice" },
 ];
@@ -46,7 +32,6 @@ const PRELIM_TABS = [
 function activeTab(tier: string): string {
   if (tier === "prohibited") return "prohibited";
   if (tier === "high" || tier.startsWith("gpai")) return "high";
-  if (tier === "limited") return "limited";
   return "minimal";
 }
 
@@ -77,8 +62,8 @@ export default function CoIssueView() {
   const prelimLabel = TIER_META[state.tier]?.label ?? state.tier;
   const active = activeTab(state.tier);
 
-  // Transparency companion is only valid alongside 'high'.
-  const transparencyAllowed = tier === "high";
+  // Transparency is allowed for all tiers except prohibited.
+  const transparencyAllowed = tier !== "" && tier !== "prohibited";
 
   const issueEnabled = !busy && !!tier && confirmed;
   const rejectEnabled = !busy && note.trim().length > 0;
@@ -182,7 +167,7 @@ export default function CoIssueView() {
           onChange={(e) => {
             setCoTouched(true);
             setTier(e.target.value);
-            if (e.target.value !== "high") setTransparency(false);
+            if (e.target.value === "prohibited") setTransparency(false);
           }}
         >
           <option value="">No risk classification</option>
@@ -192,7 +177,7 @@ export default function CoIssueView() {
             </option>
           ))}
         </select>
-        {/* The only allowed combo: high + transparency */}
+        {/* Transparency obligations (Art. 50) — allowed for all tiers except prohibited */}
         {transparencyAllowed && (
           <label className="mt-3 flex items-center gap-2 text-sm">
             <input
