@@ -15,6 +15,21 @@ function labelDisplay(labelId: string): string {
   return labelId.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+const CLASSIFICATION_TABS = [
+  { key: "minimal", label: "Minimal or no risk", labelIds: ["MINIMAL"] },
+  { key: "limited", label: "Transparency Obligations", labelIds: ["TRANSPARENCY"] },
+  { key: "high", label: "High-risk", labelIds: ["HIGH_RISK"] },
+  { key: "prohibited", label: "Prohibited practice", labelIds: ["PROHIBITED"] },
+];
+
+function activeTab(labelId: string | null): string {
+  if (!labelId) return "";
+  if (labelId.includes("PROHIBITED")) return "prohibited";
+  if (labelId.includes("HIGH_RISK")) return "high";
+  if (labelId.includes("TRANSPARENCY")) return "limited";
+  return "minimal";
+}
+
 export default function AssessmentStartPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -35,6 +50,7 @@ export default function AssessmentStartPage() {
     ORDERED_QUESTION_KEYS[0];
 
   const solverLabel = solverResult ? labelDisplay(solverResult.risk.labelId) : null;
+  const active = activeTab(solverResult?.risk.labelId ?? null);
 
   return (
     <div className="mx-auto max-w-4xl px-8 py-8">
@@ -85,7 +101,22 @@ export default function AssessmentStartPage() {
 
         {solverResult && (
           <>
-            <div className="mt-2 flex items-center gap-3">
+            <div className="mt-4 grid grid-cols-4 gap-2">
+              {CLASSIFICATION_TABS.map((t) => (
+                <div
+                  key={t.key}
+                  className={
+                    "rounded-md border px-3 py-2 text-center text-sm " +
+                    (!state.prefill_pending && t.key === active
+                      ? "border-[#1147E9] font-semibold text-[#1147E9]"
+                      : "border-border text-muted-foreground")
+                  }
+                >
+                  {t.label}
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex items-center gap-3">
               {solverResult.risk.confidenceBand && (
                 <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${BAND_CLS[solverResult.risk.confidenceBand] ?? ""}`}>
                   {solverResult.risk.confidenceBand} confidence

@@ -40,7 +40,6 @@ from app.assessment_catalogue import (
     QUESTION_TYPES,
 )
 from app.assessment_prefill_pipeline import run_assessment_prefill_pipeline
-from app.classifier import classify_ai_questionnaire
 from app.dossier import (
     build_co_issued_bundle,
     create_dossier_in_session,
