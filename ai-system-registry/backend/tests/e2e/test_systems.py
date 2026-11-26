@@ -78,6 +78,7 @@ async def test_intake_persists_registration_fields_and_owner(
         "/v1/intake",
         json={
             "name": "Owner Test System",
+            "description": "Technical description for the compliance officer.",
             "intended_purpose": "Testing",
             "contributors": ["alice", "bob"],
             "git_repo_url": "https://github.com/org/repo",
@@ -88,6 +89,8 @@ async def test_intake_persists_registration_fields_and_owner(
     assert r.status_code == 201
     sys = r.json()["system"]
     assert sys["business_owners"] == _ASSIGNEE  # owner = creator
+    assert sys["description"] == "Technical description for the compliance officer."
+    assert sys["intended_purpose"] == "Testing"
     assert sys["contributors"] == ["alice", "bob"]
     assert sys["git_repo_url"] == "https://github.com/org/repo"
     assert sys["planned_rollout_date"] == "2027-01-15"
@@ -145,10 +148,12 @@ async def test_intake_persists_org_role(client: httpx.AsyncClient):
     assert body["system"]["org_role"] == "deployer"
 
 
-async def test_intake_defaults_org_role_to_provider(client: httpx.AsyncClient):
-    # org_role omitted -> defaults to provider.
+async def test_intake_defaults_org_role_to_pending(client: httpx.AsyncClient):
+    # org_role omitted -> defaults to "pending". The EU AI Act organisation role is
+    # only determined during the assessment (like the risk tier), so a freshly
+    # registered system carries no role yet (issue #436).
     body = await _create_system(client, _minimal_system())
-    assert body["system"]["org_role"] == "provider"
+    assert body["system"]["org_role"] == "pending"
 
 
 async def test_intake_rejects_invalid_org_role(client: httpx.AsyncClient):
@@ -289,6 +294,17 @@ async def test_update_system_rejects_immutable_basis(client: httpx.AsyncClient):
 async def test_update_system_404_on_missing(client: httpx.AsyncClient):
     r = await client.put("/v1/systems/SYS-NOTFOUND", json={"name": "X"})
     assert r.status_code == 404
+
+
+async def test_update_system_rejects_null_notnull_fields(client: httpx.AsyncClient):
+    # description and intended_purpose back NOT NULL columns; an explicit null must be
+    # a clean 422 (via _REQUIRED_FIELDS), not a 500 IntegrityError at commit.
+    system_id = (await _create_system(client))["system"]["id"]
+    for field in ("description", "intended_purpose"):
+        r = await client.put(
+            f"/v1/systems/{system_id}", json={field: None}, headers=_HEADERS
+        )
+        assert r.status_code == 422, f"{field}: expected 422, got {r.status_code}"
 
 
 # ---------------------------------------------------------------------------

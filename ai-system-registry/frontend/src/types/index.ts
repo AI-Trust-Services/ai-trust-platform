@@ -1,6 +1,6 @@
 export type TierKey = "prohibited" | "gpai-systemic" | "gpai-standard" | "high" | "limited" | "minimal" | "pending";
 export type LifecycleKey = "development" | "testing" | "prod_ready" | "market" | "service" | "updated" | "decommissioned";
-export type OrgRole = "provider" | "deployer" | "both" | "importer" | "distributor" | "authorised_representative";
+export type OrgRole = "pending" | "provider" | "deployer" | "both" | "importer" | "distributor" | "authorised_representative";
 export type SystemType = "application" | "model" | "component" | "service";
 export type AutonomyLevel = "decision_support" | "human_in_the_loop" | "human_on_the_loop" | "fully_automated";
 export type WorkflowStatus = "draft" | "business_pending" | "technical_pending" | "pending_review" | "info_requested" | "approved" | "rejected" | "returned";
@@ -115,6 +115,11 @@ export interface QuestionState {
     quote?: string | null;
   }>;
   ai_explanation: string | null;
+  // The AI's originally-proposed answer, retained even after the owner overrides
+  // it (answer_source flips to "manual"); null when the AI did not answer. Confidence
+  // and references describe THIS answer, so the reviewer can see both the AI
+  // suggestion and the user's answer (#435).
+  ai_original_answer: string | null;
   // True while the background prefill pipeline is running and this question
   // has not yet received an AI answer. Clears when the batch covering it completes.
   llm_pending: boolean;
@@ -476,6 +481,7 @@ export interface AISystemFormData {
 // the creator, so it is not sent here. contributors is a roster of usernames.
 export interface RegisterSystemInput {
   name: string;
+  description?: string;
   intended_purpose: string;
   lifecycle?: LifecycleKey;
   planned_rollout_date?: string | null;

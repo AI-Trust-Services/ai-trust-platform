@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { Eye, Trash2, RefreshCw, MoreVertical, Play, ArrowRight, ChevronDown, Search } from "lucide-react";
-import LuigiClient from "@luigi-project/client";
 import { TierBadge, FormattedDate } from "../components/Badges";
 import InitialsAvatar from "../components/InitialsAvatar";
 import { api } from "../api/client";
@@ -36,12 +35,10 @@ function docProgress(status: string, stage: string | null): number {
 }
 
 // "start"/"continue" open the single-page EU AI Act assessment app in the
-// registry itself (/systems/:id/assessment). "view" hands an APPROVED assessment
-// off to the compliance MFE's governance detail via the localStorage flag it
-// consumes (obligations/evidence live there).
+// registry itself (/systems/:id/assessment). "view" opens the APPROVED cycle
+// read-only in the registry's own per-system assessment view.
 function goToAssessments(
   systemId: string,
-  systemName: string,
   action: AssessmentAction,
   rows: AssessmentRow[],
   navigate: (path: string, opts?: { state?: unknown }) => void,
@@ -55,10 +52,8 @@ function goToAssessments(
     }
     return;
   }
-  localStorage.setItem("compliance.viewSystem", JSON.stringify({ systemId, systemName }));
   const approved = rows.find((r) => r.status === "approved");
-  if (approved) localStorage.setItem("compliance.openAssessment", JSON.stringify({ assessmentId: approved.id }));
-  LuigiClient.linkManager().navigate("/home/assessments");
+  navigate(approved ? `/systems/${systemId}/assessment/view/${approved.id}` : `/systems/${systemId}`);
 }
 
 const ACTION_LABEL: Record<AssessmentAction, string> = {
@@ -79,6 +74,7 @@ const RISK_OPTIONS: { label: string; value: string }[] = [
   { label: "Minimal or No Risk", value: "minimal" },
 ];
 const ROLE_OPTIONS: { label: string; value: string }[] = [
+  { label: "Pending", value: "pending" },
   { label: "TBD", value: "__tbd__" },
   { label: "Provider", value: "provider" },
   { label: "Deployer", value: "deployer" },
@@ -110,13 +106,23 @@ function filterLabel(defaultLabel: string, sel: Set<string>, options: { label: s
   return `${defaultLabel} (${sel.size})`;
 }
 
-function RoleBadge({ role }: { role: OrgRole }) {
+// The EU AI Act organisation role is only determined by an assessment (like the
+// risk tier), so until one is *completed* (workflow_status === "approved") the row
+// shows "Pending" regardless of the stored value — mirroring TierBadge's pending
+// mask, but held until approval (not merely until the system leaves "draft").
+function effectiveOrgRole(role: OrgRole | null | undefined, workflowStatus?: string): OrgRole {
+  if (workflowStatus !== "approved") return "pending";
+  return role ?? "pending";
+}
+
+function RoleBadge({ role, workflowStatus }: { role: OrgRole | null; workflowStatus?: string }) {
+  const effective = effectiveOrgRole(role, workflowStatus);
   const cls =
-    role === "provider" ? "bg-[#e8f0fb] text-[#1147E9]"
-    : role === "deployer" ? "bg-[#d5f5e3] text-[#1a5c35]"
+    effective === "provider" ? "bg-[#e8f0fb] text-[#1147E9]"
+    : effective === "deployer" ? "bg-[#d5f5e3] text-[#1a5c35]"
     : "bg-[#eaecee] text-[#556b82]";
   // Drop the article reference (e.g. "Provider (Art. 3(3))" → "Provider") for the compact table badge.
-  const label = (ORG_ROLE_LABELS[role] ?? role).replace(/\s*\(.*\)\s*$/, "");
+  const label = (ORG_ROLE_LABELS[effective] ?? effective).replace(/\s*\(.*\)\s*$/, "");
   return <Badge className={cn("rounded-full font-medium", cls)}>{label}</Badge>;
 }
 
@@ -218,7 +224,7 @@ export default function Systems() {
     return systems.filter((s) => {
       const matchSearch = !q || s.name.toLowerCase().includes(q) || ownerLabel(s).toLowerCase().includes(q);
       const matchRisk = riskSel.size === 0 || (s.workflow_status === "approved" && riskSel.has(s.tier));
-      const matchRole = roleSel.size === 0 || (s.workflow_status === "approved" && roleSel.has(s.org_role));
+      const matchRole = roleSel.size === 0 || roleSel.has(effectiveOrgRole(s.org_role, s.workflow_status));
       const matchOwner = ownerSel.size === 0 || ownerSel.has(ownerKey(s));
       return matchSearch && matchRisk && matchRole && matchOwner;
     });
@@ -332,7 +338,7 @@ export default function Systems() {
                       ) : "—"}
                     </TableCell>
                     <TableCell><TierBadge tier={s.tier} workflowStatus={s.workflow_status} isChatbot={s.is_chatbot} generatesSyntheticContent={s.generates_synthetic_content} /></TableCell>
-                    <TableCell>{s.workflow_status === "approved" && s.org_role ? <RoleBadge role={s.org_role} /> : <Badge className="rounded-full font-medium bg-[#eaecee] text-[#556b82]">Pending</Badge>}</TableCell>
+                    <TableCell><RoleBadge role={s.org_role} workflowStatus={s.workflow_status} /></TableCell>
                     <TableCell className="text-[13px]">
                       {(() => {
                         const e = indexing[s.id];
@@ -360,7 +366,7 @@ export default function Systems() {
                             <DropdownMenuItem
                               disabled={indexing[s.id]?.busy}
                               title={indexing[s.id]?.busy ? "Available once document processing is complete" : undefined}
-                              onSelect={() => goToAssessments(s.id, s.name, action, assessmentsBySystem[s.id] ?? [], navigate)}>
+                              onSelect={() => goToAssessments(s.id, action, assessmentsBySystem[s.id] ?? [], navigate)}>
                               {action === "start" ? <Play /> : <ArrowRight />}
                               {ACTION_LABEL[action]}
                             </DropdownMenuItem>

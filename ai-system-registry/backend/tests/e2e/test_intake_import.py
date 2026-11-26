@@ -77,6 +77,53 @@ async def test_import_tier_less_record_rejected_when_targeting_approved(
     assert "Unknown risk system" not in names
 
 
+async def test_import_pending_org_role_rejected_when_targeting_approved(
+    client: httpx.AsyncClient,
+):
+    """A classified record with org_role=pending + target_status=approved is rejected.
+
+    "pending" is a valid VALID_ROLES member so Pydantic accepts it, but an approved
+    row must carry a concrete role — the issue-time pending→provider coercion never
+    runs for batch imports, so the invariant is enforced here instead.
+    """
+    records = [{"name": "Pending role system", "tier": "high", "org_role": "pending"}]
+    r = await client.post(
+        "/v1/intake/batch",
+        headers=_HEADERS,
+        **_upload(records, target_status="approved"),
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["imported"] == 0
+    assert len(body["failed"]) == 1
+    assert body["failed"][0]["name"] == "Pending role system"
+    assert "org_role" in body["failed"][0]["error"]
+
+    # Verify the system was NOT inserted.
+    systems = await client.get("/v1/systems", headers=_HEADERS)
+    names = [s["name"] for s in systems.json()]
+    assert "Pending role system" not in names
+
+
+async def test_import_pending_org_role_allowed_as_draft(client: httpx.AsyncClient):
+    """org_role=pending is fine for a draft import — the role is resolved later."""
+    records = [{"name": "Draft pending role system", "org_role": "pending"}]
+    r = await client.post(
+        "/v1/intake/batch",
+        headers=_HEADERS,
+        **_upload(records, target_status="draft"),
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["imported"] == 1
+    assert body["failed"] == []
+
+    systems = await client.get("/v1/systems", headers=_HEADERS)
+    items = {s["name"]: s for s in systems.json()}
+    assert items["Draft pending role system"]["workflow_status"] == "draft"
+    assert items["Draft pending role system"]["org_role"] == "pending"
+
+
 async def test_import_partial_success(client: httpx.AsyncClient):
     """Valid and invalid records in one batch: valid inserted, invalid reported."""
     records = [

@@ -95,9 +95,12 @@ def _system_evidence(row: AISystem) -> str:
     **Allowlist — do not add columns here.** A field belongs in this block only if
     the user can *see it and change it* in the UI: a visible, editable value that is
     wrong can be discovered and corrected by its owner, an invisible one never can.
-    These five are exactly the fields the registration form collects
+    These six are exactly the fields the registration form collects
     (``RegisterSystem.tsx``) and the "AI System Details" card edits
-    (``SystemDetailPage.tsx``).
+    (``SystemDetailPage.tsx``). ``description`` is the (optional) technical system
+    description; ``intended_purpose`` is the mandatory EU AI Act intended purpose —
+    both are user-entered free text, so both qualify. A blank ``description`` is
+    dropped by the empty-value filter below.
 
     Every other column on ``ai_systems`` is either a schema default nobody entered
     (``system_type='application'``, ``autonomy_level='decision_support'``,
@@ -116,7 +119,8 @@ def _system_evidence(row: AISystem) -> str:
     """
     fields = {
         "name": row.name,  # "Name of AI system"
-        "intended_purpose": row.intended_purpose,  # "System Description"
+        "description": row.description,  # "System description" (optional, technical)
+        "intended_purpose": row.intended_purpose,  # "Intended purpose under the EU AI Act"
         "lifecycle": row.lifecycle,  # "Development stage"
         "planned_rollout_date": row.planned_rollout_date,  # "Planned roll-out date"
         "git_repo_url": row.git_repo_url,  # "Github repository"
@@ -183,6 +187,38 @@ async def _retrieve_rag_documents(system_id: str, username: str) -> list[dict]:
         return []
 
 
+# Display-only context fields consumed by the frontend Context tab (the
+# assessment companion). They are never sent to the answering LLM: they bloat the
+# prompt and, in the CO case, carry legal citations the model must not answer from
+# (questionnaire_answer.md §7). `answerSemantics`/`optionSemantics` are kept — they
+# are genuine answering guidance.
+_DISPLAY_ONLY_FIELDS = (
+    "ownerContext",
+    "coContext",
+    "examples",
+    "extendedExamples",
+)
+
+
+def _strip_display_fields(questionnaire: dict) -> dict:
+    """Return a copy of the questionnaire with frontend-only context fields
+    removed from every question and every MULTISELECT option."""
+
+    def clean(obj: dict) -> dict:
+        out = {k: v for k, v in obj.items() if k not in _DISPLAY_ONLY_FIELDS}
+        options = out.get("allowedAnswers")
+        if isinstance(options, list):
+            out["allowedAnswers"] = [
+                clean(o) if isinstance(o, dict) else o for o in options
+            ]
+        return out
+
+    return {
+        **{k: v for k, v in questionnaire.items() if k != "questions"},
+        "questions": [clean(q) for q in questionnaire.get("questions", [])],
+    }
+
+
 def _build_user_message(
     questionnaire: dict,
     registration_evidence: str,
@@ -191,7 +227,7 @@ def _build_user_message(
     """Assemble the user message: questionnaire config + all evidence."""
     parts = [
         "Questionnaire Configuration:",
-        json.dumps(questionnaire, indent=2),
+        json.dumps(_strip_display_fields(questionnaire), indent=2),
         "",
         "Provided Evidence:",
         "",
