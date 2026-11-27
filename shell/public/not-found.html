@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Page not found</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    // Apply dark mode + custom brand accent synchronously before first paint, reading the same
+    // localStorage keys the shell/MFEs use (this page is same-origin, loaded in the Luigi iframe).
+    (function () {
+      var root = document.documentElement;
+      var d = localStorage.getItem('trust-platform-theme') === 'dark';
+      root.classList.toggle('dark', d);
+      root.style.background = d ? '#09090b' : '#ffffff';
+      // Custom accent from the same branding payload the MFEs read via useBranding(); falls back to
+      // the :root default (#1147E9) for un-branded deploys or if the shell hasn't populated the key.
+      try {
+        var b = JSON.parse(localStorage.getItem('trust-platform-branding') || '{}');
+        var accent = d ? (b.accent_color_dark || b.accent_color) : b.accent_color;
+        if (accent) root.style.setProperty('--accent', accent);
+      } catch (e) { /* keep the default --accent */ }
+    })();
+  </script>
+  <style>
+    :root {
+      --bg: #ffffff; --fg: #111827; --muted: #6b7280;
+      --circle-bg: #f3f4f6; --circle-fg: #6b7280;
+      --accent: #1147E9; --accent-fg: #ffffff;
+    }
+    html.dark {
+      --bg: #09090b; --fg: #e5e7eb; --muted: #9ca3af;
+      --circle-bg: rgba(255, 255, 255, 0.06); --circle-fg: #9ca3af;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      background: var(--bg); color: var(--fg);
+      font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; padding: 24px;
+    }
+    .box { text-align: center; max-width: 420px; }
+    .icon {
+      width: 56px; height: 56px; margin: 0 auto 20px;
+      border-radius: 9999px; background: var(--circle-bg); color: var(--circle-fg);
+      display: flex; align-items: center; justify-content: center;
+    }
+    h1 { font-size: 20px; font-weight: 600; margin: 0 0 8px; }
+    p { font-size: 14px; line-height: 1.5; color: var(--muted); margin: 0 0 24px; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      height: 40px; padding: 0 18px; border: none; border-radius: 8px;
+      background: var(--accent); color: var(--accent-fg);
+      font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer;
+      text-decoration: none; transition: opacity 0.12s;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="icon" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+      </svg>
+    </div>
+    <h1>Page not found</h1>
+    <p>The page you're looking for doesn't exist or you don't have access to it.</p>
+    <button type="button" class="btn" id="home-btn">Go to Overview</button>
+  </div>
+  <script src="https://unpkg.com/@luigi-project/client@2.31.0/luigi-client.js"></script>
+  <script>
+    // Navigate via the Luigi Client, not window.top: Luigi sandboxes the content iframe without
+    // allow-top-navigation, so a direct window.top.location change is blocked by the browser.
+    // linkManager().navigate posts a message to the shell, which routes to /home — resolved to the
+    // first nav node the current user can see (home node's dynamic defaultChildNode).
+    LuigiClient.addInitListener(function () {});
+    document.getElementById('home-btn').addEventListener('click', function () {
+      LuigiClient.linkManager().navigate('/home');
+    });
+  </script>
+</body>
+</html>

@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from datetime import datetime, timezone
 
 import httpx
-from ai_trust_authorization import check_permission, require_permission
+from ai_trust_authorization import (
+    check_permission,
+    get_current_user,
+    require_permission,
+)
 from ai_trust_authorization.constants import (
     SYSTEMS_APPROVE,
     SYSTEMS_READ,
@@ -33,7 +38,8 @@ from app.schemas import (
 )
 from app.workflow_utils import section_owner
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
-from sqlalchemy import delete, select
+from sqlalchemy import cast, delete, or_, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 router = APIRouter(tags=["systems"])
@@ -140,16 +146,35 @@ async def _assert_can_edit_section(
     dependencies=[Depends(require_permission(SYSTEMS_READ))],
 )
 async def list_systems(
+    request: Request,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> list[AISystemResponse]:
+    current_user = get_current_user(request)
+    # CO (systems:approve) and read-only roles (no systems:write) see everything.
+    # Business Owners and AI Engineers (write but not approve) see only systems
+    # where they are the owner or an explicit contributor.
+    is_co, has_write = await asyncio.gather(
+        check_permission(current_user, SYSTEMS_APPROVE),
+        check_permission(current_user, SYSTEMS_WRITE),
+    )
+    scope_to_contributor = has_write and not is_co
+
     async with SessionLocal() as session:
-        result = await session.execute(
+        q = (
             select(AISystem)
             .order_by(AISystem.created_at.desc())
             .limit(limit)
             .offset(offset)
         )
+        if scope_to_contributor:
+            q = q.where(
+                or_(
+                    AISystem.business_owners == current_user,
+                    AISystem.contributors.contains(cast([current_user], JSONB)),
+                )
+            )
+        result = await session.execute(q)
         return [AISystemResponse.model_validate(r) for r in result.scalars().all()]
 
 
