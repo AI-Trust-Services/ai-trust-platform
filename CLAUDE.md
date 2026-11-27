@@ -217,6 +217,7 @@ Static HTML + `luigi-config.js` served by nginx (Luigi core from CDN). The shell
 
 - If a pod restarts and nginx returns 502, run `kubectl rollout restart deployment/shell -n ai-trust` to clear stale DNS.
 - **Sidebar** — `responsiveNavigation: "Fiori3"`, collapsed by default. Alerts is `hideFromNav: true`. "Sign out" links to `/oauth2/sign_out`.
+- **Not-found** — any route that doesn't map to a visible nav node (non-existent, or a permission-gated node filtered out of the tree) is handled by `routing.pageNotFoundHandler`, which redirects to a hidden `not-found` node rendering the static `shell/public/not-found.html` — never Luigi's raw "Could not map exact target node" error.
 
 ## MVP scope — disabling services without removing code
 

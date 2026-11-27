@@ -240,6 +240,21 @@
       },
   ].filter((node) => canSee(node.pathSegment));
 
+  // Always-present hidden fallback node. Appended AFTER the permission filter so it can never be
+  // dropped. routing.pageNotFoundHandler (below) redirects any unmapped route here — both genuinely
+  // non-existent routes (#466) and deep-links to permission-gated nodes that were filtered out of
+  // the tree above (which Luigi also sees as "not found"). Renders the static /not-found.html.
+  children.push({
+    pathSegment: "not-found",
+    label: "Not found",
+    hideFromNav: true,
+    viewUrl: "/not-found.html",
+    // not-found.html loads @luigi-project/client only for its escape-button navigation, so the
+    // handshake does eventually fire — but disabling the indicator avoids a spinner flash before
+    // the client initialises (and an infinite spinner if the CDN client ever fails to load).
+    loadingIndicator: { enabled: false },
+  });
+
   Luigi.setConfig({
   navigation: {
     nodes: [
@@ -247,7 +262,11 @@
         pathSegment: "home",
         label: "Home",
         hideFromNav: true,
-        defaultChildNode: "overview",
+        // First node the current user can actually see (children is already permission-filtered;
+        // the not-found node was pushed last). A static "overview" would dead-end a user who lacks
+        // overview's permissions — bare /home would land on the filtered-out node → not-found.
+        // The "not-found" guard covers a user who can see nothing at all.
+        defaultChildNode: (children[0] && children[0].pathSegment) || "not-found",
         children: children,
       },
     ],
@@ -255,6 +274,13 @@
 
   routing: {
     useHashRouting: true,
+    // Any route that doesn't map to a visible nav node lands here instead of Luigi's raw
+    // "Could not map exact target node..." error (#466). Covers both non-existent routes and
+    // deep-links to permission-gated nodes (filtered out of the tree → "not found" to Luigi).
+    // Luigi's navigateTo sets location.hash verbatim, so the target MUST be an absolute path with
+    // a leading slash ("/home/not-found") — without it the hash becomes "#home/not-found" and the
+    // route never resolves.
+    pageNotFoundHandler: () => ({ redirectTo: "/home/not-found" }),
   },
 
   settings: {
