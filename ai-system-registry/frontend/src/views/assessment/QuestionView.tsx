@@ -477,7 +477,7 @@ export default function QuestionView() {
 
         <div className="mt-5 space-y-2">
           {isPredefined(def) ? (
-            def.allowedAnswers.map((opt) => (
+            def.allowedAnswers.filter((opt) => opt !== "NOT_APPLICABLE").map((opt) => (
               <label key={opt} className="flex cursor-pointer items-center gap-2 text-sm">
                 <input
                   type="radio"
