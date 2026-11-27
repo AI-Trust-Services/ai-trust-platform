@@ -8,12 +8,20 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <script>
-    // Apply dark mode synchronously before first paint, reading the same localStorage key the
-    // shell uses (this page is same-origin, loaded in the Luigi iframe). Prevents a white flash.
+    // Apply dark mode + custom brand accent synchronously before first paint, reading the same
+    // localStorage keys the shell/MFEs use (this page is same-origin, loaded in the Luigi iframe).
     (function () {
+      var root = document.documentElement;
       var d = localStorage.getItem('trust-platform-theme') === 'dark';
-      document.documentElement.classList.toggle('dark', d);
-      document.documentElement.style.background = d ? '#09090b' : '#ffffff';
+      root.classList.toggle('dark', d);
+      root.style.background = d ? '#09090b' : '#ffffff';
+      // Custom accent from the same branding payload the MFEs read via useBranding(); falls back to
+      // the :root default (#1147E9) for un-branded deploys or if the shell hasn't populated the key.
+      try {
+        var b = JSON.parse(localStorage.getItem('trust-platform-branding') || '{}');
+        var accent = d ? (b.accent_color_dark || b.accent_color) : b.accent_color;
+        if (accent) root.style.setProperty('--accent', accent);
+      } catch (e) { /* keep the default --accent */ }
     })();
   </script>
   <style>
