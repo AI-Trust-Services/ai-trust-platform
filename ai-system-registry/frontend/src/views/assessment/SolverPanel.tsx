@@ -53,7 +53,7 @@ export function SolverPanel({ solverResult, pending }: SolverPanelProps) {
               <div
                 key={t.key}
                 className={
-                  "rounded-md border px-3 py-2 text-center text-sm " +
+                  "rounded-md border px-3 py-2 text-center text-sm break-words hyphens-auto " +
                   (t.key === activeTab(solverResult.risk.labelId)
                     ? "border-[#1147E9] font-semibold text-[#1147E9]"
                     : "border-border text-muted-foreground")
@@ -64,7 +64,7 @@ export function SolverPanel({ solverResult, pending }: SolverPanelProps) {
             ))}
             <div
               className={
-                "rounded-md border px-3 py-2 text-center text-sm " +
+                "rounded-md border px-3 py-2 text-center text-sm break-words hyphens-auto " +
                 (solverResult.transparency?.result
                   ? "border-[#d97706] font-semibold text-[#d97706]"
                   : "border-border text-muted-foreground")
@@ -76,7 +76,7 @@ export function SolverPanel({ solverResult, pending }: SolverPanelProps) {
               <div
                 key={t.key}
                 className={
-                  "rounded-md border px-3 py-2 text-center text-sm " +
+                  "rounded-md border px-3 py-2 text-center text-sm break-words hyphens-auto " +
                   (t.key === activeTab(solverResult.risk.labelId)
                     ? "border-[#1147E9] font-semibold text-[#1147E9]"
                     : "border-border text-muted-foreground")
