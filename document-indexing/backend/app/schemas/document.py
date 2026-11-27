@@ -59,6 +59,10 @@ class RetrieveRequest(BaseModel):
     k: int = Field(default=10, ge=1, le=50)
     mode: Literal["dense", "fts", "hybrid"] = "hybrid"
     rrf_k: int = Field(default=60, ge=1, le=200)
+    # Optional allowlist of DocumentVersion ids (pinned per assessment cycle) so the
+    # pipeline retrieves only the documents that were indexed at assessment start.
+    # Omitting this field (or passing an empty list) retrieves over all current versions.
+    version_ids: list[str] | None = None
 
 
 class SourceRef(BaseModel):

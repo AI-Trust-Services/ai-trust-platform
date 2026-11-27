@@ -23,6 +23,12 @@ async def retrieve(req: RetrieveRequest) -> list[RetrievedPassage]:
     compliance decision."""
     async with SessionLocal() as session:
         results = await retrieval.retrieve(
-            session, req.ai_system_id, req.query, req.k, req.mode, req.rrf_k
+            session,
+            req.ai_system_id,
+            req.query,
+            k=req.k,
+            mode=req.mode,
+            rrf_k=req.rrf_k,
+            version_ids=req.version_ids or None,
         )
     return [RetrievedPassage(**r) for r in results]

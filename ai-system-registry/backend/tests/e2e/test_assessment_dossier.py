@@ -256,47 +256,54 @@ async def test_reopen_does_not_create_a_second_dossier(client: httpx.AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_open_is_best_effort_when_dossier_fails(
+async def test_open_fails_when_dossier_fails(
     client: httpx.AsyncClient, monkeypatch
 ):
-    """A failing dossier snapshot must not 500 /open or poison the transaction.
+    """A failing dossier snapshot must abort /open (hard precondition).
 
-    Regression guard for the savepoint: a snapshot query error inside
-    create_dossier_in_session rolls back only the dossier (begin_nested), so the
-    seeded question_states + llm_status still commit and /open returns 200.
-    Without the savepoint the poisoned txn would fail the outer commit → 500.
+    The dossier is now in the main transaction — if it fails the whole /open
+    rolls back (no question_states written), and a retry /open can succeed once
+    the underlying issue is gone.
     """
     import app.routers.assessment as asmt
     from sqlalchemy import text
 
     async def _boom(session, row, assessment_id):
-        # Simulate a snapshot query error (poisons the subtransaction).
+        # Simulate a snapshot query error (poisons the transaction).
         await session.execute(text("SELECT 1 FROM table_that_does_not_exist"))
 
     monkeypatch.setattr(asmt, "create_dossier_in_session", _boom)
 
     system_id = await _create_system(client, "Resilient System", "desc")
-    r = await client.post(
-        f"/v1/systems/{system_id}/assessment/open", headers=_hdr(_OWNER)
-    )
-    assert r.status_code == 200, r.text
+    # ASGITransport re-raises server exceptions in the test process, so a 500
+    # surfaces as an exception here rather than an HTTP response.
+    with pytest.raises(Exception):
+        await client.post(
+            f"/v1/systems/{system_id}/assessment/open", headers=_hdr(_OWNER)
+        )
 
     conn = _pg()
     try:
         cur = conn.cursor()
-        # No dossier was created …
+        # Neither the dossier nor question_states should have been written.
         cur.execute(
             "SELECT count(*) FROM assessment_dossiers WHERE ai_system_id = %s",
             (system_id,),
         )
-        assert cur.fetchone()[0] == 0
-        # … but the cycle opened: question_states still committed.
+        assert cur.fetchone()[0] == 0, "dossier must not be written on failure"
         cur.execute(
             "SELECT count(*) FROM question_states WHERE system_id = %s", (system_id,)
         )
-        assert cur.fetchone()[0] > 0, "question_states should still be seeded"
+        assert cur.fetchone()[0] == 0, "question_states must not be written on failure"
     finally:
         conn.close()
+
+    # Once the patch is removed (simulating the issue being fixed) a retry succeeds.
+    monkeypatch.undo()
+    r2 = await client.post(
+        f"/v1/systems/{system_id}/assessment/open", headers=_hdr(_OWNER)
+    )
+    assert r2.status_code == 200, r2.text
 
 
 # ── (B) append the AI output layer after the pipeline completes ───────────────

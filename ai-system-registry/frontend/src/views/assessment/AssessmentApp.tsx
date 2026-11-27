@@ -281,6 +281,7 @@ export default function AssessmentApp() {
           <ComplianceAdvisor
             key={id}
             systemId={id}
+            assessmentId={state?.assessment_id ?? undefined}
             section={sectionForQuestion(activeQuestionKey)}
             questionKey={activeQuestionKey}
             activeAnswer={activeQuestionKey ? currentAnswers[activeQuestionKey] : null}

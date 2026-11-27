@@ -246,3 +246,23 @@ class RejectRequest(BaseModel):
         if not v or not v.strip():
             raise ValueError("A comment is required when returning the assessment")
         return v.strip()
+
+
+class AssessmentFileCitation(BaseModel):
+    """One reference from an AI answer that points to this file."""
+
+    question_key: str
+    question_position: int
+    quote: str | None = None
+    location: str | None = None
+
+
+class AssessmentFileResponse(BaseModel):
+    """One document from the cycle's pinned snapshot, with per-answer citations."""
+
+    document_id: str
+    version_id: str
+    filename: str
+    version_label: str | None = None
+    indexed_at: str | None = None
+    citations: list[AssessmentFileCitation] = []

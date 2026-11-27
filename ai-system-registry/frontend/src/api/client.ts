@@ -6,7 +6,7 @@ import type {
   RegisterSystemInput, IndexedDocument, AssessmentRow,
   ComplianceAssessment, AuditEventListResponse,
   AssessmentState, QuestionState, QuestionComment,
-  AdvisorAnswer,
+  AdvisorAnswer, AssessmentFile,
 } from "../types"
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
@@ -209,6 +209,10 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ note }),
     }),
+  getAssessmentFiles: (systemId: string, assessmentId: string) =>
+    request<AssessmentFile[]>(
+      `/systems/${encodeURIComponent(systemId)}/assessment/files?assessment_id=${encodeURIComponent(assessmentId)}`,
+    ),
 
   // ── Model Cards ────────────────────────────────────────────────────────────
   getModels: () => request<ModelCard[]>("/model-cards?limit=200"),

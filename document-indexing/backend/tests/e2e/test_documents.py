@@ -362,6 +362,45 @@ async def test_retrieve_returns_empty_for_unknown_system(client: httpx.AsyncClie
     assert r.json() == []
 
 
+async def test_retrieve_passes_version_ids_to_retrieval(client: httpx.AsyncClient, system_id: str):
+    """When version_ids is supplied in the request body, it is forwarded to retrieval.retrieve."""
+    from unittest.mock import AsyncMock, patch, call
+
+    mock_retrieve = AsyncMock(return_value=[])
+    with patch("app.retrieval.retrieve", new=mock_retrieve):
+        r = await client.post(
+            "/v1/retrieve",
+            json={
+                "ai_system_id": system_id,
+                "query": "test query",
+                "k": 5,
+                "version_ids": ["DOCV-aaa", "DOCV-bbb"],
+            },
+            headers=_HDR,
+        )
+    assert r.status_code == 200
+    mock_retrieve.assert_called_once()
+    _, kwargs = mock_retrieve.call_args
+    # version_ids must reach the retrieval function
+    assert kwargs.get("version_ids") == ["DOCV-aaa", "DOCV-bbb"]
+
+
+async def test_retrieve_no_version_ids_passes_none(client: httpx.AsyncClient, system_id: str):
+    """Omitting version_ids passes None (no filter) to retrieval.retrieve."""
+    from unittest.mock import AsyncMock, patch
+
+    mock_retrieve = AsyncMock(return_value=[])
+    with patch("app.retrieval.retrieve", new=mock_retrieve):
+        r = await client.post(
+            "/v1/retrieve",
+            json={"ai_system_id": system_id, "query": "test", "k": 3},
+            headers=_HDR,
+        )
+    assert r.status_code == 200
+    _, kwargs = mock_retrieve.call_args
+    assert kwargs.get("version_ids") is None
+
+
 # ── Health ────────────────────────────────────────────────────────────────────
 
 

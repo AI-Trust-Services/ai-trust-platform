@@ -187,6 +187,22 @@ export interface QuestionComment {
   created_at: string;
 }
 
+export interface AssessmentFileCitation {
+  question_key: string;
+  question_position: number;
+  quote?: string | null;
+  location?: string | null;
+}
+
+export interface AssessmentFile {
+  document_id: string;
+  version_id: string;
+  filename: string;
+  version_label?: string | null;
+  indexed_at?: string | null;
+  citations: AssessmentFileCitation[];
+}
+
 export interface UserSummary {
   username: string;
   firstName: string;

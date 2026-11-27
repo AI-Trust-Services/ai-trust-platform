@@ -77,6 +77,7 @@ async def run_assessment_prefill_pipeline(
     classification_prompt_id: str = DEFAULT_CLASSIFICATION_PROMPT_ID,
     batch_callback: Callable[[list[dict]], Awaitable[None]] | None = None,
     on_questionnaire_done: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+    version_ids: list[str] | None = None,
 ) -> PrefillOutput:
     """Run the questionnaire pipeline, then the classification pipeline.
 
@@ -97,6 +98,7 @@ async def run_assessment_prefill_pipeline(
         username=username,
         batch_callback=batch_callback,
         config=run_config,
+        version_ids=version_ids,
     )
 
     async def _done_hook() -> None:

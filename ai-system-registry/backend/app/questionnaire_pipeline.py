@@ -154,14 +154,23 @@ def _consumed_documents(rag_chunks: list[dict]) -> list[dict]:
     return list(seen.values())
 
 
-async def _retrieve_rag_documents(system_id: str, username: str) -> list[dict]:
-    """Retrieve RAG document chunks for the system. Returns empty list on any failure."""
-    payload = {
+async def _retrieve_rag_documents(
+    system_id: str, username: str, version_ids: list[str] | None = None
+) -> list[dict]:
+    """Retrieve RAG document chunks for the system. Returns empty list on any failure.
+
+    When ``version_ids`` is supplied, retrieval is pinned to those exact document
+    versions (the assessment-cycle snapshot), so the pipeline sees exactly the
+    documents that were indexed at ``/open``.
+    """
+    payload: dict = {
         "ai_system_id": system_id,
         "query": _RAG_QUERY,
         "k": _RAG_K,
         "mode": "hybrid",
     }
+    if version_ids:
+        payload["version_ids"] = version_ids
     headers = {"x-forwarded-preferred-username": username}
     cid = correlation_id_var.get("")
     if cid:
@@ -384,6 +393,7 @@ async def run_questionnaire_pipeline(
     username: str,
     batch_callback: Any = None,  # async callable(batch_results: list[dict]) -> None
     config: RuntimeConfig | None = None,
+    version_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Run the questionnaire answer pipeline for a given AI system.
 
@@ -427,7 +437,7 @@ async def run_questionnaire_pipeline(
 
     # 3. Build evidence — registration data (always) + RAG documents (best-effort).
     registration_evidence = _system_evidence(row)
-    rag_chunks = await _retrieve_rag_documents(system_id, username)
+    rag_chunks = await _retrieve_rag_documents(system_id, username, version_ids=version_ids)
     if rag_chunks:
         logger.info(
             "questionnaire_pipeline.rag_retrieved",

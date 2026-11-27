@@ -30,6 +30,7 @@ from ai_trust_persistence.governance import (
 )
 from ai_trust_persistence.models.ai_system import AISystem
 from ai_trust_persistence.models.assessment import Assessment
+from ai_trust_persistence.models.assessment_dossier import AssessmentDossier
 from ai_trust_persistence.models.obligation import Obligation
 from ai_trust_persistence.models.question_comment import QuestionComment
 from ai_trust_persistence.models.question_state import QuestionState
@@ -53,6 +54,8 @@ from app.questionnaire_gating import get_all_gated_question_ids, is_gated
 from app.questionnaire_required import QUESTION_LABEL
 from app.schemas.assessment import (
     AnswerRequest,
+    AssessmentFileCitation,
+    AssessmentFileResponse,
     AssessmentStateResponse,
     AssignRequest,
     CommentCreate,
@@ -67,7 +70,7 @@ from app.schemas.assessment import (
     SubmitRequest,
     _validate_question_key,
 )
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 
 router = APIRouter(tags=["assessment"])
@@ -597,11 +600,28 @@ async def _run_prefill_background(
             )
 
     try:
+        # Read the pinned document version_ids from this cycle's dossier snapshot
+        # so retrieval is restricted to exactly the docs frozen at /open.
+        version_ids: list[str] | None = None
+        async with SessionLocal() as session:
+            dossier = (
+                await session.execute(
+                    select(AssessmentDossier).where(
+                        AssessmentDossier.assessment_id == assessment_id
+                    )
+                )
+            ).scalar_one_or_none()
+            if dossier:
+                docs = (dossier.inputs or {}).get("documents") or []
+                ids = [d["version_id"] for d in docs if d.get("version_id")]
+                version_ids = ids or None
+
         await run_assessment_prefill_pipeline(
             system_id,
             username,
             batch_callback=_on_batch,
             on_questionnaire_done=_finalize_tier,
+            version_ids=version_ids,
         )
     except Exception as exc:  # noqa: BLE001
         logger.error(
@@ -680,26 +700,12 @@ async def open_assessment(
                     ai_explanation=None,
                 )
             )
-        # #366: freeze the assessment dossier (inputs/config/prompts) at start,
-        # atomically with seeding this cycle. Best-effort — a snapshot failure
-        # must not block starting the assessment. The savepoint is what makes it
-        # best-effort: without it a failed snapshot query (or a deferred INSERT
-        # violation surfacing at the outer commit) would abort the whole txn and
-        # still 500 /open. begin_nested() flushes the INSERT here, so any failure
-        # rolls back only the dossier and leaves the seeded question_states intact.
-        try:
-            async with session.begin_nested():
-                await create_dossier_in_session(session, row, assessment.id)
-                await session.flush()
-        except Exception as exc:  # noqa: BLE001
-            logger.error(
-                "assessment.dossier_create_failed",
-                extra={
-                    "system_id": system_id,
-                    "assessment_id": assessment.id,
-                    "error": str(exc),
-                },
-            )
+        # #366 / #469: freeze the assessment dossier (inputs/config/prompts) at start,
+        # atomically with seeding this cycle. The snapshot IS the pipeline input — if
+        # snapshotting fails the assessment cannot proceed (the prefill would have no
+        # pinned document set). Let this bubble as a plain error; the caller returns 500
+        # and assessment.llm_status is never set to "pending", so the next /open retries.
+        await create_dossier_in_session(session, row, assessment.id)
         assessment.llm_status = "pending"
         await session.commit()
         logger.info(
@@ -718,6 +724,103 @@ async def open_assessment(
         row = await _get_system(session, system_id)
         assessment = await _current_assessment(session, system_id)
         return await _build_state(session, row, _current_user(request), assessment)
+
+
+# -- position lookup (1-based, stable across a session) ----------------------
+_QUESTION_POSITION: dict[str, int] = {
+    key: i + 1 for i, key in enumerate(ASSESSMENT_QUESTION_KEYS)
+}
+
+
+@router.get(
+    "/systems/{system_id}/assessment/files",
+    response_model=list[AssessmentFileResponse],
+    dependencies=[Depends(require_permission(SYSTEMS_READ))],
+)
+async def get_assessment_files(
+    system_id: str,
+    assessment_id: str = Query(...),
+) -> list[AssessmentFileResponse]:
+    """Return the pinned document snapshot for an assessment cycle, with per-file
+    citation lists derived from AI-answer references.
+
+    The file list comes from ``assessment_dossiers.inputs.documents`` (frozen at
+    ``/open``). Citations are built by matching each question's ``ai_references``
+    against file basenames (case-insensitive) — no server-side resolution of
+    document IDs or page numbers.
+    """
+    async with SessionLocal() as session:
+        # Verify the system exists and the assessment belongs to it.
+        await _get_system(session, system_id)
+
+        dossier = (
+            await session.execute(
+                select(AssessmentDossier).where(
+                    AssessmentDossier.assessment_id == assessment_id,
+                    AssessmentDossier.ai_system_id == system_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if dossier is None:
+            return []
+
+        docs: list[dict] = (dossier.inputs or {}).get("documents") or []
+        if not docs:
+            return []
+
+        states = (
+            await session.execute(
+                select(QuestionState).where(
+                    QuestionState.assessment_id == assessment_id,
+                )
+            )
+        ).scalars().all()
+
+    # Build citation lists: for each question with ai_references, match by filename
+    # basename against each doc.
+    file_citations: dict[str, list[AssessmentFileCitation]] = {
+        d["version_id"]: [] for d in docs if d.get("version_id")
+    }
+    for state in states:
+        refs = state.ai_references or []
+        if not refs:
+            continue
+        pos = _QUESTION_POSITION.get(state.question_key, 0)
+        for ref in refs:
+            if ref.get("sourceType") != "Document":
+                continue
+            source_name = (ref.get("source") or "").strip()
+            if not source_name:
+                continue
+            source_base = source_name.lower()
+            for doc in docs:
+                vid = doc.get("version_id")
+                if not vid:
+                    continue
+                doc_base = (doc.get("filename") or "").lower()
+                if doc_base == source_base or doc_base.endswith("/" + source_base):
+                    file_citations[vid].append(
+                        AssessmentFileCitation(
+                            question_key=state.question_key,
+                            question_position=pos,
+                            quote=ref.get("quote") or None,
+                            location=ref.get("location") or None,
+                        )
+                    )
+                    break  # each ref matches at most one file
+
+    return [
+        AssessmentFileResponse(
+            document_id=d.get("document_id", ""),
+            version_id=d.get("version_id", ""),
+            filename=d.get("filename", ""),
+            version_label=d.get("version_label"),
+            indexed_at=d.get("indexed_at"),
+            citations=file_citations.get(d.get("version_id", ""), []),
+        )
+        for d in docs
+        if d.get("version_id")
+    ]
 
 
 async def _build_state(

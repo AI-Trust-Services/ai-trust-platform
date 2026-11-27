@@ -25,9 +25,13 @@ CANDIDATE_K = 50  # candidates pulled per channel before fusion
 RRF_K = 60  # Reciprocal Rank Fusion constant
 
 
-def _visible(stmt: Select) -> Select:
-    """Restrict to indexed chunks of current, non-deleted documents for one system."""
-    return (
+def _visible(stmt: Select, version_ids: list[str] | None = None) -> Select:
+    """Restrict to indexed chunks of current, non-deleted documents for one system.
+
+    When ``version_ids`` is supplied, further restrict to chunks whose version is in
+    that allow-list (used to pin retrieval to the assessment-cycle snapshot).
+    """
+    stmt = (
         stmt.join(
             DocumentVersion, DocumentChunk.document_version_id == DocumentVersion.id
         )
@@ -38,6 +42,9 @@ def _visible(stmt: Select) -> Select:
             Document.deleted_at.is_(None),
         )
     )
+    if version_ids:
+        stmt = stmt.where(DocumentVersion.id.in_(version_ids))
+    return stmt
 
 
 def rrf_scores(rankings: list[list[str]], k: int = RRF_K) -> dict[str, float]:
@@ -57,7 +64,10 @@ def rrf(rankings: list[list[str]], k: int = RRF_K, top: int | None = None) -> li
 
 
 async def _dense(
-    session: AsyncSession, ai_system_id: str, query_vec: list[float]
+    session: AsyncSession,
+    ai_system_id: str,
+    query_vec: list[float],
+    version_ids: list[str] | None = None,
 ) -> list[tuple[str, float]]:
     """``(chunk_id, cosine_similarity)`` for the top dense candidates, best first."""
     dist = DocumentChunk.embedding.cosine_distance(query_vec).label("dist")
@@ -66,7 +76,8 @@ async def _dense(
             select(DocumentChunk.id, dist).where(
                 DocumentChunk.ai_system_id == ai_system_id,
                 DocumentChunk.embedding.is_not(None),
-            )
+            ),
+            version_ids,
         )
         .order_by(dist)
         .limit(CANDIDATE_K)
@@ -76,7 +87,10 @@ async def _dense(
 
 
 async def _fts(
-    session: AsyncSession, ai_system_id: str, query: str
+    session: AsyncSession,
+    ai_system_id: str,
+    query: str,
+    version_ids: list[str] | None = None,
 ) -> list[tuple[str, float]]:
     """``(chunk_id, ts_rank)`` for the top FTS candidates, best first."""
     tsquery = func.websearch_to_tsquery("simple", query)
@@ -86,7 +100,8 @@ async def _fts(
             select(DocumentChunk.id, rank).where(
                 DocumentChunk.ai_system_id == ai_system_id,
                 DocumentChunk.content_tsv.op("@@")(tsquery),
-            )
+            ),
+            version_ids,
         )
         .order_by(rank.desc())
         .limit(CANDIDATE_K)
@@ -102,13 +117,18 @@ async def retrieve(
     k: int = 10,
     mode: str = "hybrid",
     rrf_k: int = RRF_K,
+    version_ids: list[str] | None = None,
 ) -> list[dict]:
     """Return up to ``k`` passages, most relevant first, each with a source reference.
 
     ``mode`` ∈ ``hybrid`` (dense + FTS fused with RRF), ``dense``, ``fts``. A single-
     channel mode orders by that channel's own score and skips the other channel's work
     entirely (the dense modes still embed the query; ``fts`` does not). Each passage
-    carries the per-channel rank/score diagnostics the Test Bed advanced panel surfaces."""
+    carries the per-channel rank/score diagnostics the Test Bed advanced panel surfaces.
+
+    ``version_ids``: when supplied, retrieval is restricted to chunks belonging to those
+    document versions (the assessment-cycle snapshot), so the pipeline sees exactly the
+    documents that were pinned at ``/open``."""
     want_dense = mode in ("dense", "hybrid")
     want_fts = mode in ("fts", "hybrid")
 
@@ -116,9 +136,9 @@ async def retrieve(
     lexical: list[tuple[str, float]] = []
     if want_dense:
         query_vec = await embedding_client.embed_one(query)
-        dense = await _dense(session, ai_system_id, query_vec)
+        dense = await _dense(session, ai_system_id, query_vec, version_ids)
     if want_fts:
-        lexical = await _fts(session, ai_system_id, query)
+        lexical = await _fts(session, ai_system_id, query, version_ids)
 
     dense_rank = {cid: i for i, (cid, _) in enumerate(dense)}
     dense_score = {cid: s for cid, s in dense}

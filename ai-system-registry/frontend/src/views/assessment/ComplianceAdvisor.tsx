@@ -15,8 +15,12 @@ import {
   AtSign,
   Lightbulb,
   ChevronDown,
+  ChevronRight,
+  Search,
+  Upload,
+  Sparkles,
 } from "lucide-react";
-import type { ChatMessage, AdvisorSource } from "../../types";
+import type { ChatMessage, AdvisorSource, AssessmentFile } from "../../types";
 import { api } from "../../api/client";
 import {
   QUESTION_DEF_BY_ID,
@@ -55,18 +59,10 @@ const SUGGESTIONS: { Icon: typeof Lightbulb; label: string }[] = [
 interface Turn {
   role: "user" | "assistant";
   content: string;
-  // What is actually sent to the LLM for this turn. For a user turn this is
-  // `content` prefixed with the section context (`[Section: …]`); the raw
-  // `content` is shown in the chat bubble. Resending `apiContent` in the
-  // transcript keeps the section context present on every later turn, not just
-  // the first. Absent for assistant turns (content is sent as-is).
   apiContent?: string;
   sources?: AdvisorSource[];
 }
 
-// Human-readable "what the advisor is doing" lines, cycled while a turn is in
-// flight. Indicative (timer-driven) rather than tied to the live agent steps —
-// the authoritative per-step record (which tool ran, etc.) lives in Langfuse.
 const PROGRESS_STEPS = [
   "Reading your question…",
   "Consulting the EU AI Act…",
@@ -74,9 +70,8 @@ const PROGRESS_STEPS = [
   "Putting together a grounded answer…",
 ];
 
-/** A grounding citation. Document sources deep-link to the original (jumping to
- * the cited page for PDFs); EU AI Act sources are non-clickable (cognee provides
- * no linkable anchor) and show their supporting snippet on hover. */
+/** A grounding citation. Document sources deep-link to the original; EU AI Act
+ * sources are non-clickable and show their snippet on hover. */
 function SourceChip({ source }: { source: AdvisorSource }) {
   const isDoc = source.kind === "document";
   const Icon = isDoc ? FileText : BookOpen;
@@ -87,9 +82,6 @@ function SourceChip({ source }: { source: AdvisorSource }) {
 
   async function open() {
     if (!canLink || !source.document_id) return;
-    // Open the tab synchronously inside the click handler so the browser keeps
-    // the user activation; a presign request first would lose it and the tab
-    // gets blocked as a pop-up. Fill its location once the URL resolves.
     const win = window.open("", "_blank", "noopener,noreferrer");
     try {
       const { url } = await api.getDocumentDownloadUrlIndexed(
@@ -127,8 +119,7 @@ function SourceChip({ source }: { source: AdvisorSource }) {
   );
 }
 
-/** Vertical tab in the companion's left rail (label rotated to read bottom-up,
- *  matching the Figma design). */
+/** Vertical tab in the companion's left rail. */
 function RailTab({
   active,
   onClick,
@@ -155,24 +146,14 @@ function RailTab({
   );
 }
 
-// Some source cells carry stray zero-width / soft-hyphen characters; strip them
-// so the rendered context reads cleanly.
 function cleanContext(s: string): string {
-  return s.replace(/[\u200B-\u200D\uFEFF\u00AD]/g, "");
+  return s.replace(/[​-‍﻿­]/g, "");
 }
 
-// An ALL-CAPS line (no lowercase letters) in the owner context is a section
-// heading \u2014 e.g. "RULE", "WHEN THE EXCLUSION DOES NOT APPLY", "REFERENCES".
-// The 120-char cap (vs. a shorter one) lets long legal titles like "BIOMETRIC
-// DATA AND CATEGORISATION: PROHIBITION, DEFINITION AND ANCILLARY FEATURES"
-// register as headings rather than falling into a generic "Details" block; no
-// all-caps body line in the questionnaire is that long.
 function isHeadingLine(t: string): boolean {
   return t.length >= 2 && t.length <= 120 && /[A-Z]/.test(t) && !/[a-z]/.test(t);
 }
 
-/** Render a block's body lines: consecutive "-"/"\u2022" lines become a bullet list,
- *  everything else a paragraph. */
 function renderBodyLines(lines: string[]): ReactNode[] {
   const out: ReactNode[] = [];
   let bullets: string[] = [];
@@ -181,14 +162,14 @@ function renderBodyLines(lines: string[]): ReactNode[] {
     out.push(
       <ul key={`ul-${key}`} className="ml-4 list-disc space-y-1">
         {bullets.map((b, i) => (
-          <li key={i}>{b.replace(/^[-\u2022]\s*/, "")}</li>
+          <li key={i}>{b.replace(/^[-•]\s*/, "")}</li>
         ))}
       </ul>,
     );
     bullets = [];
   };
   lines.forEach((l, i) => {
-    if (/^[-\u2022]/.test(l)) {
+    if (/^[-•]/.test(l)) {
       bullets.push(l);
     } else {
       flush(String(i));
@@ -199,12 +180,6 @@ function renderBodyLines(lines: string[]): ReactNode[] {
   return out;
 }
 
-/** The per-question "Examples" list, shared verbatim by the owner and CO
- *  context views. Each bullet in the source `examples` text is one example; a
- *  leading "[Flag]" (e.g. "[Not excluded]", "[High-risk]", "[Prohibited]") is
- *  lifted out of the text and shown as a small heading above that example — 249
- *  of 265 source bullets carry one. Bullets with no flag (e.g. the definitional
- *  "is this an AI system?" examples) render as plain text with no heading. */
 function ExamplesList({ text }: { text: string }) {
   const items = cleanContext(text)
     .split("\n")
@@ -228,10 +203,6 @@ function ExamplesList({ text }: { text: string }) {
   );
 }
 
-/** Content of the shared "Examples" collapsible: the primary examples, then —
- *  when present — the secondary-source "Extended examples" under a divider
- *  heading (they carry no `[Flag]` of their own, so without the heading they'd
- *  blend into the primary list). Shared by the owner and CO context views. */
 function ExamplesBody({ examples, extended }: { examples: string; extended?: string }) {
   return (
     <>
@@ -248,9 +219,6 @@ function ExamplesBody({ examples, extended }: { examples: string; extended?: str
   );
 }
 
-/** Owner context formatted for readability: ALL-CAPS lines become headings,
- *  "-" lines become bullet lists, the rest paragraphs. Keeps a long block of
- *  text from reading as one wall. */
 function OwnerContextBody({
   text,
   examples,
@@ -278,17 +246,11 @@ function OwnerContextBody({
       cur.body.push(t);
     }
   }
-  // The owner view deliberately drops the "REFERENCES" section (legal citations
-  // for the compliance officer) — owners get the plain-language context only.
-  // The CO view (CoContextBody) keeps its sources.
   const ownerBlocks = blocks.filter((b) => !/^references$/i.test(b.heading?.trim() ?? ""));
   return (
     <div className="space-y-3 text-sm leading-relaxed text-[#18181d]">
       {ownerBlocks.map((b, bi) => {
         const hasBody = b.body.some(Boolean);
-        // Every section with content collapses by default (same as the CO
-        // view). A heading-less block (e.g. a context that is a single
-        // paragraph) collapses under a generic "Context" title.
         if (!hasBody) {
           return (
             <div key={bi} className="space-y-1.5">
@@ -316,13 +278,8 @@ function OwnerContextBody({
   );
 }
 
-// Matches an external URL embedded inline in the CO legal text (stops at
-// whitespace and a closing paren, which usually wraps the link).
 const CO_URL_RE = /https?:\/\/[^\s)]+/g;
 
-// Section-label lines in the CO legal text that aren't ALL-CAPS: "Summary:",
-// "AI Act provision:", "Recitals", "Guidelines", etc. A short line ending in a
-// colon is treated as a heading too (e.g. "EC Guidelines on … (url):").
 const CO_HEADING_WORDS = new Set([
   "summary",
   "ai act provision",
@@ -340,7 +297,6 @@ function isCoHeading(t: string): boolean {
   return CO_HEADING_WORDS.has(t.replace(/:$/, "").trim().toLowerCase());
 }
 
-/** Turn URLs in a text run into external links; plain text otherwise. */
 function linkify(text: string): ReactNode[] {
   const out: ReactNode[] = [];
   let last = 0;
@@ -369,7 +325,6 @@ function linkify(text: string): ReactNode[] {
   return out;
 }
 
-/** Unique external URLs across the whole CO context, for the Sources list. */
 function extractUrls(text: string): string[] {
   const seen = new Set<string>();
   for (const m of text.matchAll(CO_URL_RE)) {
@@ -378,8 +333,6 @@ function extractUrls(text: string): string[] {
   return [...seen];
 }
 
-/** Render a CO block's body: blank lines split paragraphs, "-"/"•" lines become
- *  bullet lists, URLs become external links. */
 function renderCoBody(body: string[]): ReactNode[] {
   const out: ReactNode[] = [];
   let para: string[] = [];
@@ -420,9 +373,6 @@ function renderCoBody(body: string[]): ReactNode[] {
   return out;
 }
 
-// Collapsed-by-default section used by both the owner and CO context views: a
-// heading row that toggles its body open. Remounts (via the key on the context
-// body) reset every section back to collapsed on question navigation.
 function ContextCollapsible({ heading, children }: { heading: string; children: ReactNode }) {
   return (
     <Collapsible className="rounded-md border border-border">
@@ -435,11 +385,6 @@ function ContextCollapsible({ heading, children }: { heading: string; children: 
   );
 }
 
-/** Compliance-officer legal context (issue #409). Longer and more structured
- *  than the owner context: the title stays open, every section with body —
- *  including the Summary — collapses by default, inline URLs are clickable, and
- *  all external links are gathered into a collapsed-by-default Sources list at
- *  the end. */
 function CoContextBody({
   text,
   examples,
@@ -474,8 +419,6 @@ function CoContextBody({
     <div className="space-y-3 text-sm leading-relaxed text-[#18181d]">
       {blocks.map((b, i) => {
         const hasBody = b.body.some(Boolean);
-        // Blocks without a body (e.g. the title) render as a plain heading;
-        // everything with content collapses by default — the Summary included.
         if (!hasBody) {
           return (
             <div key={i} className="space-y-1.5">
@@ -495,7 +438,6 @@ function CoContextBody({
         );
       })}
       {examples && (
-        // Below the context sections, above the Sources list.
         <ContextCollapsible heading="Examples">
           <ExamplesBody examples={examples} extended={extendedExamples} />
         </ContextCollapsible>
@@ -522,8 +464,6 @@ function CoContextBody({
   );
 }
 
-/** Parse a MULTISELECT answer (a JSON-serialised string array) into the list of
- *  selected option values; `[]` for an empty/blank/invalid answer. */
 function parseSelectedValues(raw?: string | null): string[] {
   if (!raw) return [];
   try {
@@ -534,11 +474,6 @@ function parseSelectedValues(raw?: string | null): string[] {
   }
 }
 
-/** For a MULTISELECT "lead" question (e.g. Prohibited_1) whose options each carry
- *  the context of the individual question they consolidated, render — grouped per
- *  SELECTED option — that option's context. Role-split like the single-question
- *  views: owners see the option's `ownerContext`, the CO its `coContext`. Shown
- *  below any question-level context. */
 function OptionContextGroups({
   def,
   selectedValues,
@@ -580,13 +515,156 @@ function OptionContextGroups({
   );
 }
 
+// Figma purple accent used in the AI System Files tab.
+const FILES_PURPLE = "#7c3aed";
+
+// Try to parse a page number from an LLM location string ("p.14", "page 3",
+// "section 3" does NOT parse). Returns null when no page can be detected.
+function parsePageNumber(location: string | null | undefined): number | null {
+  if (!location) return null;
+  const m = location.match(/(?:p\.?\s*|page\s+)(\d+)/i);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/** One file card in the AI System Files tab. Collapses/expands on click or when
+ *  a search term matches. */
+function FileCard({
+  file,
+  isThisQuestion,
+  activeQuestionPos,
+  forceExpand,
+}: {
+  file: AssessmentFile;
+  isThisQuestion: boolean;
+  activeQuestionPos: number | null;
+  forceExpand: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const expanded = open || forceExpand;
+
+  const citedCount = file.citations.length;
+  const distinctQuestions = new Set(file.citations.map((c) => c.question_key)).size;
+
+  return (
+    <div
+      className={cn(
+        "rounded-lg border bg-background transition-colors",
+        isThisQuestion ? "border-[#7c3aed]/40" : "border-border",
+      )}
+    >
+      {/* Card header — always visible */}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-start gap-2 px-3 py-2.5 text-left"
+      >
+        <FileText
+          className="mt-0.5 size-4 shrink-0"
+          style={{ color: citedCount > 0 ? FILES_PURPLE : undefined }}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-sm font-medium text-foreground">{file.filename}</span>
+            {isThisQuestion && (
+              <span
+                className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                style={{ background: `${FILES_PURPLE}20`, color: FILES_PURPLE }}
+              >
+                This question
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            {file.version_label && <span>v{file.version_label}</span>}
+            {file.version_label && citedCount > 0 && <span>·</span>}
+            {citedCount > 0 && (
+              <span>cited in {distinctQuestions} ans…</span>
+            )}
+          </div>
+        </div>
+        <ChevronRight
+          className={cn(
+            "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform",
+            expanded && "rotate-90",
+          )}
+        />
+      </button>
+
+      {/* Citation list + actions (expanded) */}
+      {expanded && (
+        <div className="border-t border-border px-3 pb-3 pt-2">
+          {file.citations.length > 0 ? (
+            <div className="mb-2 space-y-1.5">
+              {file.citations.map((c, i) => {
+                const page = parsePageNumber(c.location);
+                const isActive = activeQuestionPos !== null && c.question_position === activeQuestionPos;
+                return (
+                  <div
+                    key={i}
+                    className={cn(
+                      "rounded px-2 py-1 text-xs",
+                      isActive ? "bg-[#7c3aed]/10" : "bg-muted/50",
+                    )}
+                  >
+                    <div className="flex items-center gap-1 font-medium text-foreground">
+                      {page != null && (
+                        <span
+                          className="shrink-0 rounded px-1"
+                          style={{ background: `${FILES_PURPLE}20`, color: FILES_PURPLE }}
+                        >
+                          p.{page}
+                        </span>
+                      )}
+                      <span className="truncate">
+                        Q{c.question_position}
+                        {QUESTION_DEF_BY_ID[c.question_key] && (
+                          <span className="font-normal text-muted-foreground">
+                            {" · "}
+                            {QUESTION_DEF_BY_ID[c.question_key].question}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    {c.quote && (
+                      <p className="mt-0.5 italic text-muted-foreground">"{c.quote}"</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="mb-2 text-xs text-muted-foreground">Not cited in any AI answer.</p>
+          )}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled
+              title="Coming soon"
+              className="cursor-not-allowed rounded border border-border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground opacity-50"
+            >
+              Open
+            </button>
+            <button
+              type="button"
+              disabled
+              title="Coming soon"
+              className="cursor-not-allowed rounded border border-border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground opacity-50"
+            >
+              Ask about this file
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** The right-hand **Assessment Companion** panel. A vertical tab rail switches
- * between the **AI Act Companion** (grounded EU AI Act chat backed by
- * POST /systems/{id}/advisor/ask) and the per-question **Context** tab (the
- * owner-facing EU AI Act context from the questionnaire config). */
+ * between the **AI Act Companion** (EU AI Act context for the active question)
+ * and the **AI System Files** (snapshot of indexed docs with per-answer citations). */
 export function ComplianceAdvisor({
   systemId,
+  assessmentId,
   section,
   questionKey,
   activeAnswer,
@@ -595,17 +673,12 @@ export function ComplianceAdvisor({
   isComplianceOfficer = false,
 }: {
   systemId?: string;
+  assessmentId?: string;
   section?: string;
   questionKey?: string;
-  // Raw stored answer for the active question. For a MULTISELECT lead question
-  // this is a JSON array of selected option values, used to drive the
-  // per-selection context grouping in the Context tab.
   activeAnswer?: string | null;
   expanded: boolean;
   onExpandedChange: (v: boolean) => void;
-  // The Context tab is role-split: owners/engineers see the owner context,
-  // the compliance officer (reviewer, systems:approve) sees the CO legal
-  // context. Never show one role the other's text.
   isComplianceOfficer?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -618,15 +691,7 @@ export function ComplianceAdvisor({
   const guidance = section ? SECTION_GUIDANCE[section] : undefined;
 
   const def = questionKey ? QUESTION_DEF_BY_ID[questionKey] : undefined;
-  // Role-split context: CO sees the legal CO context, everyone else the owner
-  // context. `activeContext` drives the context-first tab defaulting below.
   const activeContext = isComplianceOfficer ? def?.coContext : def?.ownerContext;
-
-  // A MULTISELECT "lead" question (e.g. Prohibited_1) whose options carry their
-  // own context: the Context tab shows per-selected-option groups in addition to
-  // (or, when the question itself has no context, instead of) the question-level
-  // context. Only treat it as such when at least one option has context for the
-  // viewing role.
   const isOptionContextLead =
     !!def &&
     isMultiselect(def) &&
@@ -634,14 +699,10 @@ export function ComplianceAdvisor({
   const selectedValues = parseSelectedValues(activeAnswer);
   const hasContext = !!activeContext || isOptionContextLead;
 
-  // Context-first only as the initial default. After that the tab is purely the
-  // user's choice and persists across question navigation — we deliberately do
-  // NOT auto-switch when a question has no context: the Context tab shows a
-  // "no additional context" fallback instead of yanking the user back to chat.
-  const [tab, setTab] = useState<"context" | "chat">("context");
+  // "AI Act Companion" = the EU AI Act context tab (renamed from "Context").
+  // "files" = the AI System Files tab.
+  const [tab, setTab] = useState<"context" | "chat" | "files">("context");
 
-  // Cycle the human-readable progress lines while a turn is in flight. Advances
-  // but holds on the last line (doesn't loop back) so it reads as forward motion.
   useEffect(() => {
     if (!loading) {
       setProgressStep(0);
@@ -684,6 +745,15 @@ export function ComplianceAdvisor({
     }
   }
 
+  // Question position (1-based) for the Files tab "This question" / header.
+  // Derived from the question key's position in the questionnaire question list.
+  // We import the QUESTION_DEF_BY_ID map but need the ordered list for position.
+  // The position is baked into citations from the backend; here we just need
+  // to match by question_key — the backend provides question_position on citations.
+  // We pass the question key so FileCard can match citations by question_key.
+  // The header "N files used for Q<pos>" reads from the first matching citation's
+  // question_position (since all citations for the same question share the same pos).
+
   if (collapsed) {
     return (
       <div className="flex h-full w-10 shrink-0 flex-col items-center gap-4 border-l border-border bg-card py-4">
@@ -707,25 +777,20 @@ export function ComplianceAdvisor({
     <aside
       className={cn(
         "flex h-full flex-row border-l border-border bg-card",
-        // Expanded: fill the whole middle region (main is unmounted by the
-        // parent), i.e. everything up to the question-list sidebar. Normal: a
-        // fixed side panel beside main.
         expanded ? "min-w-0 flex-1" : "w-[408px] shrink-0 transition-[width] duration-200",
       )}
     >
-      {/* Vertical tab rail (full height). The AI Act Companion (chat) tab is
-          intentionally hidden — only the Context tab is exposed. The chat code
-          below stays in place (unreachable) so it can be re-enabled by adding
-          the AI Act Companion RailTab back. Keep the Context RailTab too:
-          send() switches to the chat tab (setTab("chat")), so the Context tab
-          is the only way back and must stay in the rail. */}
+      {/* Vertical tab rail */}
       <nav className="flex w-9 shrink-0 flex-col border-r border-border bg-[#f8fafe]">
         <RailTab active={tab === "context"} onClick={() => setTab("context")}>
-          Context
+          AI Act Companion
+        </RailTab>
+        <RailTab active={tab === "files"} onClick={() => setTab("files")}>
+          AI System Files
         </RailTab>
       </nav>
 
-      {/* Content column. The faint diagonal brand wash matches the Figma. */}
+      {/* Content column */}
       <div
         className="flex min-w-0 flex-1 flex-col bg-card"
         style={{
@@ -733,7 +798,7 @@ export function ComplianceAdvisor({
             "linear-gradient(36deg, color-mix(in srgb, var(--brand) 8%, transparent), transparent 45%)",
         }}
       >
-        {/* Header: AI Trust logo + title + panel controls. */}
+        {/* Header */}
         <div className="flex items-start justify-between px-7 pb-5 pt-[34px]">
           <div className="flex items-center gap-2">
             <img src={aiTrustLogo} alt="" className="h-5 w-auto" />
@@ -770,16 +835,13 @@ export function ComplianceAdvisor({
           </div>
         </div>
 
-        {tab === "context" ? (
+        {tab === "context" && (
           <div className="min-w-0 flex-1 overflow-y-auto px-7 pb-6 pt-2">
             {hasContext ? (
               <>
                 <h3 className="mb-4 text-[18px] font-semibold leading-[26px] text-foreground">
                   This section refers to the EU AI Act regarding…
                 </h3>
-                {/* Question-level context, when the question itself carries it.
-                    Key by questionKey so navigating questions remounts the
-                    renderer and resets every collapsible back to collapsed. */}
                 {activeContext &&
                   (isComplianceOfficer ? (
                     <CoContextBody
@@ -796,9 +858,6 @@ export function ComplianceAdvisor({
                       extendedExamples={def?.extendedExamples}
                     />
                   ))}
-                {/* Per-selected-option context for a MULTISELECT lead question.
-                    Keyed by questionKey + the selection so it remounts (and the
-                    collapsibles reset) as the question or the selection changes. */}
                 {isOptionContextLead && def && (
                   <OptionContextGroups
                     key={`${questionKey}:${selectedValues.join(",")}`}
@@ -814,7 +873,17 @@ export function ComplianceAdvisor({
               </p>
             )}
           </div>
-        ) : (
+        )}
+
+        {tab === "files" && (
+          <FilesTabWrapper
+            systemId={systemId}
+            assessmentId={assessmentId}
+            questionKey={questionKey}
+          />
+        )}
+
+        {tab === "chat" && (
           <div className="flex min-h-0 flex-1 flex-col">
             <div ref={scrollRef} className="flex-1 overflow-y-auto px-7 py-4 text-sm">
               {turns.length === 0 && (
@@ -871,7 +940,6 @@ export function ComplianceAdvisor({
               </div>
             </div>
 
-            {/* Chat composer: suggestion chips + message box + disclaimer. */}
             <div className="flex flex-col gap-1.5 p-4">
               {error && <p className="text-xs text-[var(--danger-fg,#d14343)]">{error}</p>}
               <div className="flex flex-col gap-2 py-2">
@@ -929,5 +997,234 @@ export function ComplianceAdvisor({
         )}
       </div>
     </aside>
+  );
+}
+
+/** Wrapper that resolves questionPosition from the files data before rendering. */
+function FilesTabWrapper({
+  systemId,
+  assessmentId,
+  questionKey,
+}: {
+  systemId?: string;
+  assessmentId?: string;
+  questionKey?: string;
+}) {
+  // question_position comes from the backend citations; find the position for the
+  // active question by scanning citations in the files list once loaded.
+  // We pass questionPosition separately so FilesTab can show the header.
+  // We use a ref-pattern: when files are loaded the first citation for this
+  // question tells us its position.
+  const [files, setFiles] = useState<AssessmentFile[] | null>(null);
+  const [fetchLoading, setFetchLoading] = useState(false);
+
+  useEffect(() => {
+    if (!systemId || !assessmentId) {
+      setFiles(null);
+      return;
+    }
+    setFetchLoading(true);
+    api
+      .getAssessmentFiles(systemId, assessmentId)
+      .then(setFiles)
+      .catch(() => setFiles([]))
+      .finally(() => setFetchLoading(false));
+  }, [systemId, assessmentId]);
+
+  // Derive question position from citations for the active question key
+  let questionPosition: number | null = null;
+  if (questionKey && files) {
+    for (const f of files) {
+      const c = f.citations.find((c) => c.question_key === questionKey);
+      if (c) {
+        questionPosition = c.question_position;
+        break;
+      }
+    }
+  }
+
+  if (!assessmentId) {
+    return (
+      <div className="flex flex-1 items-center justify-center px-6 py-10">
+        <p className="text-center text-sm text-muted-foreground">
+          Open an assessment to see its documents.
+        </p>
+      </div>
+    );
+  }
+
+  if (fetchLoading) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!files || files.length === 0) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-10 text-center">
+        <div className="flex size-14 items-center justify-center rounded-full bg-muted/60">
+          <Upload className="size-7 text-muted-foreground/60" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-foreground">No documents yet</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Upload technical documentation, model cards or policies so the AI can cite a source
+            for every answer.
+          </p>
+        </div>
+        <div className="flex flex-col items-center gap-1">
+          <button
+            type="button"
+            disabled
+            title="Coming soon"
+            className="flex cursor-not-allowed items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground opacity-50"
+          >
+            <Upload className="size-4" />
+            Upload files
+          </button>
+          <p className="text-[11px] text-muted-foreground">PDF, DOCX or MD · up to 25 MB each</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <FilesTab
+      systemId={systemId}
+      assessmentId={assessmentId}
+      questionKey={questionKey}
+      questionPosition={questionPosition}
+      files={files}
+    />
+  );
+}
+
+/** The "AI System Files" tab content (receives already-loaded files). */
+function FilesTab({
+  questionKey,
+  questionPosition,
+  files,
+}: {
+  systemId?: string;
+  assessmentId?: string;
+  questionKey?: string;
+  questionPosition: number | null;
+  files: AssessmentFile[];
+}) {
+  const [search, setSearch] = useState("");
+
+  // Sort: active-Q cited first → other cited (desc count) → uncited
+  const activeKey = questionKey;
+  const sorted = [...files].sort((a, b) => {
+    const aCitedHere = activeKey
+      ? a.citations.some((c) => c.question_key === activeKey)
+      : false;
+    const bCitedHere = activeKey
+      ? b.citations.some((c) => c.question_key === activeKey)
+      : false;
+    if (aCitedHere !== bCitedHere) return aCitedHere ? -1 : 1;
+    return b.citations.length - a.citations.length;
+  });
+
+  const q = search.toLowerCase().trim();
+  const filtered = q ? sorted.filter((f) => f.filename.toLowerCase().includes(q)) : sorted;
+
+  const citedHereCount = activeKey
+    ? files.filter((f) => f.citations.some((c) => c.question_key === activeKey)).length
+    : 0;
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* Files header */}
+      {activeKey && citedHereCount > 0 && questionPosition != null && (
+        <div className="px-6 pb-2 pt-3">
+          <p
+            className="flex items-center gap-1.5 text-xs font-semibold"
+            style={{ color: FILES_PURPLE }}
+          >
+            <Sparkles className="size-3.5 shrink-0" />
+            <span className="truncate">
+              {citedHereCount} file{citedHereCount !== 1 ? "s" : ""} used for Q{questionPosition}
+              {QUESTION_DEF_BY_ID[activeKey] && (
+                <span className="font-normal">
+                  {" · "}
+                  {QUESTION_DEF_BY_ID[activeKey].question}
+                </span>
+              )}
+            </span>
+          </p>
+        </div>
+      )}
+
+      {/* Search */}
+      <div className="px-6 pb-3 pt-3">
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5">
+          <Search className="size-3.5 shrink-0 text-muted-foreground" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search files…"
+            className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
+          />
+        </div>
+      </div>
+
+      {/* File cards */}
+      <div className="flex-1 space-y-2 overflow-y-auto px-6 pb-6">
+        {filtered.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-8 text-center">
+            <FileText className="size-8 text-muted-foreground/40" />
+            <div>
+              <p className="text-sm font-medium text-foreground">No files match "{search}"</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Try another term, or upload a document that covers this topic.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+            >
+              Clear search
+            </button>
+          </div>
+        ) : (
+          filtered.map((file) => {
+            const isThisQuestion = activeKey
+              ? file.citations.some((c) => c.question_key === activeKey)
+              : false;
+            const forceExpand = q.length > 0 && file.filename.toLowerCase().includes(q);
+            return (
+              <FileCard
+                key={file.version_id}
+                file={file}
+                isThisQuestion={isThisQuestion}
+                activeQuestionPos={questionPosition}
+                forceExpand={forceExpand}
+              />
+            );
+          })
+        )}
+
+        {/* Footer note + upload placeholder */}
+        <div className="mt-2 space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Files are indexed automatically. Upload a new version to re-check the answers that cite it.
+          </p>
+          <button
+            type="button"
+            disabled
+            title="Coming soon"
+            className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-lg border border-dashed border-border px-4 py-2 text-xs text-muted-foreground opacity-50"
+          >
+            <Upload className="size-3.5" />
+            Upload document
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
