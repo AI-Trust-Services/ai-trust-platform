@@ -596,7 +596,7 @@ function FileCard({
         <div className="border-t border-border px-3 pb-3 pt-2">
           {file.citations.length > 0 ? (
             <div className="mb-2 space-y-1.5">
-              {file.citations.map((c, i) => {
+              {[...file.citations].sort((a, b) => a.question_position - b.question_position).map((c, i) => {
                 const page = parsePageNumber(c.location);
                 const isActive = activeQuestionPos !== null && c.question_position === activeQuestionPos;
                 return (
@@ -617,7 +617,7 @@ function FileCard({
                         </span>
                       )}
                       <span className="truncate">
-                        Q{c.question_position}
+                        <span className="font-semibold">Q{c.question_position}</span>
                         {QUESTION_DEF_BY_ID[c.question_key] && (
                           <span className="font-normal text-muted-foreground">
                             {" · "}
