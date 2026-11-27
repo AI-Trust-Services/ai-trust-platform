@@ -1913,7 +1913,8 @@
       "type": "PREDEFINED",
       "allowedAnswers": [
         "YES",
-        "NO"
+        "NO",
+        "NOT_APPLICABLE"
       ],
       "appliesWhen": {
         "all": [
