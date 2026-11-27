@@ -25,8 +25,10 @@ for (const route of BAD_ROUTES) {
   test(`${route.name} shows the not-found page`, async ({ page }) => {
     await page.goto(`/${route.hash}`);
 
-    // Luigi redirects the unmapped route to the hidden not-found node.
-    await expect(page).toHaveURL(/#\/home\/not-found$/);
+    // Luigi redirects the unmapped route to the hidden not-found node. No end anchor: a future
+    // Luigi version could append a trailing slash or node/context params after a redirect, which
+    // would still be the right page — the frame assertions below confirm the actual content.
+    await expect(page).toHaveURL(/#\/home\/not-found/);
 
     // The page renders inside the Luigi content iframe.
     const frame = page.frameLocator('iframe[src*="not-found.html"]');
