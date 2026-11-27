@@ -68,6 +68,16 @@ def minio_store():
             raise KeyError(f"Object '{key}' not found")
         return store[key]
 
+    async def _list_latest_classification(system_id: str, config_id: str) -> object:
+        import os
+
+        config_id = os.path.basename(config_id)
+        prefix = f"classification-results/{system_id}/{config_id}/"
+        candidates = [k for k in store if k.startswith(prefix)]
+        if not candidates:
+            return None
+        return store[max(candidates)]
+
     with ExitStack() as stack:
         stack.enter_context(
             patch("app.minio_client.put_json", new=AsyncMock(side_effect=_put))
@@ -80,6 +90,12 @@ def minio_store():
                 "app.minio_client.get_presigned_url",
                 new_callable=AsyncMock,
                 return_value=_STUB_PRESIGNED,
+            )
+        )
+        stack.enter_context(
+            patch(
+                "app.minio_client.list_latest_classification",
+                new=AsyncMock(side_effect=_list_latest_classification),
             )
         )
         yield store
@@ -1780,3 +1796,81 @@ async def test_swagger_pipelines_match_what_the_assessment_start_ran(
         c.json()["result"]["skipped_labels"]
         == from_open_classification["skipped_labels"]
     )
+
+
+# ── regression: tier must not be silently downgraded on confirm ──────────────
+
+
+@pytest.mark.asyncio
+async def test_confirm_does_not_downgrade_high_risk_tier(
+    client: httpx.AsyncClient, minio_store: dict
+):
+    """Regression for the bug where confirm_question re-solved without passing
+    questionnaire_result to solve(), causing base_answers={} and HIGH_RISK rules
+    to evaluate False → tier silently downgraded to minimal.
+
+    Strategy: open a system (pipeline runs, writes questionnaire + classification to
+    minio_store); then overwrite the stored classification result with a HIGH_RISK
+    pipeline-result; change a question manually; confirm; assert tier is still 'high'.
+    """
+    from ai_trust_persistence.database import engine
+    from ai_trust_persistence.models.ai_system import AISystem
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    system_id = await _create_system(client)
+    await _open(client, system_id)
+
+    (q_key,) = _stored(minio_store, f"questionnaire-results/{system_id}/")
+    (c_key,) = _stored(minio_store, f"classification-results/{system_id}/")
+
+    # Overwrite classification result to look like a HIGH_RISK pipeline run.
+    minio_store[c_key] = {
+        "questionnaire_run_key": q_key,
+        "config_id": "risk_role_classification_config",
+        "config_version": "1.0.0",
+        "prompt_id": "risk_role_classification",
+        "classifications": [
+            {"labelId": "PROHIBITED", "result": False, "confidence": 20.0, "explanation": ""},
+            {"labelId": "HIGH_RISK", "result": True, "confidence": 92.0, "explanation": "High risk."},
+            {"labelId": "TRANSPARENCY", "result": False, "confidence": 30.0, "explanation": ""},
+            {"labelId": "PROVIDER", "result": True, "confidence": 88.0, "explanation": ""},
+            {"labelId": "DEPLOYER", "result": False, "confidence": 40.0, "explanation": ""},
+            {"labelId": "IMPORTER", "result": False, "confidence": 40.0, "explanation": ""},
+            {"labelId": "AUTHORISED_REPRESENTATIVE", "result": False, "confidence": 40.0, "explanation": ""},
+        ],
+        "skipped_labels": [],
+    }
+    # Also set tier=high on the row so the starting state is correct.
+    async with AsyncSession(engine) as s:
+        row = await s.get(AISystem, system_id)
+        row.tier = "high"
+        await s.commit()
+
+    # Manually change a question answer (triggers re-solve on confirm).
+    state = await client.get(
+        f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
+    )
+    assert state.status_code == 200
+    qkey = state.json()["questions"][0]["question_key"]
+
+    await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/answer",
+        json={"answer": "YES"},
+        headers=_hdr(_OWNER),
+    )
+    await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/comments",
+        json={"body": "Manual override for test."},
+        headers=_hdr(_OWNER),
+    )
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/confirm",
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+
+    async with AsyncSession(engine) as s:
+        row = await s.get(AISystem, system_id)
+        assert row.tier == "high", (
+            f"tier was downgraded to '{row.tier}' — re-solve lost the HIGH_RISK answers"
+        )

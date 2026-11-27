@@ -1,10 +1,8 @@
 """E2E tests for POST /v1/systems/{id}/classification/resolve.
 
 Uses ASGITransport — no running server needed.
-MinIO is patched at the minio_client level (list_latest_classification / get_json).
-hierarchy_solver.solve() is patched where it only needs a stub (stub tests) or
-invoked for real once the implementation exists (full tests use NotImplementedError
-as a skip signal — xfail via pytest.mark).
+MinIO is patched at app.hierarchy_solver.minio_client (the I/O wrapper module that
+both the /resolve router and confirm_question share via resolve_latest_for_system).
 """
 
 from __future__ import annotations
@@ -90,11 +88,11 @@ def _mock_minio(pipeline_result=None, questionnaire_result=None):
         else _QUESTIONNAIRE_RESULT
     )
     return patch(
-        "app.routers.hierarchy_solver.minio_client.list_latest_classification",
+        "app.hierarchy_solver.minio_client.list_latest_classification",
         new_callable=AsyncMock,
         return_value=pr,
     ), patch(
-        "app.routers.hierarchy_solver.minio_client.get_json",
+        "app.hierarchy_solver.minio_client.get_json",
         new_callable=AsyncMock,
         return_value=qr,
     )
@@ -117,7 +115,7 @@ async def test_resolve_unknown_system(client):
 async def test_resolve_no_classification_run(client):
     system_id = await _create_system(client)
     with patch(
-        "app.routers.hierarchy_solver.minio_client.list_latest_classification",
+        "app.hierarchy_solver.minio_client.list_latest_classification",
         new_callable=AsyncMock,
         return_value=None,
     ):

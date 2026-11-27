@@ -2,12 +2,17 @@
 
 Resolves a classification pipeline result to a single risk winner and a list of
 role labels, applying optional user overrides and computing confidence bands.
+
+The ``solve()`` function is pure.  ``resolve_latest_for_system()`` is the I/O
+wrapper used by both the /resolve router and the per-confirm re-solve in
+``confirm_question``; it owns the MinIO fetch so neither call-site duplicates it.
 """
 
 from __future__ import annotations
 
 import logging
 
+from app import minio_client
 from app.classification_config import DEFAULT_CLASSIFICATION_CONFIG_ID
 from app.llm.templates import load_questionnaire
 from app.questionnaire_tree import eval_label, get_question_ids_from_label
@@ -217,6 +222,46 @@ def solve(
     transparency = combined.get(_TRANSPARENCY_LABEL_ID)
 
     return ResolveResponse(risk=risk, transparency=transparency, roles=roles)
+
+
+# ---------------------------------------------------------------------------
+# I/O wrapper — used by /resolve router and confirm_question re-solve
+# ---------------------------------------------------------------------------
+
+
+async def resolve_latest_for_system(
+    system_id: str,
+    overrides: LabelOverrides | None,
+) -> ResolveResponse:
+    """Load the latest pipeline-2 result from MinIO and solve.
+
+    Loads the questionnaire result from MinIO only when ``overrides.answers`` is
+    non-empty (the base answer map is required for correct re-evaluation; without
+    it, answered labels outside the manual overrides would evaluate False and the
+    risk winner could silently fall through to MINIMAL).
+
+    Raises:
+        LookupError: no classification run exists yet for this system.
+        ValueError:  unknown label/question id or invalid riskWinner in overrides
+                     (caller should map to HTTP 422).
+    """
+    pipeline_result = await minio_client.list_latest_classification(
+        system_id, DEFAULT_CLASSIFICATION_CONFIG_ID
+    )
+    if pipeline_result is None:
+        raise LookupError(f"No classification run found for system '{system_id}'")
+
+    questionnaire_result: dict | None = None
+    if overrides and overrides.answers:
+        questionnaire_run_key = pipeline_result.get("questionnaire_run_key")
+        if not questionnaire_run_key:
+            raise LookupError(
+                f"Classification run for system '{system_id}' has no "
+                "questionnaire_run_key — cannot re-evaluate answers"
+            )
+        questionnaire_result = await minio_client.get_json(questionnaire_run_key)
+
+    return solve(pipeline_result, overrides, questionnaire_result)
 
 
 # ---------------------------------------------------------------------------

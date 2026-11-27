@@ -10,9 +10,7 @@ from __future__ import annotations
 from ai_trust_authorization.permissions import require_permission
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
-from app import minio_client
-from app.classification_config import DEFAULT_CLASSIFICATION_CONFIG_ID
-from app.hierarchy_solver import solve
+from app.hierarchy_solver import resolve_latest_for_system
 from app.schemas.hierarchy_solver import LabelOverrides, ResolveResponse
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -50,25 +48,9 @@ async def resolve_classification(
     if exists is None:
         raise HTTPException(404, f"AI system '{system_id}' not found")
 
-    pipeline_result = await minio_client.list_latest_classification(
-        system_id, DEFAULT_CLASSIFICATION_CONFIG_ID
-    )
-    if pipeline_result is None:
-        raise HTTPException(404, "No classification run found for this system")
-
-    # only load the questionnaire result when answers overrides are present — the solver
-    # needs the base answer map only for re-evaluation; labels/riskWinner don't need it
-    questionnaire_result = None
-    if body and body.answers:
-        questionnaire_run_key = pipeline_result.get("questionnaire_run_key")
-        if not questionnaire_run_key:
-            raise RuntimeError(
-                f"Classification run for system '{system_id}' has no questionnaire_run_key — "
-                "cannot re-evaluate answers without the questionnaire result."
-            )
-        questionnaire_result = await minio_client.get_json(questionnaire_run_key)
-
     try:
-        return solve(pipeline_result, body, questionnaire_result)
+        return await resolve_latest_for_system(system_id, body)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc

@@ -46,7 +46,12 @@ from app.dossier import (
     write_ai_output_in_session,
     write_output_layer_in_session,
 )
-from app.hierarchy_solver import label_to_tier, org_role_from_roles, solve
+from app.hierarchy_solver import (
+    label_to_tier,
+    org_role_from_roles,
+    resolve_latest_for_system,
+    solve,
+)
 from app.ids import new_id
 from app.llm import LLMParseError
 from app.questionnaire_gating import get_all_gated_question_ids, is_gated
@@ -1064,22 +1069,28 @@ async def confirm_question(
 
     # Re-solve with manual overrides so tier reflects the latest confirmed answers.
     # Runs outside the confirm session to keep the confirm txn minimal.
-    if row.classification_rationale:
-        async with SessionLocal() as resession:
-            all_states = await _states_by_key(resession, assessment.id)
-        manual_answers: dict[str, list[str]] = {}
-        for key, st in all_states.items():
-            if st.answer_source == "manual" and st.answer:
-                try:
-                    parsed = json.loads(st.answer)
-                    manual_answers[key] = (
-                        parsed if isinstance(parsed, list) else [st.answer]
-                    )
-                except Exception:
-                    manual_answers[key] = [st.answer]
-        if manual_answers:
-            overrides = LabelOverrides(answers=manual_answers)
-            result = solve(row.classification_rationale, overrides)
+    # Uses MinIO (same path as /resolve router) so the pipeline-result format is
+    # guaranteed — classification_rationale on the row can be an Intake-era shape.
+    async with SessionLocal() as resession:
+        all_states = await _states_by_key(resession, assessment.id)
+    manual_answers: dict[str, list[str]] = {}
+    for key, st in all_states.items():
+        if st.answer_source == "manual" and st.answer:
+            try:
+                parsed = json.loads(st.answer)
+                manual_answers[key] = (
+                    parsed if isinstance(parsed, list) else [st.answer]
+                )
+            except Exception:
+                manual_answers[key] = [st.answer]
+    if manual_answers:
+        try:
+            result = await resolve_latest_for_system(
+                system_id, LabelOverrides(answers=manual_answers)
+            )
+        except LookupError:
+            pass  # no pipeline run yet — skip re-solve, tier stays as-is
+        else:
             tier = label_to_tier(result.risk.label_id)
             org_role = org_role_from_roles(result.roles)
             async with SessionLocal() as session:
