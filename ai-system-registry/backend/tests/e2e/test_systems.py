@@ -187,7 +187,7 @@ async def test_update_system_lifecycle(client: httpx.AsyncClient):
 
 async def test_list_systems_returns_registered_system(client: httpx.AsyncClient):
     await _create_system(client)
-    r = await client.get("/v1/systems")
+    r = await client.get("/v1/systems", headers=_HEADERS)
     assert r.status_code == 200
     systems = r.json()
     assert len(systems) == 1
@@ -197,7 +197,7 @@ async def test_list_systems_returns_registered_system(client: httpx.AsyncClient)
 async def test_list_systems_pagination(client: httpx.AsyncClient):
     for i in range(3):
         await _create_system(client, {"name": f"System {i}"})
-    r = await client.get("/v1/systems?limit=2&offset=0")
+    r = await client.get("/v1/systems?limit=2&offset=0", headers=_HEADERS)
     assert r.status_code == 200
     assert len(r.json()) == 2
 
