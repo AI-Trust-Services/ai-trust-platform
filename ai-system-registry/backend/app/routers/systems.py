@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 import httpx
 from ai_trust_authorization import (
@@ -262,7 +262,7 @@ async def update_system(
 
         for field, value in updates.items():
             setattr(row, field, value)
-        row.updated_at = datetime.now(timezone.utc)
+        row.updated_at = datetime.now(UTC)
 
         if flag_updates:
             classification = classify(row)
@@ -338,7 +338,7 @@ async def reclassify_system(system_id: str, request: Request) -> IntakeResponse:
         row.tier = classification.tier
         row.basis = classification.basis
         row.annex_iii_area = classification.annex_iii_area
-        row.updated_at = datetime.now(timezone.utc)
+        row.updated_at = datetime.now(UTC)
 
         log_audit_event(
             session,
@@ -523,7 +523,7 @@ async def patch_questionnaire_answers(
         else:
             answers.update(body.answers)
         row.questionnaire_answers = answers
-        row.updated_at = datetime.now(timezone.utc)
+        row.updated_at = datetime.now(UTC)
         await session.commit()
         await session.refresh(row)
 
@@ -596,11 +596,11 @@ async def upload_registration_document(
                 RegistrationDocument(
                     filename=filename,
                     minio_key=key,
-                    uploaded_at=datetime.now(timezone.utc),
+                    uploaded_at=datetime.now(UTC),
                 ).model_dump(mode="json")
             )
             row.registration_documents = docs
-            row.updated_at = datetime.now(timezone.utc)
+            row.updated_at = datetime.now(UTC)
             await session.commit()
             await session.refresh(row)
         except Exception:

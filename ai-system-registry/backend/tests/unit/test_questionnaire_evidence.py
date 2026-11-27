@@ -13,7 +13,6 @@ from __future__ import annotations
 from datetime import date
 
 from ai_trust_persistence.models.ai_system import AISystem
-
 from app.questionnaire_pipeline import _system_evidence
 
 # Columns that must never appear, with the value a real row would carry. The ORM

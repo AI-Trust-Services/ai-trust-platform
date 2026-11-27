@@ -23,66 +23,30 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from functools import partial
 from pathlib import Path
 from typing import Any
 
 from ai_trust_logging import get_logger
-
+from app import minio_client
+from app.classification_config import (
+    DEFAULT_CLASSIFICATION_CONFIG_ID,
+    DEFAULT_CLASSIFICATION_PROMPT_ID,
+)
 from app.llm.client import RuntimeConfig, chat
 from app.llm.parsing import LLMParseError, parse_with_retry
-from app.llm.templates import load_template, load_questionnaire
+from app.llm.templates import load_questionnaire, load_template
 from app.llm.validators import validate_answer_entries, validate_classification_label
-from app import minio_client
+from app.questionnaire_tree import collect_question_ids, get_question_ids_from_label
 
 logger = get_logger(__name__)
 
-# Template IDs use the subfolder prefix supported by the loader. Shared by every
-# caller so an empty-body request runs exactly what the assessment runs.
-DEFAULT_CLASSIFICATION_PROMPT_ID = "risk_classification/risk_role_classification"
-DEFAULT_CLASSIFICATION_CONFIG_ID = "risk_classification/risk_role_classification_config"
-
-_CLASSIFICATION_MAX_TOKENS = int(os.environ.get("CLASSIFICATION_MAX_TOKENS", "2048"))
+_CLASSIFICATION_MAX_TOKENS = int(os.environ.get("CLASSIFICATION_MAX_TOKENS", "8192"))
 
 
 class InvalidRunKeyError(ValueError):
     """The questionnaire run key does not belong to the system being classified."""
-
-
-# ---------------------------------------------------------------------------
-# Question-id collection (recursive rule-tree walk)
-# ---------------------------------------------------------------------------
-
-
-def _collect_question_ids(node: Any) -> set[str]:
-    """Recursively walk a label rule's ``when`` tree and collect all questionId values."""
-    if isinstance(node, list):
-        ids: set[str] = set()
-        for item in node:
-            ids |= _collect_question_ids(item)
-        return ids
-    if isinstance(node, dict):
-        if "questionId" in node:
-            return {node["questionId"]}
-        ids = set()
-        for value in node.values():
-            ids |= _collect_question_ids(value)
-        return ids
-    return set()
-
-
-def _label_question_ids(label: dict) -> set[str]:
-    """Collect all questionIds referenced by any rule in a label."""
-    ids: set[str] = set()
-    for rule in label.get("rules", []):
-        ids |= _collect_question_ids(rule.get("when", {}))
-    return ids
-
-
-# ---------------------------------------------------------------------------
-# Questionnaire data scoping
-# ---------------------------------------------------------------------------
 
 
 def _scope_questionnaire_data(
@@ -233,7 +197,7 @@ async def run_classification(
     runnable: list[tuple[dict, list[dict]]] = []
     skipped: list[dict] = []
     for label in active_labels:
-        question_ids = _label_question_ids(label)
+        question_ids = get_question_ids_from_label(label)
         scoped = _scope_questionnaire_data(questionnaire_results, question_ids)
         missing = sorted(question_ids - {r.get("questionId") for r in scoped})
         if missing:
@@ -301,7 +265,7 @@ async def run_classification(
     }
 
     # 6. Persist to MinIO.
-    timestamp = datetime.now(timezone.utc)
+    timestamp = datetime.now(UTC)
     iso = timestamp.strftime("%Y-%m-%dT%H-%M-%S-%fZ")
     run_key = f"classification-results/{system_id}/{config_id_short}/{iso}.json"
     await minio_client.put_json(run_key, result)

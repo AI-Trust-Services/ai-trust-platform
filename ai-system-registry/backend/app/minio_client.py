@@ -20,10 +20,9 @@ import re
 from datetime import timedelta
 from typing import Any
 
+from ai_trust_logging import get_logger
 from minio import Minio
 from minio.error import S3Error
-
-from ai_trust_logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -170,3 +169,31 @@ async def delete_file(key: str) -> None:
         logger.info("minio.file_deleted", extra={"key": key})
     except Exception as e:  # noqa: BLE001 — deletion is best-effort
         logger.warning("minio.file_delete_failed", extra={"key": key, "error": str(e)})
+
+
+def _list_latest_classification_sync(system_id: str, config_id: str) -> Any:
+    # writer stores under the config id's basename (classification_pipeline.config_id_short);
+    # mirror that here so a nested config id ("risk_classification/foo") still matches.
+    config_id = os.path.basename(config_id)
+    prefix = f"classification-results/{system_id}/{config_id}/"
+    objects = list(_get_client().list_objects(BUCKET, prefix=prefix))
+    if not objects:
+        return None
+    # ISO timestamp suffix sorts lexicographically — max object_name == newest run.
+    latest = max(objects, key=lambda o: o.object_name)
+    return json.loads(_get_json_sync(latest.object_name))
+
+
+async def list_latest_classification(system_id: str, config_id: str) -> Any:
+    """Return the parsed JSON of the most recent classification run for this system+config.
+
+    Returns ``None`` when no run exists yet (caller maps to 404).
+    """
+    try:
+        return await asyncio.to_thread(
+            _list_latest_classification_sync, system_id, config_id
+        )
+    except S3Error as exc:
+        if exc.code in ("NoSuchKey", "NoSuchBucket"):
+            return None
+        raise

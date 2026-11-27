@@ -110,25 +110,33 @@ def _fetch_ai_output(system_id: str) -> dict | None:
 
 @pytest.fixture(autouse=True)
 def _stub_pipeline_minio():
-    """Patch the pipeline's MinIO upload (same as test_assessment.py) so /open's
-    background pipeline runs without a live MinIO."""
+    """In-memory stand-in for MinIO, active for every test in this module.
+
+    The questionnaire pipeline saves its result, the classification pipeline
+    reads it back and saves its own, and the solver reads that — /open runs the
+    whole chain. A write-only stub would leave the read-backs empty, so this
+    patches the ``minio_client`` JSON helpers with a round-trip dict store
+    (mirrors ``minio_store`` in test_assessment.py)."""
+    store: dict[str, object] = {}
+
+    async def _put(key: str, obj: object) -> None:
+        store[key] = obj
+
+    async def _get(key: str) -> object:
+        if key not in store:
+            raise KeyError(f"Object '{key}' not found")
+        return store[key]
+
     with ExitStack() as stack:
         stack.enter_context(
-            patch(
-                "app.questionnaire_pipeline.minio_client.ensure_bucket",
-                new_callable=AsyncMock,
-            )
+            patch("app.minio_client.put_json", new=AsyncMock(side_effect=_put))
+        )
+        stack.enter_context(
+            patch("app.minio_client.get_json", new=AsyncMock(side_effect=_get))
         )
         stack.enter_context(
             patch(
-                "app.questionnaire_pipeline.asyncio.to_thread",
-                new_callable=AsyncMock,
-                return_value=None,
-            )
-        )
-        stack.enter_context(
-            patch(
-                "app.questionnaire_pipeline.minio_client.get_presigned_url",
+                "app.minio_client.get_presigned_url",
                 new_callable=AsyncMock,
                 return_value="http://minio:9000/stub.json?sig=stub",
             )

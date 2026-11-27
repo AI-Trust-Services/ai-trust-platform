@@ -12,7 +12,7 @@ its transaction (``async with SessionLocal()``), per the repo convention.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from typing import Any
 
 from ai_trust_authorization import require_permission
@@ -41,12 +41,17 @@ from app.assessment_catalogue import (
     QUESTION_TYPES,
 )
 from app.assessment_prefill_pipeline import run_assessment_prefill_pipeline
-from app.classifier import classify_ai_questionnaire
 from app.dossier import (
     build_co_issued_bundle,
     create_dossier_in_session,
     write_ai_output_in_session,
     write_output_layer_in_session,
+)
+from app.hierarchy_solver import (
+    label_to_tier,
+    org_role_from_roles,
+    resolve_latest_for_system,
+    solve,
 )
 from app.ids import new_id
 from app.llm import LLMParseError
@@ -70,6 +75,7 @@ from app.schemas.assessment import (
     SubmitRequest,
     _validate_question_key,
 )
+from app.schemas.hierarchy_solver import LabelOverrides
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 
@@ -234,9 +240,11 @@ def _confirmed_answers(states: dict[str, QuestionState]) -> list[dict[str, Any]]
         }
         for key, st in sorted(
             states.items(),
-            key=lambda kv: ASSESSMENT_QUESTION_KEYS.index(kv[0])
-            if kv[0] in ASSESSMENT_QUESTION_KEYS
-            else 9999,
+            key=lambda kv: (
+                ASSESSMENT_QUESTION_KEYS.index(kv[0])
+                if kv[0] in ASSESSMENT_QUESTION_KEYS
+                else 9999
+            ),
         )
     ]
 
@@ -480,14 +488,22 @@ async def _run_prefill_background(
     * ``_on_batch`` — after each questionnaire batch, write its answers into the
       existing ``question_states`` so the frontend sees them while polling
       ``GET /state``.
-    * ``_finalize_tier`` — once the questionnaire is done (concurrently with the
-      label classification), derive the tier, ``org_role`` and sources and clear
-      ``assessment.llm_status`` in one transaction.
+    * ``_on_questionnaire_done`` — once the questionnaire step is done (concurrently
+      with the classification run), persist ``assessment_sources`` and clear
+      ``assessment.llm_status`` so the UI shows answers immediately. No tier write.
+    * ``_on_classification_done`` — after both the classification run and
+      ``_on_questionnaire_done`` complete, call the hierarchy solver to derive
+      ``row.tier`` / ``org_role`` and freeze the dossier ``ai`` layer.
 
-    A failure of the questionnaire run or of ``_finalize_tier`` sets
-    ``llm_status="failed"`` (the frontend's retry banner); a failure of the label
-    classification is only logged by the pipeline (its output is not shown yet).
+    A failure of the questionnaire run, ``_on_questionnaire_done``, or
+    ``_on_classification_done`` sets ``llm_status="failed"`` (the frontend's retry
+    banner). A step-2 (classification) failure also sets ``llm_status="failed"``
+    (the owner retries via ``/open``).
     """
+
+    # Shared state: populated by _on_questionnaire_done, consumed by _on_classification_done.
+    # Safe: on_classification_done only runs after on_questionnaire_done completes.
+    _shared: dict = {}
 
     async def _on_batch(batch_results: list) -> None:
         """Persist one batch's answers into the existing question_states rows.
@@ -526,67 +542,62 @@ async def _run_prefill_background(
                 },
             )
 
-    async def _finalize_tier(questionnaire_output: dict) -> None:
-        """Tier step: classify from the persisted answers, then clear llm_status.
-
-        Raises on a classifier failure so the surrounding handler marks the
-        prefill failed (nothing is written, the next ``/open`` retries).
-        """
-        proposals = _proposals_from_results(
-            (questionnaire_output.get("result") or {}).get("results") or []
-        )
+    async def _on_questionnaire_done(questionnaire_output: dict) -> None:
+        """Persist assessment_sources. llm_status stays pending until classification done."""
+        results = (questionnaire_output.get("result") or {}).get("results") or []
+        proposals = _proposals_from_results(results)
+        _shared["results"] = results
+        _shared["consumed"] = questionnaire_output.get("consumed")
+        _shared["provider"] = questionnaire_output.get("provider")
+        _shared["sources"] = [
+            s.model_dump() for s in _sources_from_proposals(proposals)
+        ]
         async with SessionLocal() as session:
             row = await _get_system(session, system_id)
-            try:
-                classification, rationale = await classify_ai_questionnaire(row)
-            except Exception as exc:
-                logger.error("assessment.classify_failed", extra={"error": str(exc)})
-                raise
-            row.tier = classification.tier
-            row.basis = classification.basis
-            row.annex_iii_area = classification.annex_iii_area
-            row.classification_rationale = rationale
-            if rationale.get("org_role"):
-                row.org_role = rationale["org_role"]
-            row.assessment_sources = [
-                s.model_dump() for s in _sources_from_proposals(proposals)
-            ]
-            assessment = await _current_assessment(session, system_id)
-            if assessment:
-                # A completed run that ran on the offline stub produced no real
-                # analysis (every answer is NOT_ENOUGH_INFORMATION). Mark it
-                # "stub" instead of clearing so the UI can warn the owner to
-                # contact an admin; a real run clears to None as before.
-                provider = questionnaire_output.get("provider") or {}
-                assessment.llm_status = "stub" if provider.get("stub") else None
+            row.assessment_sources = _shared["sources"]
             await session.commit()
-            logger.info(
-                "assessment.prefill_completed",
-                extra={"system_id": system_id, "tier": row.tier},
-            )
+        logger.info(
+            "assessment.prefill_questionnaire_done",
+            extra={"system_id": system_id, "assessment_id": assessment_id},
+        )
 
-        # #366: freeze the AI output layer (per-question answers + proposed
-        # classification) into the dossier. Separate txn + own error handling so
-        # this append-only, write-once side-effect can never roll back the
-        # classification result committed above.
+    async def _on_classification_done(classification_output: dict) -> None:
+        """Tier step: solve the classification result, persist tier/org_role."""
+        result = solve(classification_output["result"], overrides=None)
+        tier = label_to_tier(result.risk.label_id)
+        org_role = org_role_from_roles(result.roles)
+        basis = result.risk.explanation or tier
+        async with SessionLocal() as session:
+            row = await _get_system(session, system_id)
+            row.tier = tier
+            if org_role is not None:
+                row.org_role = org_role
+            row.basis = basis
+            row.annex_iii_area = None
+            row.classification_rationale = classification_output["result"]
+            await session.commit()
+        logger.info(
+            "assessment.prefill_completed",
+            extra={"system_id": system_id, "tier": tier},
+        )
+        # #366: freeze the AI output layer. Separate txn + own error handling so
+        # this append-only, write-once side-effect never rolls back the tier commit.
         try:
             async with SessionLocal() as session:
                 await write_ai_output_in_session(
                     session,
                     assessment_id,
-                    (questionnaire_output.get("result") or {}).get("results") or [],
+                    _shared.get("results", []),
                     {
-                        "tier": classification.tier,
-                        "basis": classification.basis,
-                        "annex_iii_area": classification.annex_iii_area,
-                        "org_role": rationale.get("org_role"),
-                        "rationale": rationale,
-                        "assessment_sources": [
-                            s.model_dump() for s in _sources_from_proposals(proposals)
-                        ],
+                        "tier": tier,
+                        "basis": basis,
+                        "annex_iii_area": None,
+                        "org_role": org_role,
+                        "solver_result": result.model_dump(),
+                        "assessment_sources": _shared.get("sources", []),
                     },
-                    consumed=questionnaire_output.get("consumed"),
-                    provider=questionnaire_output.get("provider"),
+                    consumed=_shared.get("consumed"),
+                    provider=_shared.get("provider"),
                 )
                 await session.commit()
         except Exception as exc:  # noqa: BLE001
@@ -616,13 +627,32 @@ async def _run_prefill_background(
                 ids = [d["version_id"] for d in docs if d.get("version_id")]
                 version_ids = ids or None
 
-        await run_assessment_prefill_pipeline(
+        out = await run_assessment_prefill_pipeline(
             system_id,
             username,
             batch_callback=_on_batch,
-            on_questionnaire_done=_finalize_tier,
+            on_questionnaire_done=_on_questionnaire_done,
+            on_classification_done=_on_classification_done,
             version_ids=version_ids,
         )
+        if out.classification_error is not None:
+            logger.warning(
+                "assessment.prefill_classification_failed",
+                extra={"system_id": system_id, "error": str(out.classification_error)},
+            )
+            async with SessionLocal() as session:
+                assessment = await _current_assessment(session, system_id)
+                if assessment:
+                    assessment.llm_status = "failed"
+                await session.commit()
+        else:
+            provider = _shared.get("provider") or {}
+            final_status = "stub" if provider.get("stub") else None
+            async with SessionLocal() as session:
+                assessment = await _current_assessment(session, system_id)
+                if assessment:
+                    assessment.llm_status = final_status
+                await session.commit()
     except Exception as exc:  # noqa: BLE001
         logger.error(
             "assessment.prefill_background_failed",
@@ -662,13 +692,7 @@ async def open_assessment(
         assessment = await _ensure_assessment(session, row)
         existing = await _states_by_key(session, assessment.id)
         if existing:
-            # Retry after a background failure OR a stub run: clear llm_status and
-            # re-schedule. "stub" means the cycle was never really analysed (no live
-            # LLM at the time), so re-opening once a provider is configured must
-            # re-run the prefill — same rationale as "failed". Without this a stub
-            # cycle is a dead-end (stuck on the "contact admin" banner) even after a
-            # provider is activated; the only escape would be starting a new cycle.
-            if assessment.llm_status in ("failed", "stub"):
+            if assessment.llm_status in ("failed", "pending", "stub"):
                 assessment.llm_status = "pending"
                 await session.commit()
                 background_tasks.add_task(
@@ -902,15 +926,6 @@ async def _build_state(
     co_transparency = (
         assessment.co_issued_transparency if snap else row.co_issued_transparency
     )
-    # Transparency obligation also derives from the chatbot / synthetic-content
-    # flags; read the frozen snapshot for a historical cycle so a later edit to
-    # the live system row doesn't rewrite what the cycle was approved at.
-    is_chatbot = assessment.is_chatbot if snap else row.is_chatbot
-    gen_synthetic = (
-        assessment.generates_synthetic_content
-        if snap
-        else row.generates_synthetic_content
-    )
     rationale = (
         assessment.classification_rationale if snap else row.classification_rationale
     ) or {}
@@ -954,8 +969,7 @@ async def _build_state(
         basis=basis,
         org_role=org_role,
         reasoning=rationale.get("reasoning"),
-        transparency=tier == "high"
-        and bool(co_transparency or is_chatbot or gen_synthetic),
+        transparency=bool(co_transparency),
         confidence_counts=conf,
         attention_count=attention,
         # No flag→question mapping exists for the ai-questionnaire.json ids, so the
@@ -1152,10 +1166,45 @@ async def confirm_question(
                     "A comment explaining the change is required before confirming",
                 )
 
-        state.confirmed_at = datetime.now(timezone.utc)
+        state.confirmed_at = datetime.now(UTC)
         state.confirmed_by = user
         await session.commit()
-        return ConfirmResponse(question_key=question_key, confirmed=True)
+
+    # Re-solve with manual overrides so tier reflects the latest confirmed answers.
+    # Runs outside the confirm session to keep the confirm txn minimal.
+    # Uses MinIO (same path as /resolve router) so the pipeline-result format is
+    # guaranteed — classification_rationale on the row can be an Intake-era shape.
+    async with SessionLocal() as resession:
+        all_states = await _states_by_key(resession, assessment.id)
+    manual_answers: dict[str, list[str]] = {}
+    for key, st in all_states.items():
+        if st.answer_source == "manual" and st.answer:
+            try:
+                parsed = json.loads(st.answer)
+                manual_answers[key] = (
+                    parsed if isinstance(parsed, list) else [st.answer]
+                )
+            except Exception:
+                manual_answers[key] = [st.answer]
+    if manual_answers:
+        try:
+            result = await resolve_latest_for_system(
+                system_id, LabelOverrides(answers=manual_answers)
+            )
+        except LookupError:
+            pass  # no pipeline run yet — skip re-solve, tier stays as-is
+        else:
+            tier = label_to_tier(result.risk.label_id)
+            org_role = org_role_from_roles(result.roles)
+            async with SessionLocal() as session:
+                row = await _get_system(session, system_id)
+                row.tier = tier
+                if org_role is not None:
+                    row.org_role = org_role
+                row.basis = result.risk.explanation or tier
+                await session.commit()
+
+    return ConfirmResponse(question_key=question_key, confirmed=True)
 
 
 @router.post(
@@ -1314,7 +1363,7 @@ async def delete_comment(
             raise HTTPException(404, "Comment not found")
         if user != comment.author_username and user != _system_owner(row):
             raise HTTPException(403, "You may only delete your own comments")
-        comment.deleted_at = datetime.now(timezone.utc)
+        comment.deleted_at = datetime.now(UTC)
         await session.commit()
 
 
@@ -1364,7 +1413,7 @@ async def assign_question(
             session.add(state)
         state.assignee_username = body.assignee_username
         state.assigned_by_username = user
-        state.assigned_at = datetime.now(timezone.utc)
+        state.assigned_at = datetime.now(UTC)
         system_name = row.name
         await session.commit()
         count = (await _comment_counts(session, assessment.id)).get(question_key, 0)
@@ -1563,12 +1612,12 @@ async def issue_classification(
     _: str = Depends(require_permission(SYSTEMS_APPROVE)),
 ):
     """CO issues the final, binding risk classification. Only from pending_review;
-    the result is immutable. The only allowed tier combo is high + transparency."""
+    the result is immutable."""
     user = _current_user(request)
-    # Enforce the combo rule: transparency may only accompany 'high'.
-    if body.transparency and body.tier != "high":
+    # Transparency may accompany any tier except prohibited.
+    if body.transparency and body.tier == "prohibited":
         raise HTTPException(
-            422, "Transparency obligations may only be issued alongside 'high' risk"
+            422, "Transparency obligations cannot be issued alongside 'prohibited' risk"
         )
     if not body.confirmed:
         raise HTTPException(422, "The confirmation checkbox must be ticked to issue")
@@ -1624,7 +1673,8 @@ async def issue_classification(
             # created iff the commit succeeds, and never persisted on failure.
             # Idempotent — skip if obligations already exist (a reject→resubmit→
             # re-issue cycle must not duplicate). minimal/GPAI/prohibited tiers
-            # yield no obligations (obligations_for returns []), so this is a no-op.
+            # with no transparency flag yield no obligations (no-op); minimal/GPAI
+            # with transparency=True yield the Art. 50 chain (P-LIM/D-LIM).
             existing_obligations = (
                 await session.execute(
                     select(func.count())
@@ -1820,7 +1870,7 @@ async def start_new_assessment(
             return await open_assessment(system_id, request, background_tasks)
         # Archive the approved cycle (frozen; its states/comments stay attached).
         current.status = "inactive"
-        current.updated_at = datetime.now(timezone.utc)
+        current.updated_at = datetime.now(UTC)
         # Reset the live classification so the fresh cycle re-prefills from scratch.
         # Mirror compliance /historicize (tier=pending, workflow=draft); the other
         # fields are reset to their column defaults — basis is NOT NULL (""),

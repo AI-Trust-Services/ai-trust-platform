@@ -15,9 +15,9 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from app.assessment_catalogue import ASSESSMENT_QUESTION_KEYS
 from app.llm.parsing import LLMParseError
+from app.llm.templates import load_questionnaire
 from app.questionnaire_pipeline import (
     DEFAULT_QUESTIONNAIRE_ID,
     DEFAULT_QUESTIONNAIRE_PROMPT_ID,
@@ -26,7 +26,6 @@ from app.questionnaire_pipeline import (
     _strip_display_fields,
     run_questionnaire_pipeline,
 )
-from app.llm.templates import load_questionnaire
 
 _SYSTEM = "SYS-UNIT0001"
 
@@ -196,14 +195,16 @@ async def test_failed_batch_is_skipped_and_others_still_succeed():
 
 
 async def test_no_valid_batch_raises_and_stores_nothing():
-    with _env() as put_json:
-        with patch(
+    with (
+        _env() as put_json,
+        patch(
             "app.questionnaire_pipeline.parse_with_retry",
             new_callable=AsyncMock,
             side_effect=LLMParseError("simulated batch failure"),
-        ):
-            with pytest.raises(LLMParseError, match="no questionnaire batch produced"):
-                await _run()
+        ),
+        pytest.raises(LLMParseError, match="no questionnaire batch produced"),
+    ):
+        await _run()
     put_json.assert_not_awaited()
 
 
@@ -220,9 +221,8 @@ async def test_callback_failure_counts_as_a_failed_batch():
 
 
 async def test_unknown_system_raises_key_error():
-    with _env(row=False):
-        with pytest.raises(KeyError, match="not found"):
-            await _run()
+    with _env(row=False), pytest.raises(KeyError, match="not found"):
+        await _run()
 
 
 # ---------------------------------------------------------------------------

@@ -3,7 +3,7 @@ is loaded correctly and the expected constants are populated."""
 
 from __future__ import annotations
 
-from app.questionnaire_required import VALID_QUESTION_KEYS, QUESTION_LABEL
+from app.questionnaire_required import QUESTION_LABEL, VALID_QUESTION_KEYS
 
 
 def test_valid_question_keys_non_empty():

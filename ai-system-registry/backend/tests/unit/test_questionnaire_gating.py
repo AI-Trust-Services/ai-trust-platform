@@ -11,14 +11,12 @@ Tests cover:
 import json
 
 import pytest
-
 from app.questionnaire_gating import (
     QUESTIONS_WITH_GATE,
     evaluate_applies_when,
     get_all_gated_question_ids,
     is_gated,
 )
-
 
 # ---------------------------------------------------------------------------
 # evaluate_applies_when

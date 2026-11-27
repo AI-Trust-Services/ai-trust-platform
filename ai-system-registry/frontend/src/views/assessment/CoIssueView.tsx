@@ -1,54 +1,56 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ChevronLeft, Save, XCircle } from "lucide-react";
 import { useAssessment } from "./AssessmentApp";
 import { ORDERED_QUESTION_KEYS } from "./AssessmentSidebar";
 import { api } from "../../api/client";
-import { TIER_META } from "../../utils";
-import { orgRoleLabel } from "../../constants/orgRoles";
 import { cn } from "@/lib/utils";
+import { SolverPanel } from "./SolverPanel";
+
+function mapLabelToTier(labelId: string | undefined): string {
+  if (labelId === "HIGH_RISK") return "high";
+  if (labelId === "PROHIBITED") return "prohibited";
+  if (labelId === "MINIMAL") return "minimal";
+  return "";
+}
 
 // Tiers the CO may issue (the dropdown options). gpai-* are not CO-issuable.
 const ISSUABLE: { value: string; label: string }[] = [
   { value: "minimal", label: "Minimal or no risk" },
-  { value: "limited", label: "Transparency obligations" },
   { value: "high", label: "High-risk" },
   { value: "prohibited", label: "Prohibited practice" },
 ];
-
-const PRELIM_TABS = [
-  { key: "minimal", label: "Minimal or no risk" },
-  { key: "limited", label: "Transparency Obligations" },
-  { key: "high", label: "High-risk" },
-  { key: "prohibited", label: "Prohibited practice" },
-];
-
-function activeTab(tier: string): string {
-  if (tier === "prohibited") return "prohibited";
-  if (tier === "high" || tier.startsWith("gpai")) return "high";
-  if (tier === "limited") return "limited";
-  return "minimal";
-}
 
 /** #348 — Compliance Officer "Issue a Risk Classification" end view. */
 export default function CoIssueView() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { state } = useAssessment();
+  const { solverResult } = useAssessment();
 
   const [tier, setTier] = useState<string>("");
+  const [coTouched, setCoTouched] = useState(false);
   const [transparency, setTransparency] = useState(false);
+
+  // Prefill the dropdown from the solver once it arrives — but only if the CO
+  // hasn't manually selected a tier yet. Once-Initializer can't do this because
+  // solverResult is usually null at mount (async fetch hasn't landed yet).
+  useEffect(() => {
+    if (coTouched || !solverResult) return;
+    const derived = mapLabelToTier(solverResult.risk.labelId);
+    if (derived) setTier(derived);
+    // Transparency is orthogonal to the risk tier — mirror the solver's
+    // TRANSPARENCY label into the checkbox (null = not assessed → leave off).
+    setTransparency(solverResult.transparency?.result ?? false);
+  }, [solverResult, coTouched]);
   const [note, setNote] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const lastQuestionKey = ORDERED_QUESTION_KEYS[ORDERED_QUESTION_KEYS.length - 1];
-  const prelimLabel = TIER_META[state.tier]?.label ?? state.tier;
-  const active = activeTab(state.tier);
 
-  // Transparency companion is only valid alongside 'high'.
-  const transparencyAllowed = tier === "high";
+  // Transparency is allowed for all tiers except prohibited.
+  const transparencyAllowed = tier !== "" && tier !== "prohibited";
 
   const issueEnabled = !busy && !!tier && confirmed;
   const rejectEnabled = !busy && note.trim().length > 0;
@@ -95,44 +97,9 @@ export default function CoIssueView() {
         contributors of this AI System.
       </p>
 
-      {/* Preliminary (AI-generated) classification — display only */}
-      <div className="mt-6 rounded-xl border border-border bg-card p-6">
-        <div className="flex items-start justify-between">
-          <span className="rounded-full bg-[#eaecee] px-3 py-1 text-xs font-medium text-[#556b82]">
-            AI-generated · not final
-          </span>
-          {state.org_role && (
-            <span className="text-sm text-muted-foreground">
-              Role: <span className="text-foreground">{orgRoleLabel(state.org_role)}</span>
-            </span>
-          )}
-        </div>
-        <h2 className="mt-4 text-xl font-bold">
-          Preliminary Risk Classification: <span className="text-[#8b3a00]">{prelimLabel}</span>
-        </h2>
-        <div className="mt-4 grid grid-cols-4 gap-2">
-          {PRELIM_TABS.map((t) => (
-            <div
-              key={t.key}
-              className={cn(
-                "rounded-md border px-3 py-2 text-center text-sm",
-                t.key === active
-                  ? "border-[#1147E9] font-semibold text-[#1147E9]"
-                  : "border-border text-muted-foreground",
-              )}
-            >
-              {t.label}
-            </div>
-          ))}
-        </div>
-        {state.source_documents.length > 0 && (
-          <p className="mt-4 text-sm text-muted-foreground">
-            Based on:{" "}
-            {state.source_documents
-              .map((d) => (d.page != null ? `${d.name} (p. ${d.page})` : d.name))
-              .join(", ")}
-          </p>
-        )}
+      {/* Solver result — read-only for the CO */}
+      <div className="mt-6">
+        <SolverPanel solverResult={solverResult} />
       </div>
 
       {/* CO classification panel */}
@@ -145,8 +112,9 @@ export default function CoIssueView() {
           className="mt-2 w-full max-w-sm rounded-md border border-border p-2 text-sm"
           value={tier}
           onChange={(e) => {
+            setCoTouched(true);
             setTier(e.target.value);
-            if (e.target.value !== "high") setTransparency(false);
+            if (e.target.value === "prohibited") setTransparency(false);
           }}
         >
           <option value="">No risk classification</option>
@@ -156,13 +124,16 @@ export default function CoIssueView() {
             </option>
           ))}
         </select>
-        {/* The only allowed combo: high + transparency */}
+        {/* Transparency obligations (Art. 50) — allowed for all tiers except prohibited */}
         {transparencyAllowed && (
           <label className="mt-3 flex items-center gap-2 text-sm">
             <input
               type="checkbox"
               checked={transparency}
-              onChange={(e) => setTransparency(e.target.checked)}
+              onChange={(e) => {
+                setCoTouched(true);
+                setTransparency(e.target.checked);
+              }}
             />
             <span>Also issue transparency obligations (Art. 50)</span>
           </label>

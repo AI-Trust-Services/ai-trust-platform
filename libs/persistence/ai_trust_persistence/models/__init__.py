@@ -1,6 +1,4 @@
 from ai_trust_persistence.models.ai_system import AISystem
-from ai_trust_persistence.models.branding import Branding
-from ai_trust_persistence.models.platform_settings import PlatformSettings
 from ai_trust_persistence.models.ai_system_model_card import AISystemModelCard
 from ai_trust_persistence.models.alert_rule import AlertRule
 from ai_trust_persistence.models.assessment import Assessment
@@ -9,7 +7,7 @@ from ai_trust_persistence.models.assessment_dossier import (
     AssessmentDossierOutput,
 )
 from ai_trust_persistence.models.audit_event import AuditEvent
-from ai_trust_persistence.models.requirement import Requirement
+from ai_trust_persistence.models.branding import Branding
 from ai_trust_persistence.models.custom_role import CustomRole
 from ai_trust_persistence.models.document import (
     Document,
@@ -24,22 +22,24 @@ from ai_trust_persistence.models.evidence import (
 from ai_trust_persistence.models.framework import Framework
 from ai_trust_persistence.models.llm_provider_config import LLMProviderConfig
 from ai_trust_persistence.models.model_card import ModelCard
-from ai_trust_persistence.models.model_card_metric import ModelCardMetric
-from ai_trust_persistence.models.model_card_source import ModelCardSource
 from ai_trust_persistence.models.model_card_dataset import ModelCardDataset
-from ai_trust_persistence.models.model_card_dataset_preparation import (
-    ModelCardDatasetPreparation,
-)
 from ai_trust_persistence.models.model_card_dataset_measurement import (
     ModelCardDatasetMeasurement,
+)
+from ai_trust_persistence.models.model_card_dataset_preparation import (
+    ModelCardDatasetPreparation,
 )
 from ai_trust_persistence.models.model_card_feature_store import ModelCardFeatureStore
 from ai_trust_persistence.models.model_card_feature_store_group import (
     ModelCardFeatureStoreGroup,
 )
+from ai_trust_persistence.models.model_card_metric import ModelCardMetric
+from ai_trust_persistence.models.model_card_source import ModelCardSource
 from ai_trust_persistence.models.obligation import Obligation
+from ai_trust_persistence.models.platform_settings import PlatformSettings
 from ai_trust_persistence.models.question_comment import QuestionComment
 from ai_trust_persistence.models.question_state import QuestionState
+from ai_trust_persistence.models.requirement import Requirement
 from ai_trust_persistence.models.system_workflow_step import SystemWorkflowStep
 from ai_trust_persistence.models.test_bed import TestBedRun
 
@@ -47,33 +47,33 @@ __all__ = [
     "AISystem",
     "AISystemModelCard",
     "AlertRule",
+    "Assessment",
+    "AssessmentDossier",
+    "AssessmentDossierOutput",
     "AuditEvent",
     "Branding",
     "CustomRole",
     "Document",
-    "DocumentVersion",
     "DocumentChunk",
-    "ModelCard",
-    "ModelCardMetric",
-    "ModelCardSource",
-    "ModelCardDataset",
-    "ModelCardDatasetPreparation",
-    "ModelCardDatasetMeasurement",
-    "ModelCardFeatureStore",
-    "ModelCardFeatureStoreGroup",
-    "Framework",
-    "LLMProviderConfig",
-    "Assessment",
-    "AssessmentDossier",
-    "AssessmentDossierOutput",
-    "Obligation",
-    "Requirement",
+    "DocumentVersion",
     "Evidence",
     "EvidenceVersion",
+    "Framework",
+    "LLMProviderConfig",
+    "ModelCard",
+    "ModelCardDataset",
+    "ModelCardDatasetMeasurement",
+    "ModelCardDatasetPreparation",
+    "ModelCardFeatureStore",
+    "ModelCardFeatureStoreGroup",
+    "ModelCardMetric",
+    "ModelCardSource",
+    "Obligation",
     "PlatformSettings",
-    "SystemWorkflowStep",
     "QuestionComment",
     "QuestionState",
+    "Requirement",
+    "SystemWorkflowStep",
     "TestBedRun",
     "evidence_requirements",
 ]

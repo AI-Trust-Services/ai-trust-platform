@@ -329,7 +329,7 @@ async def test_probe_404_is_model_message():
 
 
 async def test_probe_200_with_choices_succeeds():
-    status, msg = await _probe_with_status(
+    status, _ = await _probe_with_status(
         200, {"choices": [{"message": {"content": "x"}}]}
     )
     assert status == "ok"

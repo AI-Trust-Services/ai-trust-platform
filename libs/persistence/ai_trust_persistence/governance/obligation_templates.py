@@ -196,8 +196,15 @@ _EU_CLUSTERS = [
 ]
 
 
+_TRANSPARENCY_CLUSTERS = frozenset({"P-LIM", "D-LIM"})
+
+
 def obligations_for(
-    framework_id: str, tier: str, org_role: str = "provider"
+    framework_id: str,
+    tier: str,
+    org_role: str = "provider",
+    *,
+    transparency: bool = False,
 ) -> list[dict]:
     """Return the obligation template list for a framework + risk tier + org_role.
 
@@ -207,26 +214,45 @@ def obligations_for(
     a "both" system gets the union of the two, and unsupported roles
     (importer/distributor) get an empty list.
 
+    When `transparency=True` (Art. 50 applies — CO issued transparency obligations,
+    or the system is a chatbot / generates synthetic content), the P-LIM / D-LIM
+    clusters are added regardless of tier (except prohibited, where transparency
+    cannot apply). This is orthogonal to the high/limited tier gate.
+
     Returns an empty list when no obligations apply. Callers treat an empty result
     as "no obligations to generate".
     """
-    if framework_id == "FRM-EU-AI-ACT":
-        if tier in ("high", "limited"):
-            result: list[dict] = []
-            for c in _EU_CLUSTERS:
-                if org_role == "both":
-                    if c["role"] not in ("provider", "deployer"):
-                        continue
-                elif c["role"] != org_role:
+    include_transparency = (
+        framework_id == "FRM-EU-AI-ACT" and transparency and tier != "prohibited"
+    )
+    if framework_id == "FRM-EU-AI-ACT" and (
+        tier in ("high", "limited") or include_transparency
+    ):
+        result: list[dict] = []
+        for c in _EU_CLUSTERS:
+            if org_role == "both":
+                if c["role"] not in ("provider", "deployer"):
                     continue
-                if requirements_for(c["cluster_id"], tier, org_role):
-                    result.append(
-                        {
-                            "cluster_id": c["cluster_id"],
-                            "title": c["title"],
-                            "article_ref": c["article_ref"],
-                        }
-                    )
-            return result
+            elif c["role"] != org_role:
+                continue
+            is_lim = c["cluster_id"] in _TRANSPARENCY_CLUSTERS
+            # Transparency clusters: include only when transparency flag is set.
+            # Non-transparency clusters: include only for high/limited tiers.
+            if is_lim and not include_transparency:
+                continue
+            if not is_lim and tier not in ("high", "limited"):
+                continue
+            # Probe with the effective tier for this cluster: LIM clusters need
+            # "limited" to pass _tier_allows even when the assessed tier is "minimal".
+            probe_tier = "limited" if is_lim else tier
+            if requirements_for(c["cluster_id"], probe_tier, org_role):
+                result.append(
+                    {
+                        "cluster_id": c["cluster_id"],
+                        "title": c["title"],
+                        "article_ref": c["article_ref"],
+                    }
+                )
+        return result
 
     return []
