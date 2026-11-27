@@ -15,10 +15,11 @@ import {
   AtSign,
   Lightbulb,
   ChevronDown,
-  ChevronRight,
   Search,
   Upload,
   Sparkles,
+  ExternalLink,
+  MessageSquare,
 } from "lucide-react";
 import type { ChatMessage, AdvisorSource, AssessmentFile } from "../../types";
 import { api } from "../../api/client";
@@ -582,10 +583,10 @@ function FileCard({
             )}
           </div>
         </div>
-        <ChevronRight
+        <ChevronDown
           className={cn(
             "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform",
-            expanded && "rotate-90",
+            expanded && "rotate-180",
           )}
         />
       </button>
@@ -609,8 +610,8 @@ function FileCard({
                     <div className="flex items-center gap-1 font-medium text-foreground">
                       {page != null && (
                         <span
-                          className="shrink-0 rounded px-1"
-                          style={{ background: `${FILES_PURPLE}20`, color: FILES_PURPLE }}
+                          className="shrink-0 rounded border px-1 text-[10px] font-semibold"
+                          style={{ borderColor: FILES_PURPLE, color: FILES_PURPLE }}
                         >
                           p.{page}
                         </span>
@@ -640,16 +641,18 @@ function FileCard({
               type="button"
               disabled
               title="Coming soon"
-              className="cursor-not-allowed rounded border border-border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground opacity-50"
+              className="flex cursor-not-allowed items-center gap-1.5 rounded border border-border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground opacity-50"
             >
+              <ExternalLink className="size-3" />
               Open
             </button>
             <button
               type="button"
               disabled
               title="Coming soon"
-              className="cursor-not-allowed rounded border border-border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground opacity-50"
+              className="flex cursor-not-allowed items-center gap-1.5 rounded border border-border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground opacity-50"
             >
+              <MessageSquare className="size-3" />
               Ask about this file
             </button>
           </div>
@@ -1174,6 +1177,12 @@ function FilesTab({
 
       {/* File cards */}
       <div className="flex-1 space-y-2 overflow-y-auto px-6 pb-6">
+        {/* Search result count */}
+        {q && filtered.length > 0 && (
+          <p className="pb-1 text-xs text-muted-foreground">
+            {filtered.length} file{filtered.length !== 1 ? "s" : ""} match{filtered.length === 1 ? "es" : ""} "{search}"
+          </p>
+        )}
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-8 text-center">
             <FileText className="size-8 text-muted-foreground/40" />
