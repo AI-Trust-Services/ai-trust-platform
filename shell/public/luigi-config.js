@@ -249,9 +249,9 @@
     label: "Not found",
     hideFromNav: true,
     viewUrl: "/not-found.html",
-    // not-found.html is a plain static page — it does NOT load @luigi-project/client, so it never
-    // sends the init handshake Luigi waits for. Without this, Luigi shows its loading spinner over
-    // the (already visible) iframe forever. Disabling the indicator for this node removes the spinner.
+    // not-found.html loads @luigi-project/client only for its escape-button navigation, so the
+    // handshake does eventually fire — but disabling the indicator avoids a spinner flash before
+    // the client initialises (and an infinite spinner if the CDN client ever fails to load).
     loadingIndicator: { enabled: false },
   });
 

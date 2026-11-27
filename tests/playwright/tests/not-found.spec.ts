@@ -42,3 +42,24 @@ for (const route of BAD_ROUTES) {
     ).toHaveCount(0);
   });
 }
+
+test("the escape button leaves the not-found page", async ({ page }) => {
+  // The content iframe is sandboxed without allow-top-navigation, so the button must navigate via
+  // the Luigi Client (postMessage), not window.top — this guards that regression. /home resolves to
+  // the first node the user can see, so it never bounces back here.
+  await page.goto("/#/home/does-not-exist");
+  await expect(page).toHaveURL(/#\/home\/not-found/);
+  const frame = page.frameLocator('iframe[src*="not-found.html"]');
+  await expect(frame.getByRole("button", { name: "Go to Overview" })).toBeVisible();
+
+  // Wait for the Luigi Client handshake — linkManager().navigate is a no-op before init (a human
+  // reading the page is always past this; the test would otherwise click too early).
+  const nf = page.frames().find((f) => f.url().includes("not-found.html"))!;
+  await nf.waitForFunction(
+    () => (window as { LuigiClient?: { isLuigiClientInitialized?: () => boolean } }).LuigiClient
+      ?.isLuigiClientInitialized?.() === true,
+  );
+
+  await frame.getByRole("button", { name: "Go to Overview" }).click();
+  await expect(page).not.toHaveURL(/#\/home\/not-found/);
+});

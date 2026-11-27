@@ -73,14 +73,15 @@
     <p>The page you're looking for doesn't exist or you don't have access to it.</p>
     <button type="button" class="btn" id="home-btn">Go to Overview</button>
   </div>
+  <script src="https://unpkg.com/@luigi-project/client@2.31.0/luigi-client.js"></script>
   <script>
-    // This page renders inside the Luigi iframe; navigate the top (shell) window's hash route.
-    // Target /home (not /home/overview): Luigi resolves it to the home node's defaultChildNode,
-    // which is the first node the current user can see — so the button never dead-ends a user who
-    // lacks overview's permissions (which would bounce back here via pageNotFoundHandler).
+    // Navigate via the Luigi Client, not window.top: Luigi sandboxes the content iframe without
+    // allow-top-navigation, so a direct window.top.location change is blocked by the browser.
+    // linkManager().navigate posts a message to the shell, which routes to /home — resolved to the
+    // first nav node the current user can see (home node's dynamic defaultChildNode).
+    LuigiClient.addInitListener(function () {});
     document.getElementById('home-btn').addEventListener('click', function () {
-      try { window.top.location.hash = '/home'; }
-      catch (e) { window.location.hash = '/home'; }
+      LuigiClient.linkManager().navigate('/home');
     });
   </script>
 </body>
