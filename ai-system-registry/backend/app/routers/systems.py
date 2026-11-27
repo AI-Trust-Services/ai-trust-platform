@@ -5,7 +5,11 @@ import os
 from datetime import datetime, timezone
 
 import httpx
-from ai_trust_authorization import check_permission, get_current_user, require_permission
+from ai_trust_authorization import (
+    check_permission,
+    get_current_user,
+    require_permission,
+)
 from ai_trust_authorization.constants import (
     SYSTEMS_APPROVE,
     SYSTEMS_READ,
