@@ -93,7 +93,9 @@ def _pipeline_label(c: dict) -> ResolvedLabel:
     )
 
 
-def _user_label(label_id: str, result: bool, explanation: str | None = None) -> ResolvedLabel:
+def _user_label(
+    label_id: str, result: bool, explanation: str | None = None
+) -> ResolvedLabel:
     return ResolvedLabel(
         labelId=label_id,
         result=result,
@@ -170,7 +172,9 @@ def solve(
     for c in classifications:
         lid = c["labelId"]
         if overrides and lid in overrides.labels:  # direct label override
-            combined[lid] = _user_label(lid, overrides.labels[lid], c.get("explanation"))
+            combined[lid] = _user_label(
+                lid, overrides.labels[lid], c.get("explanation")
+            )
         elif lid in answer_results:
             combined[lid] = _user_label(lid, answer_results[lid], c.get("explanation"))
         else:  # pipeline result unchanged
@@ -184,16 +188,16 @@ def solve(
             overrides and lid in overrides.labels
         ):  # direct label override revives skipped
             combined[lid] = _user_label(lid, overrides.labels[lid])
-        elif (
-            answer_results.get(lid)
-        ):  # answer override revives skipped
+        elif answer_results.get(lid):  # answer override revives skipped
             combined[lid] = _user_label(lid, answer_results[lid])
         # else: stays out of combined — skipped and not revived
 
     # Resolve risk winner.
     if overrides and overrides.risk_winner:
         prior = combined.get(overrides.risk_winner)
-        risk = _user_label(overrides.risk_winner, True, prior.explanation if prior else None)
+        risk = _user_label(
+            overrides.risk_winner, True, prior.explanation if prior else None
+        )
     else:
         winner_id = "MINIMAL"
         for label_id in _RISK_HIERARCHY[:-1]:

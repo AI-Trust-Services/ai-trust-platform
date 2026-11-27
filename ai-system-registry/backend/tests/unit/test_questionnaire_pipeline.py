@@ -195,11 +195,15 @@ async def test_failed_batch_is_skipped_and_others_still_succeed():
 
 
 async def test_no_valid_batch_raises_and_stores_nothing():
-    with _env() as put_json, patch(
-        "app.questionnaire_pipeline.parse_with_retry",
-        new_callable=AsyncMock,
-        side_effect=LLMParseError("simulated batch failure"),
-    ), pytest.raises(LLMParseError, match="no questionnaire batch produced"):
+    with (
+        _env() as put_json,
+        patch(
+            "app.questionnaire_pipeline.parse_with_retry",
+            new_callable=AsyncMock,
+            side_effect=LLMParseError("simulated batch failure"),
+        ),
+        pytest.raises(LLMParseError, match="no questionnaire batch produced"),
+    ):
         await _run()
     put_json.assert_not_awaited()
 

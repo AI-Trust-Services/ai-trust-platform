@@ -256,9 +256,24 @@ def test_transparency_separate_from_risk_winner():
         "config_version": "1.0.0",
         "prompt_id": "risk_role_classification",
         "classifications": [
-            {"labelId": "HIGH_RISK", "result": True, "confidence": 85.0, "explanation": ""},
-            {"labelId": "TRANSPARENCY", "result": True, "confidence": 75.0, "explanation": ""},
-            {"labelId": "MINIMAL", "result": False, "confidence": 20.0, "explanation": ""},
+            {
+                "labelId": "HIGH_RISK",
+                "result": True,
+                "confidence": 85.0,
+                "explanation": "",
+            },
+            {
+                "labelId": "TRANSPARENCY",
+                "result": True,
+                "confidence": 75.0,
+                "explanation": "",
+            },
+            {
+                "labelId": "MINIMAL",
+                "result": False,
+                "confidence": 20.0,
+                "explanation": "",
+            },
         ],
         "skipped_labels": [],
     }

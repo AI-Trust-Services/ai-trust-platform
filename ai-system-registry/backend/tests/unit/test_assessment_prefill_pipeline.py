@@ -122,7 +122,8 @@ async def test_on_classification_done_error_propagates():
         patch(
             "app.assessment_prefill_pipeline.run_classification",
             new=AsyncMock(return_value=FAKE_C),
-        ),pytest.raises(ValueError, match="tier write failed")
+        ),
+        pytest.raises(ValueError, match="tier write failed"),
     ):
         await run_assessment_prefill_pipeline(
             "SYS-TEST",

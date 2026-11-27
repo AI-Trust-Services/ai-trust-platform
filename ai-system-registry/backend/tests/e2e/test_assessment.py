@@ -1780,4 +1780,3 @@ async def test_swagger_pipelines_match_what_the_assessment_start_ran(
         c.json()["result"]["skipped_labels"]
         == from_open_classification["skipped_labels"]
     )
-
