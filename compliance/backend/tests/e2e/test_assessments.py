@@ -7,11 +7,10 @@ import pytest
 
 from tests.e2e.conftest import (
     create_assessment,
-    create_requirement,
     create_obligation,
+    create_requirement,
     create_system,
 )
-
 
 # ---------------------------------------------------------------------------
 # Health
@@ -143,7 +142,7 @@ async def test_create_assessment_obligation_failure_rolls_back_assessment(
 ):
     # If obligation generation raises inside the transaction, the assessment row must
     # also be rolled back — no orphaned assessments with zero obligations from errors.
-    from unittest.mock import patch, AsyncMock
+    from unittest.mock import AsyncMock, patch
 
     system = await create_system(tier="minimal")
 
@@ -451,8 +450,8 @@ async def test_generated_obligations_carry_cluster_id(
 ):
     # cluster_id is internal (not exposed in the API) but must be persisted so
     # carry-forward and control generation key off it.
-    from sqlalchemy import select
     from ai_trust_persistence.models import Obligation
+    from sqlalchemy import select
 
     system = await create_system(tier="high")
     ass = await create_assessment(client, system["id"])
@@ -646,7 +645,7 @@ async def test_generated_requirements_linked_to_obligations(client: httpx.AsyncC
     system = await create_system(tier="high")
     ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
-    art9 = [o for o in obs if o["cluster_id"] == "P-RM"][0]
+    art9 = next(o for o in obs if o["cluster_id"] == "P-RM")
     linked = (await client.get(f"/v1/requirements?obligation_id={art9['id']}")).json()
     assert len(linked) == 7  # P-RM cluster -> 7 Requirements
 
@@ -657,7 +656,7 @@ async def test_high_tier_requirement_ref_is_requirement_id(client: httpx.AsyncCl
     system = await create_system(tier="high")
     ass = await create_assessment(client, system["id"])
     obs = (await client.get(f"/v1/obligations?assessment_id={ass['id']}")).json()
-    art9 = [o for o in obs if o["cluster_id"] == "P-RM"][0]
+    art9 = next(o for o in obs if o["cluster_id"] == "P-RM")
     linked = (await client.get(f"/v1/requirements?obligation_id={art9['id']}")).json()
     refs = {c["requirement_ref"] for c in linked}
     assert "P-RM-01" in refs
@@ -797,10 +796,10 @@ async def test_requirement_owner_carried_forward_from_prior(client: httpx.AsyncC
 
 async def _set_system_tier(system_id: str, tier: str) -> None:
     """Directly set a system's tier (simulates risk classification completing)."""
+    from ai_trust_persistence.models import AISystem
     from sqlalchemy import update
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from ai_trust_persistence.models import AISystem
     from tests.e2e.conftest import _test_engine
 
     async with AsyncSession(_test_engine) as session:

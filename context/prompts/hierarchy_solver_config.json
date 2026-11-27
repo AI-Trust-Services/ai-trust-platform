@@ -1,0 +1,11 @@
+{
+  "confidence_thresholds": {
+    "PROHIBITED":                { "high": 90, "medium": 60 },
+    "HIGH_RISK":                 { "high": 90, "medium": 60 },
+    "TRANSPARENCY":              { "high": 90, "medium": 60 },
+    "PROVIDER":                  { "high": 90, "medium": 60 },
+    "DEPLOYER":                  { "high": 90, "medium": 60 },
+    "IMPORTER":                  { "high": 90, "medium": 60 },
+    "AUTHORISED_REPRESENTATIVE": { "high": 90, "medium": 60 }
+  }
+}

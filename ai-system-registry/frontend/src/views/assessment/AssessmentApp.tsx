@@ -2,17 +2,17 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { Outlet, useNavigate, useParams, useMatch, useLocation } from "react-router";
 import { Loader2, Save } from "lucide-react";
-import type { AssessmentState } from "../../types";
+import type { AssessmentState, ResolveResponse } from "../../types";
 import { api } from "../../api/client";
 import { usePermissions } from "../../hooks/usePermissions";
-import { isGated } from "../../config/aiQuestionnaire";
+import { isGated, isMultiselect, QUESTION_DEF_BY_ID } from "../../config/aiQuestionnaire";
 import { AssessmentSidebar, ORDERED_QUESTION_KEYS } from "./AssessmentSidebar";
 import { ComplianceAdvisor } from "./ComplianceAdvisor";
 import { ASSESSMENT_SECTIONS } from "./AssessmentSidebar";
 
 interface AssessmentCtx {
   state: AssessmentState;
-  reload: () => Promise<void>;
+  reload: () => Promise<AssessmentState>;
   savedAt: number | null;
   markSaved: () => void;
   // Username → display name. Populated lazily on first QuestionView mount so
@@ -24,6 +24,10 @@ interface AssessmentCtx {
   // or `/systems/:id/assessment/view/:assessmentId` for a read-only historical one,
   // so in-app navigation stays pinned to the cycle being viewed.
   basePath: string;
+  // Hierarchy solver result — null until pipeline finishes and ≥1 answer is confirmed.
+  solverResult: ResolveResponse | null;
+  // Trigger a fresh solver call. Pass the fresh state from reload() to avoid stale refs.
+  fetchSolverResult: (s?: AssessmentState) => Promise<void>;
 }
 
 const Ctx = createContext<AssessmentCtx | null>(null);
@@ -143,10 +147,11 @@ export default function AssessmentApp() {
     load();
   }, [load]);
 
-  const reload = useCallback(async () => {
-    if (!id) return;
+  const reload = useCallback(async (): Promise<AssessmentState> => {
+    if (!id) throw new Error("no system id");
     const s = await api.getAssessmentState(id, viewAssessmentId);
     setState(s);
+    return s;
   }, [id, viewAssessmentId]);
 
   // Poll GET /state every 3 s while the background prefill pipeline is running.
@@ -185,6 +190,54 @@ export default function AssessmentApp() {
   }, [hasState, prefillPending, id, viewAssessmentId]);
 
   const markSaved = useCallback(() => setSavedAt(Date.now()), []);
+
+  // Hierarchy solver — null until pipeline is done and ≥1 answer is confirmed.
+  const [solverResult, setSolverResult] = useState<ResolveResponse | null>(null);
+  // stateRef lets fetchSolverResult read the latest state without being recreated
+  // on every state update (avoids re-triggering effects that depend on it).
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const fetchSolverResult = useCallback(async (s?: AssessmentState) => {
+    if (!id) return;
+    // s from reload() avoids staleRef after a confirm; fallback for mount-time calls.
+    const questions = (s ?? stateRef.current)?.questions;
+    if (!questions) return;
+    const answers: Record<string, string[]> = {};
+    for (const q of questions) {
+      // Only manual answers as overrides — keeps LLM confidence for unmodified questions.
+      if (q.answer_source !== "manual" || !q.answer) continue;
+      const def = QUESTION_DEF_BY_ID[q.question_key];
+      if (def && isMultiselect(def)) {
+        try {
+          // Multiselect stored as JSON string '["A","B"]' — parse to array or solver gets a no-op.
+          const parsed = JSON.parse(q.answer);
+          answers[q.question_key] = Array.isArray(parsed) ? parsed : [q.answer];
+        } catch {
+          answers[q.question_key] = [q.answer];
+        }
+      } else {
+        answers[q.question_key] = [q.answer];
+      }
+    }
+    try {
+      setSolverResult(await api.resolveClassification(id, Object.keys(answers).length ? { answers } : {}));
+    } catch {
+      // best-effort — panel stays empty on error
+    }
+  }, [id]);
+
+  // Initial solver call once the prefill pipeline finishes and answers exist.
+  const initialSolverDone = useRef(false);
+  useEffect(() => {
+    if (!state || state.prefill_pending || initialSolverDone.current) return;
+    // Resolve as soon as any question has an answer — AI-prefilled answers are
+    // unconfirmed by default (#439), so gating on owner_confirmed left the panel
+    // stuck on "Computing…" until the first manual confirm.
+    if (!state.questions.some((q) => q.answer)) return;
+    initialSolverDone.current = true;
+    fetchSolverResult();
+  }, [state?.prefill_pending, fetchSolverResult]);
 
   // Base path for nested links — pins historical ("View results") navigation to
   // its cycle; the live cycle uses the plain assessment base.
@@ -237,7 +290,7 @@ export default function AssessmentApp() {
   }
 
   return (
-    <Ctx.Provider value={{ state, reload, savedAt, markSaved, userMap, ensureUserMap, basePath }}>
+    <Ctx.Provider value={{ state, reload, savedAt, markSaved, userMap, ensureUserMap, basePath, solverResult, fetchSolverResult }}>
       <div className="flex h-full flex-col">
         {state.prefill_failed && (
           <div className="flex shrink-0 items-center gap-2 border-b border-[#fca5a5]/40 bg-[#fef2f2] px-6 py-2 text-sm text-[#991b1b]">

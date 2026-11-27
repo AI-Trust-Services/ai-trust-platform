@@ -12,32 +12,36 @@ sequences the two pipelines (which are also triggered one at a time by
 how failures propagate. It has no HTTP endpoint: it is started by
 ``POST /assessment/open`` as a background task.
 
-The caller customises *persistence* through two optional hooks, so the pipelines
+The caller customises *persistence* through three optional hooks, so the pipelines
 themselves stay side-effect free (apart from their MinIO result files):
 
 * ``batch_callback`` — awaited with each questionnaire batch's results as it
   completes (``/open`` uses it to save answers into ``question_states``).
 * ``on_questionnaire_done`` — awaited with the questionnaire output once step 1
-  is done, **concurrently with** step 2 (``/open`` uses it for the tier step and
-  to clear the "prefill pending" state, so the UI is ready as soon as it is).
+  is done, **concurrently with** step 2 (``/open`` uses it to save
+  ``assessment_sources`` and clear the "prefill pending" state, so the UI shows
+  answers as soon as they are ready — no tier write here).
+* ``on_classification_done`` — awaited with the classification output **after**
+  both step 2 and ``on_questionnaire_done`` have finished (``/open`` uses it to
+  derive and persist ``row.tier`` / ``org_role`` from the solver).
 
 Failure policy:
 * step 1 fails → the exception propagates (nothing to classify);
 * ``on_questionnaire_done`` raises → the exception propagates;
 * step 2 fails as a whole → captured in ``PrefillOutput.classification_error``
-  (logged) instead of raised: its output is not consumed by the UI yet, so it must
-  not fail the prefill. Individual label failures are already handled inside
-  ``run_classification``.
+  (logged) instead of raised; ``on_classification_done`` is **not** called.
+* ``on_classification_done`` raises → the exception propagates.
+  Individual label failures are already handled inside ``run_classification``.
 """
 
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from ai_trust_logging import get_logger
-
 from app.classification_pipeline import (
     DEFAULT_CLASSIFICATION_CONFIG_ID,
     DEFAULT_CLASSIFICATION_PROMPT_ID,
@@ -77,11 +81,13 @@ async def run_assessment_prefill_pipeline(
     classification_prompt_id: str = DEFAULT_CLASSIFICATION_PROMPT_ID,
     batch_callback: Callable[[list[dict]], Awaitable[None]] | None = None,
     on_questionnaire_done: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+    on_classification_done: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
 ) -> PrefillOutput:
     """Run the questionnaire pipeline, then the classification pipeline.
 
-    Raises whatever step 1 or ``on_questionnaire_done`` raises; a step-2 failure
-    is returned in ``PrefillOutput.classification_error`` (see module docstring).
+    Raises whatever step 1, ``on_questionnaire_done``, or
+    ``on_classification_done`` raises; a step-2 failure is returned in
+    ``PrefillOutput.classification_error`` (see module docstring).
     """
     # Resolve the LLM provider ONCE for the entire prefill run and pin it across
     # BOTH the questionnaire and classification steps, so the whole assessment is
@@ -136,5 +142,10 @@ async def run_assessment_prefill_pipeline(
         return PrefillOutput(
             questionnaire=questionnaire, classification_error=classification
         )
+
+    # Step 3 — post-classification hook (tier/org_role persist from solver).
+    # Only called when classification succeeded; a failure here propagates.
+    if on_classification_done is not None:
+        await on_classification_done(classification)
 
     return PrefillOutput(questionnaire=questionnaire, classification=classification)

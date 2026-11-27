@@ -6,7 +6,7 @@ import type {
   RegisterSystemInput, IndexedDocument, AssessmentRow,
   ComplianceAssessment, AuditEventListResponse,
   AssessmentState, QuestionState, QuestionComment,
-  AdvisorAnswer,
+  AdvisorAnswer, ResolveResponse, LabelOverrides,
 } from "../types"
 
 const API_BASE = import.meta.env.VITE_REGISTRY_API_BASE;
@@ -196,7 +196,7 @@ export const api = {
   // Compliance Officer end view (#348).
   issueClassification: (
     systemId: string,
-    data: { tier: string; transparency: boolean; note?: string; confirmed: boolean },
+    data: { tier: string; transparency: boolean; note?: string; confirmed: boolean; org_role?: string },
   ) =>
     request<AssessmentState>(`/systems/${encodeURIComponent(systemId)}/assessment/issue`, {
       method: "POST",
@@ -437,6 +437,33 @@ export const api = {
         (versionId ? `?version_id=${encodeURIComponent(versionId)}` : ""),
       {},
       INDEXING_API_BASE,
+    ),
+
+  // ── Hierarchy Solver tester ────────────────────────────────────────────────
+  runQuestionnaire: (systemId: string) =>
+    request<{ run_key: string; presigned_url: string; result: unknown }>(
+      `/systems/${encodeURIComponent(systemId)}/questionnaire-llm-run`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+    ),
+
+  runClassification: (systemId: string, questionnaireRunKey: string) =>
+    request<{ run_key: string; presigned_url: string; result: unknown }>(
+      `/systems/${encodeURIComponent(systemId)}/classification-llm-run`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questionnaire_run_key: questionnaireRunKey }),
+      },
+    ),
+
+  resolveClassification: (systemId: string, overrides: LabelOverrides) =>
+    request<ResolveResponse>(
+      `/systems/${encodeURIComponent(systemId)}/classification/resolve`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(overrides),
+      },
     ),
 };
 

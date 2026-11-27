@@ -12,18 +12,21 @@ from __future__ import annotations
 
 import uuid
 
+from ai_trust_logging import get_logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ai_trust_logging import get_logger
-from ai_trust_persistence.governance.obligation_templates import obligations_for
-from ai_trust_persistence.governance.requirement_templates import (
-    cluster_articles,
-    requirements_for,
-)
 from ai_trust_persistence.governance.cascade import (
     refresh_assessment_score,
     refresh_obligation,
+)
+from ai_trust_persistence.governance.obligation_templates import (
+    _TRANSPARENCY_CLUSTERS,
+    obligations_for,
+)
+from ai_trust_persistence.governance.requirement_templates import (
+    cluster_articles,
+    requirements_for,
 )
 from ai_trust_persistence.models import AISystem, Assessment, Obligation, Requirement
 
@@ -54,11 +57,24 @@ async def generate_obligations_in_session(
     # obligations (obligations_for filters by role, and "pending" matches none).
     if org_role == "pending":
         org_role = "provider"
-    templates = obligations_for(assessment.framework_id, system.tier, org_role)
+    # Art. 50 transparency obligations apply orthogonally to tier: the CO explicitly
+    # issued them (co_issued_transparency) or the system's raw flags imply it.
+    # Prohibited tier is excluded — the router gate enforces this at issue time too.
+    transparency = (
+        bool(
+            getattr(system, "co_issued_transparency", False)
+            or getattr(system, "is_chatbot", False)
+            or getattr(system, "generates_synthetic_content", False)
+        )
+        and system.tier != "prohibited"
+    )
+    templates = obligations_for(
+        assessment.framework_id, system.tier, org_role, transparency=transparency
+    )
 
     if (
         assessment.framework_id == "FRM-EU-AI-ACT"
-        and system.tier in ("high", "limited")
+        and (system.tier in ("high", "limited") or transparency)
         and org_role not in ("provider", "deployer", "both")
     ):
         # Only provider/deployer (and their union, "both") obligation sets are
@@ -109,7 +125,10 @@ async def generate_obligations_in_session(
         # for retained sets (which carry no per-requirement articles).
         article_ref = (
             cluster_articles(
-                t["cluster_id"], system.tier, org_role, assessment.framework_id
+                t["cluster_id"],
+                "limited" if t["cluster_id"] in _TRANSPARENCY_CLUSTERS else system.tier,
+                org_role,
+                assessment.framework_id,
             )
             or t["article_ref"]
         )
@@ -172,7 +191,15 @@ async def generate_requirements_in_session(
 
     created: list[Requirement] = []
     for obl in obligations:
-        templates = requirements_for(obl.cluster_id or obl.article_ref, tier, org_role)
+        # Art. 50 (P-LIM/D-LIM) clusters carry risk="Limited"; probe with "limited"
+        # so their requirements survive the tier filter even when the assessed tier
+        # is e.g. "minimal" or "high" (transparency is orthogonal to tier).
+        effective_tier = (
+            "limited" if (obl.cluster_id or "") in _TRANSPARENCY_CLUSTERS else tier
+        )
+        templates = requirements_for(
+            obl.cluster_id or obl.article_ref, effective_tier, org_role
+        )
         if not templates:
             logger.warning(
                 "assessment.requirement_template_missing",

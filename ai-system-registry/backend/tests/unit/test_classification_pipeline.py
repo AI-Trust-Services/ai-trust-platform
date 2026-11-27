@@ -9,21 +9,21 @@ import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from app.classification_pipeline import (
     DEFAULT_CLASSIFICATION_CONFIG_ID,
     InvalidRunKeyError,
     _check_run_key,
-    _collect_question_ids,
-    _label_question_ids,
     _scope_questionnaire_data,
     run_classification,
 )
 from app.llm.templates import load_questionnaire
-
+from app.questionnaire_tree import collect_question_ids as _collect_question_ids
+from app.questionnaire_tree import (
+    get_question_ids_from_label as _get_question_ids_from_label,
+)
 
 # ---------------------------------------------------------------------------
-# _collect_question_ids / _label_question_ids
+# _collect_question_ids / _get_question_ids_from_label
 # ---------------------------------------------------------------------------
 
 
@@ -55,7 +55,7 @@ def test_collect_question_ids_list():
     assert _collect_question_ids(nodes) == {"Q1", "Q2"}
 
 
-def test_label_question_ids_multiple_rules():
+def test_get_question_ids_from_label_multiple_rules():
     label = {
         "id": "DEPLOYER",
         "activate": True,
@@ -70,12 +70,12 @@ def test_label_question_ids_multiple_rules():
             },
         ],
     }
-    assert _label_question_ids(label) == {"Role_3", "Role_4"}
+    assert _get_question_ids_from_label(label) == {"Role_3", "Role_4"}
 
 
-def test_label_question_ids_empty_rules():
+def test_get_question_ids_from_label_empty_rules():
     label = {"id": "DISTRIBUTOR", "activate": False, "rules": []}
-    assert _label_question_ids(label) == set()
+    assert _get_question_ids_from_label(label) == set()
 
 
 # ---------------------------------------------------------------------------
@@ -124,13 +124,15 @@ def test_every_rule_question_id_exists_in_the_questionnaire():
     be evaluated — and would make its label skip forever."""
     known = {q["id"] for q in load_questionnaire("ai-questionnaire")["questions"]}
     for label in _active_labels():
-        unknown = _label_question_ids(label) - known
+        unknown = _get_question_ids_from_label(label) - known
         assert not unknown, f"{label['id']} references unknown questions {unknown}"
 
 
 def test_active_labels_have_rules():
     for label in _active_labels():
-        assert _label_question_ids(label), f"{label['id']} has no rule questions"
+        assert _get_question_ids_from_label(label), (
+            f"{label['id']} has no rule questions"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -222,8 +224,8 @@ async def test_label_with_missing_question_is_skipped_not_classified():
     """If a label's source answers are absent (their batch failed) it must not be sent
     to the LLM — a likely-false result would be persisted as if it were established."""
     victim = _active_labels()[0]
-    missing = sorted(_label_question_ids(victim))[:1]
-    _, put_json, p1, p2, p3 = _minio(
+    missing = sorted(_get_question_ids_from_label(victim))[:1]
+    _, _put_json, p1, p2, p3 = _minio(
         _full_questionnaire_result(skip=frozenset(missing))
     )
     with p1, p2, p3:
@@ -242,9 +244,8 @@ async def test_label_with_missing_question_is_skipped_not_classified():
 async def test_foreign_run_key_is_rejected_before_any_minio_read():
     foreign = "questionnaire-results/SYS-OTHER/ai-questionnaire/x.json"
     get_json, put_json, p1, p2, p3 = _minio(_full_questionnaire_result())
-    with p1, p2, p3:
-        with pytest.raises(InvalidRunKeyError):
-            await run_classification(_SYSTEM, foreign)
+    with p1, p2, p3, pytest.raises(InvalidRunKeyError):
+        await run_classification(_SYSTEM, foreign)
     get_json.assert_not_awaited()
     put_json.assert_not_awaited()
 

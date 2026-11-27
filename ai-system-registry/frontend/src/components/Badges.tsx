@@ -29,27 +29,19 @@ const LIFECYCLE_CLASSES: Record<LifecycleKey, string> = {
 export function TierBadge({
   tier,
   workflowStatus,
-  isChatbot,
-  generatesSyntheticContent,
+  isChatbot: _isChatbot,
+  generatesSyntheticContent: _generatesSyntheticContent,
   transparency,
 }: {
   tier: TierKey;
   workflowStatus?: string;
   isChatbot?: boolean;
   generatesSyntheticContent?: boolean;
-  /** Pre-derived Art.50 companion (e.g. CO-issued transparency) — when set,
-   *  overrides the isChatbot/generatesSyntheticContent derivation. */
   transparency?: boolean;
 }) {
   const effectiveTier = workflowStatus !== undefined && workflowStatus !== "approved" ? "pending" : tier;
   const meta = TIER_META[effectiveTier] || { label: tier };
-  // EU AI Act: Art. 50 transparency stacks on top of a high-risk classification —
-  // the only tier pair that co-applies. The classifier waterfall only records the
-  // high tier, so derive the companion flag from the row's Art. 50 triggers.
-  const alsoTransparency =
-    transparency !== undefined
-      ? transparency
-      : effectiveTier === "high" && (isChatbot || generatesSyntheticContent);
+  const alsoTransparency = transparency === true;
   return (
     <span className="inline-flex flex-wrap items-center gap-1">
       <Badge className={cn("rounded-full font-medium", TIER_CLASSES[effectiveTier] ?? TIER_CLASSES.minimal)}>

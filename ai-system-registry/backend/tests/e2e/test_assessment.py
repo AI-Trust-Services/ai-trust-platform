@@ -68,6 +68,16 @@ def minio_store():
             raise KeyError(f"Object '{key}' not found")
         return store[key]
 
+    async def _list_latest_classification(system_id: str, config_id: str) -> object:
+        import os
+
+        config_id = os.path.basename(config_id)
+        prefix = f"classification-results/{system_id}/{config_id}/"
+        candidates = [k for k in store if k.startswith(prefix)]
+        if not candidates:
+            return None
+        return store[max(candidates)]
+
     with ExitStack() as stack:
         stack.enter_context(
             patch("app.minio_client.put_json", new=AsyncMock(side_effect=_put))
@@ -80,6 +90,12 @@ def minio_store():
                 "app.minio_client.get_presigned_url",
                 new_callable=AsyncMock,
                 return_value=_STUB_PRESIGNED,
+            )
+        )
+        stack.enter_context(
+            patch(
+                "app.minio_client.list_latest_classification",
+                new=AsyncMock(side_effect=_list_latest_classification),
             )
         )
         yield store
@@ -1103,12 +1119,12 @@ async def test_co_issue_requires_confirmation_checkbox(client: httpx.AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_co_transparency_only_with_high(client: httpx.AsyncClient):
+async def test_co_transparency_blocked_for_prohibited(client: httpx.AsyncClient):
     system_id = await _submit_as_owner(client)
-    # transparency + a non-high tier is rejected (the combo rule).
+    # transparency + prohibited is rejected; all other tiers are allowed.
     r = await client.post(
         f"/v1/systems/{system_id}/assessment/issue",
-        json={"tier": "minimal", "transparency": True, "confirmed": True},
+        json={"tier": "prohibited", "transparency": True, "confirmed": True},
         headers=_hdr(_CO),
     )
     assert r.status_code == 422, r.text
@@ -1356,61 +1372,6 @@ async def test_issue_coerces_pending_org_role_to_provider(client: httpx.AsyncCli
         )
     obligations, _ = await _count_governance(system_id)
     assert obligations > 0, "coerced provider role must still generate obligations"
-
-
-@pytest.mark.asyncio
-async def test_start_new_resets_org_role_to_pending(client: httpx.AsyncClient):
-    """Edge case (#436, cycle 2): start-new must reset org_role to "pending" (like
-    tier), so a second cycle whose classifier stays silent does not snapshot the
-    previous cycle's stale, not-freshly-determined role. Without the reset, the
-    issue-time pending→provider coercion would never fire and the stale role would
-    be carried forward silently.
-
-    The stub classifier always emits a concrete org_role, so to exercise the silent
-    case we patch the cycle-2 classify to return a rationale with no org_role — the
-    low-confidence / classifier-failure path `_finalize_tier` leaves untouched.
-    """
-    from unittest.mock import AsyncMock, patch
-
-    from ai_trust_persistence.database import engine
-    from ai_trust_persistence.models.ai_system import AISystem
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from app.classifier import classify_ai_questionnaire
-
-    system_id = await _submit_as_owner(client)
-    # Cycle 1 resolves and issues a concrete role.
-    await _issue_as_co(client, system_id, "high")
-    async with AsyncSession(engine) as s:
-        row = await s.get(AISystem, system_id)
-        assert row.org_role == "provider"
-
-    # Cycle 2's classifier is silent on org_role (stub normally isn't). Delegate to
-    # the real classifier, then strip org_role from the rationale so _finalize_tier
-    # takes its "role not resolved this run" branch.
-    async def _silent_role(row):
-        classification, rationale = await classify_ai_questionnaire(row)
-        rationale = {**rationale, "org_role": None}
-        return classification, rationale
-
-    with patch(
-        "app.routers.assessment.classify_ai_questionnaire",
-        new=AsyncMock(side_effect=_silent_role),
-    ):
-        r = await client.post(
-            f"/v1/systems/{system_id}/assessment/start-new", headers=_hdr(_OWNER)
-        )
-        assert r.status_code == 200, r.text
-
-    # start-new reset the role to "pending" and the silent cycle-2 classify did not
-    # overwrite it — so it is NOT the stale cycle-1 "provider". That is what lets the
-    # issue-time coercion re-fire on cycle 2 instead of carrying the stale role.
-    async with AsyncSession(engine) as s:
-        row = await s.get(AISystem, system_id)
-        assert row.org_role == "pending", (
-            "cycle 2 must start with a pending role so the issue-time coercion "
-            "can re-fire instead of carrying the stale cycle-1 'provider' role"
-        )
 
 
 @pytest.mark.asyncio
@@ -1757,8 +1718,8 @@ async def test_open_stores_questionnaire_then_classification_results(
 async def test_label_classification_failure_does_not_fail_the_prefill(
     client: httpx.AsyncClient,
 ):
-    """Step 2 failing as a whole is only logged: the owner still gets the answers and
-    tier, and no 'AI pre-fill failed' banner (its output isn't shown yet)."""
+    """Step 2 failing as a whole sets prefill_failed so the owner can retry, but the
+    questionnaire answers are still prefilled (the tier stays pending until retry succeeds)."""
     system_id = await _create_system(client)
     with patch(
         "app.assessment_prefill_pipeline.run_classification",
@@ -1767,11 +1728,11 @@ async def test_label_classification_failure_does_not_fail_the_prefill(
     ):
         state = await _open(client, system_id)
 
-    assert state["prefill_failed"] is False
+    assert state["prefill_failed"] is True
     assert state["prefill_pending"] is False
     by_key = {q["question_key"]: q for q in state["questions"]}
     assert by_key["Scope_1"]["answer"] == "NOT_ENOUGH_INFORMATION"
-    assert state["tier"] != "pending"
+    assert state["tier"] == "pending"
 
 
 @pytest.mark.asyncio
@@ -1835,3 +1796,116 @@ async def test_swagger_pipelines_match_what_the_assessment_start_ran(
         c.json()["result"]["skipped_labels"]
         == from_open_classification["skipped_labels"]
     )
+
+
+# ── regression: tier must not be silently downgraded on confirm ──────────────
+
+
+@pytest.mark.asyncio
+async def test_confirm_does_not_downgrade_high_risk_tier(
+    client: httpx.AsyncClient, minio_store: dict
+):
+    """Regression for the bug where confirm_question re-solved without passing
+    questionnaire_result to solve(), causing base_answers={} and HIGH_RISK rules
+    to evaluate False → tier silently downgraded to minimal.
+
+    Strategy: open a system (pipeline runs, writes questionnaire + classification to
+    minio_store); then overwrite the stored classification result with a HIGH_RISK
+    pipeline-result; change a question manually; confirm; assert tier is still 'high'.
+    """
+    from ai_trust_persistence.database import engine
+    from ai_trust_persistence.models.ai_system import AISystem
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    system_id = await _create_system(client)
+    await _open(client, system_id)
+
+    (q_key,) = _stored(minio_store, f"questionnaire-results/{system_id}/")
+    (c_key,) = _stored(minio_store, f"classification-results/{system_id}/")
+
+    # Overwrite classification result to look like a HIGH_RISK pipeline run.
+    minio_store[c_key] = {
+        "questionnaire_run_key": q_key,
+        "config_id": "risk_role_classification_config",
+        "config_version": "1.0.0",
+        "prompt_id": "risk_role_classification",
+        "classifications": [
+            {
+                "labelId": "PROHIBITED",
+                "result": False,
+                "confidence": 20.0,
+                "explanation": "",
+            },
+            {
+                "labelId": "HIGH_RISK",
+                "result": True,
+                "confidence": 92.0,
+                "explanation": "High risk.",
+            },
+            {
+                "labelId": "TRANSPARENCY",
+                "result": False,
+                "confidence": 30.0,
+                "explanation": "",
+            },
+            {
+                "labelId": "PROVIDER",
+                "result": True,
+                "confidence": 88.0,
+                "explanation": "",
+            },
+            {
+                "labelId": "DEPLOYER",
+                "result": False,
+                "confidence": 40.0,
+                "explanation": "",
+            },
+            {
+                "labelId": "IMPORTER",
+                "result": False,
+                "confidence": 40.0,
+                "explanation": "",
+            },
+            {
+                "labelId": "AUTHORISED_REPRESENTATIVE",
+                "result": False,
+                "confidence": 40.0,
+                "explanation": "",
+            },
+        ],
+        "skipped_labels": [],
+    }
+    # Also set tier=high on the row so the starting state is correct.
+    async with AsyncSession(engine) as s:
+        row = await s.get(AISystem, system_id)
+        row.tier = "high"
+        await s.commit()
+
+    # Manually change a question answer (triggers re-solve on confirm).
+    state = await client.get(
+        f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
+    )
+    assert state.status_code == 200
+    qkey = state.json()["questions"][0]["question_key"]
+
+    await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/answer",
+        json={"answer": "YES"},
+        headers=_hdr(_OWNER),
+    )
+    await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/comments",
+        json={"body": "Manual override for test."},
+        headers=_hdr(_OWNER),
+    )
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/questions/{qkey}/confirm",
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+
+    async with AsyncSession(engine) as s:
+        row = await s.get(AISystem, system_id)
+        assert row.tier == "high", (
+            f"tier was downgraded to '{row.tier}' — re-solve lost the HIGH_RISK answers"
+        )

@@ -14,6 +14,7 @@ import AssessmentStartPage from "./views/assessment/AssessmentStartPage";
 import QuestionView from "./views/assessment/QuestionView";
 import AssessmentSubmitPage from "./views/assessment/AssessmentSubmitPage";
 import CoIssueView from "./views/assessment/CoIssueView";
+import HierarchySolverTester from "./views/HierarchySolverTester";
 
 const SYSTEM_PERMS = ["systems:read", "systems:write"];
 
@@ -60,6 +61,10 @@ const router = createHashRouter([
           { index: true, element: <AssessmentStartPage /> },
           { path: "q/:questionKey", element: <QuestionView /> },
         ],
+      },
+      {
+        path: "systems/:id/hierarchy-test",
+        element: <HierarchySolverTester />,
       },
       {
         path: "models",
