@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from datetime import datetime, timezone
 
 import httpx
-from ai_trust_authorization import check_permission, require_permission
+from ai_trust_authorization import check_permission, get_current_user, require_permission
 from ai_trust_authorization.constants import (
     SYSTEMS_APPROVE,
     SYSTEMS_READ,
@@ -145,15 +146,15 @@ async def list_systems(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> list[AISystemResponse]:
-    current_user = request.headers.get("x-forwarded-preferred-username", "")
+    current_user = get_current_user(request)
     # CO (systems:approve) and read-only roles (no systems:write) see everything.
     # Business Owners and AI Engineers (write but not approve) see only systems
     # where they are the owner or an explicit contributor.
-    is_co = await check_permission(current_user, SYSTEMS_APPROVE)
-    scope_to_contributor = False
-    if not is_co:
-        has_write = await check_permission(current_user, SYSTEMS_WRITE)
-        scope_to_contributor = has_write
+    is_co, has_write = await asyncio.gather(
+        check_permission(current_user, SYSTEMS_APPROVE),
+        check_permission(current_user, SYSTEMS_WRITE),
+    )
+    scope_to_contributor = has_write and not is_co
 
     async with SessionLocal() as session:
         q = (
@@ -162,7 +163,7 @@ async def list_systems(
             .limit(limit)
             .offset(offset)
         )
-        if scope_to_contributor and current_user:
+        if scope_to_contributor:
             q = q.where(
                 or_(
                     AISystem.business_owners == current_user,

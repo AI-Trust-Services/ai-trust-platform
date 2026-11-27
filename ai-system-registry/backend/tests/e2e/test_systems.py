@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
+import ai_trust_authorization.openfga_client as _fga_module
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -208,8 +209,6 @@ async def test_list_systems_pagination(client: httpx.AsyncClient):
 # The conftest patches _fga.check to _always_allowed globally, which makes every
 # caller look like a CO (approve=True → no filter). The tests below override that
 # patch locally to simulate non-CO and CO callers.
-
-import ai_trust_authorization.openfga_client as _fga_module  # noqa: E402
 
 # openfga_client.check is called with the OpenFGA *relation* string, not the
 # permission string — e.g. "can_write_systems" / "can_approve_systems".
