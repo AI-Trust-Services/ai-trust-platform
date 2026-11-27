@@ -674,6 +674,7 @@ export function ComplianceAdvisor({
   expanded,
   onExpandedChange,
   isComplianceOfficer = false,
+  prefillPending = false,
 }: {
   systemId?: string;
   assessmentId?: string;
@@ -683,6 +684,7 @@ export function ComplianceAdvisor({
   expanded: boolean;
   onExpandedChange: (v: boolean) => void;
   isComplianceOfficer?: boolean;
+  prefillPending?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -883,6 +885,7 @@ export function ComplianceAdvisor({
             systemId={systemId}
             assessmentId={assessmentId}
             questionKey={questionKey}
+            prefillPending={prefillPending}
           />
         )}
 
@@ -1008,31 +1011,34 @@ function FilesTabWrapper({
   systemId,
   assessmentId,
   questionKey,
+  prefillPending,
 }: {
   systemId?: string;
   assessmentId?: string;
   questionKey?: string;
+  prefillPending?: boolean;
 }) {
-  // question_position comes from the backend citations; find the position for the
-  // active question by scanning citations in the files list once loaded.
-  // We pass questionPosition separately so FilesTab can show the header.
-  // We use a ref-pattern: when files are loaded the first citation for this
-  // question tells us its position.
   const [files, setFiles] = useState<AssessmentFile[] | null>(null);
   const [fetchLoading, setFetchLoading] = useState(false);
+  const prevPendingRef = useRef<boolean | undefined>(undefined);
 
   useEffect(() => {
     if (!systemId || !assessmentId) {
       setFiles(null);
       return;
     }
+    // Fetch on mount, and again when the pipeline transitions pending→done.
+    const wasJustDone =
+      prevPendingRef.current === true && prefillPending === false;
+    prevPendingRef.current = prefillPending;
+    if (files !== null && !wasJustDone) return; // already loaded, no pipeline transition
     setFetchLoading(true);
     api
       .getAssessmentFiles(systemId, assessmentId)
       .then(setFiles)
       .catch(() => setFiles([]))
       .finally(() => setFetchLoading(false));
-  }, [systemId, assessmentId]);
+  }, [systemId, assessmentId, prefillPending]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Derive question position from citations for the active question key
   let questionPosition: number | null = null;

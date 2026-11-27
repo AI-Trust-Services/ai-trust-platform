@@ -344,6 +344,7 @@ export default function AssessmentApp() {
             // systems:approve) sees the CO legal context; owners/engineers see
             // the owner context. Neither sees the other's text.
             isComplianceOfficer={can("systems:approve")}
+            prefillPending={state?.prefill_pending ?? false}
           />
         </div>
       </div>
