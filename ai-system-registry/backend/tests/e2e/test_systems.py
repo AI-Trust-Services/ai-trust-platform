@@ -210,7 +210,11 @@ async def test_list_systems_pagination(client: httpx.AsyncClient):
 # patch locally to simulate non-CO and CO callers.
 
 import ai_trust_authorization.openfga_client as _fga_module  # noqa: E402
-from ai_trust_authorization.constants import SYSTEMS_APPROVE, SYSTEMS_WRITE  # noqa: E402
+
+# openfga_client.check is called with the OpenFGA *relation* string, not the
+# permission string — e.g. "can_write_systems" / "can_approve_systems".
+_CAN_WRITE = "can_write_systems"
+_CAN_APPROVE = "can_approve_systems"
 
 
 async def test_list_systems_non_co_sees_only_own_systems(client: httpx.AsyncClient):
@@ -223,10 +227,13 @@ async def test_list_systems_non_co_sees_only_own_systems(client: httpx.AsyncClie
     )
     assert r.status_code == 201
 
-    async def _engineer_check(user, permission, *_a, **_kw):
-        if user == _ASSIGNEE:
-            return permission == SYSTEMS_WRITE  # write yes, approve no
-        return True  # other-user creation calls pass through
+    # Simulate engineer1 as AI Engineer: write=True, approve=False.
+    # All other callers (e.g. the _assert_valid_contributors users-backend check)
+    # pass through as allowed so setup calls are unaffected.
+    async def _engineer_check(user, relation, *_a, **_kw):
+        if user == f"user:{_ASSIGNEE}":
+            return relation == _CAN_WRITE  # write yes, approve no
+        return True
 
     original = _fga_module.check
     _fga_module.check = _engineer_check
@@ -256,8 +263,10 @@ async def test_list_systems_non_co_sees_systems_where_contributor(
     )
     assert r.status_code == 201
 
-    async def _engineer_check(user, permission, *_a, **_kw):
-        return permission == SYSTEMS_WRITE  # write yes, approve no
+    async def _engineer_check(user, relation, *_a, **_kw):
+        if user == f"user:{_ASSIGNEE}":
+            return relation == _CAN_WRITE  # write yes, approve no
+        return True
 
     original = _fga_module.check
     _fga_module.check = _engineer_check
@@ -281,10 +290,10 @@ async def test_list_systems_co_sees_all_systems(client: httpx.AsyncClient):
 
     co_headers = {"x-forwarded-preferred-username": "co-user"}
 
-    async def _co_check(user, permission, *_a, **_kw):
-        if user == "co-user":
-            return permission == SYSTEMS_APPROVE
-        return True  # creation calls pass through
+    async def _co_check(user, relation, *_a, **_kw):
+        if user == "user:co-user":
+            return relation == _CAN_APPROVE
+        return True
 
     original = _fga_module.check
     _fga_module.check = _co_check
