@@ -37,11 +37,11 @@ Failure policy:
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from ai_trust_logging import get_logger
-
 from app.classification_pipeline import (
     DEFAULT_CLASSIFICATION_CONFIG_ID,
     DEFAULT_CLASSIFICATION_PROMPT_ID,

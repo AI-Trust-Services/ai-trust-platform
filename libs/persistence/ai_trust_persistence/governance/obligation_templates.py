@@ -210,23 +210,22 @@ def obligations_for(
     Returns an empty list when no obligations apply. Callers treat an empty result
     as "no obligations to generate".
     """
-    if framework_id == "FRM-EU-AI-ACT":
-        if tier in ("high", "limited"):
-            result: list[dict] = []
-            for c in _EU_CLUSTERS:
-                if org_role == "both":
-                    if c["role"] not in ("provider", "deployer"):
-                        continue
-                elif c["role"] != org_role:
+    if framework_id == "FRM-EU-AI-ACT" and tier in ("high", "limited"):
+        result: list[dict] = []
+        for c in _EU_CLUSTERS:
+            if org_role == "both":
+                if c["role"] not in ("provider", "deployer"):
                     continue
-                if requirements_for(c["cluster_id"], tier, org_role):
-                    result.append(
-                        {
-                            "cluster_id": c["cluster_id"],
-                            "title": c["title"],
-                            "article_ref": c["article_ref"],
-                        }
-                    )
-            return result
+            elif c["role"] != org_role:
+                continue
+            if requirements_for(c["cluster_id"], tier, org_role):
+                result.append(
+                    {
+                        "cluster_id": c["cluster_id"],
+                        "title": c["title"],
+                        "article_ref": c["article_ref"],
+                    }
+                )
+        return result
 
     return []

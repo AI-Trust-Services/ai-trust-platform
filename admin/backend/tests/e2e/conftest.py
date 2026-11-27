@@ -52,10 +52,10 @@ os.environ.setdefault("DATABASE_URL", _TEST_DATABASE_URL)
 
 # Override the engine with NullPool so SQLAlchemy opens/closes a fresh DB
 # connection per request — no idle pool connections to conflict with table cleanup.
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from sqlalchemy.pool import NullPool
-import ai_trust_persistence.database as _db
 import ai_trust_persistence as _persistence_pkg
+import ai_trust_persistence.database as _db
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 _test_engine = create_async_engine(_TEST_DATABASE_URL, poolclass=NullPool)
 _test_session_factory = async_sessionmaker(_test_engine, expire_on_commit=False)
@@ -66,10 +66,10 @@ _db.SessionLocal = _test_session_factory
 _persistence_pkg.engine = _test_engine
 _persistence_pkg.SessionLocal = _test_session_factory
 
+import httpx
 import psycopg2
 import pytest
 import pytest_asyncio
-import httpx
 
 _ALEMBIC_INI = Path(__file__).parents[4] / "libs" / "persistence" / "alembic.ini"
 
@@ -207,8 +207,8 @@ def e2e_setup():
     ):
         # Bypass OpenFGA for e2e tests — no OpenFGA instance is available.
         import ai_trust_authorization.openfga_client as _fga
-        from app.main import app
         from ai_trust_authorization.permissions import get_current_user
+        from app.main import app
 
         async def _always_allowed(*_a, **_kw) -> bool:
             return True
@@ -311,8 +311,8 @@ def patch_openfga_and_startup():
         # Prevent lifespan seed from hitting the real DB
         patch("app.startup.seed_settings_from_env", new=AsyncMock()),
     ):
-        from app.main import app
         from ai_trust_authorization.permissions import get_current_user
+        from app.main import app
 
         app.dependency_overrides[get_current_user] = lambda: "test-user"
         yield

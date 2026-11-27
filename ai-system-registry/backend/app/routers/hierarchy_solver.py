@@ -7,16 +7,15 @@ all labels. Stateless — nothing is written to the database.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
 from ai_trust_authorization.permissions import require_permission
 from ai_trust_persistence import SessionLocal
 from ai_trust_persistence.models.ai_system import AISystem
-from sqlalchemy import select
-
 from app import minio_client
 from app.classification_config import DEFAULT_CLASSIFICATION_CONFIG_ID
 from app.hierarchy_solver import solve
 from app.schemas.hierarchy_solver import LabelOverrides, ResolveResponse
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 
 router = APIRouter(tags=["assessment"])
 

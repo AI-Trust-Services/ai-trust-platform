@@ -16,10 +16,6 @@ from __future__ import annotations
 import os
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from pydantic import BaseModel
-from sqlalchemy import select
-
 from ai_trust_authorization import require_permission
 from ai_trust_authorization.constants import SYSTEMS_WRITE
 from ai_trust_logging import get_logger
@@ -34,9 +30,9 @@ from app.llm import (
     build_engineer_doc_extract_messages,
     build_engineer_turn_messages,
     build_infer_flags_messages,
-    build_turn_messages,
-    build_questionnaire_turn_messages,
     build_questionnaire_extract_messages,
+    build_questionnaire_turn_messages,
+    build_turn_messages,
     chat,
     parse_json_response,
 )
@@ -47,6 +43,9 @@ from app.schemas import (
     AssistTurnResponse,
     InferredFlag,
 )
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from pydantic import BaseModel
+from sqlalchemy import select
 
 router = APIRouter(tags=["intake-assist"])
 logger = get_logger(__name__)
@@ -76,7 +75,7 @@ async def _run_assist_turn(
             build_messages_fn(transcript, fields), json_mode=True, task=task
         )
         parsed = await parse_json_response(result["text"], task=task)
-    except (LLMParseError, Exception) as exc:  # noqa: BLE001
+    except (LLMParseError, Exception) as exc:
         logger.error("intake_assist.turn_failed", extra={"error": str(exc)})
         raise HTTPException(status_code=502, detail=_AI_UNAVAILABLE) from exc
 
@@ -114,7 +113,7 @@ async def _run_assist_turn(
             inferred = [
                 InferredFlag(**f) for f in flags_parsed.get("inferred_flags", [])
             ]
-        except (LLMParseError, Exception) as exc:  # noqa: BLE001
+        except (LLMParseError, Exception) as exc:
             logger.error("intake_assist.infer_flags_failed", extra={"error": str(exc)})
             raise HTTPException(status_code=502, detail=_AI_UNAVAILABLE) from exc
 
@@ -161,7 +160,7 @@ async def _run_assist_extract(
             messages, model=model, json_mode=True, task=task, config=cfg
         )
         parsed = await parse_json_response(result["text"], task=task)
-    except (LLMParseError, Exception) as exc:  # noqa: BLE001
+    except (LLMParseError, Exception) as exc:
         logger.error(
             "intake_assist.extract_failed",
             extra={"error": str(exc), "file_name": file.filename},

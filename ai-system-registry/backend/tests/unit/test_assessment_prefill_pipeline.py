@@ -11,14 +11,13 @@ os.environ.setdefault(
     "DATABASE_URL", "postgresql+asyncpg://u:p@localhost/ai_trust_test"
 )
 
-import pytest
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from app.assessment_prefill_pipeline import (
-    run_assessment_prefill_pipeline,
     PrefillOutput,
+    run_assessment_prefill_pipeline,
 )
-
 
 FAKE_Q = {
     "run_key": "questionnaire-results/SYS-TEST/ai-questionnaire/t.json",
@@ -123,16 +122,15 @@ async def test_on_classification_done_error_propagates():
         patch(
             "app.assessment_prefill_pipeline.run_classification",
             new=AsyncMock(return_value=FAKE_C),
-        ),
+        ),pytest.raises(ValueError, match="tier write failed")
     ):
-        with pytest.raises(ValueError, match="tier write failed"):
-            await run_assessment_prefill_pipeline(
-                "SYS-TEST",
-                "user",
-                on_classification_done=AsyncMock(
-                    side_effect=ValueError("tier write failed")
-                ),
-            )
+        await run_assessment_prefill_pipeline(
+            "SYS-TEST",
+            "user",
+            on_classification_done=AsyncMock(
+                side_effect=ValueError("tier write failed")
+            ),
+        )
 
 
 @pytest.mark.asyncio

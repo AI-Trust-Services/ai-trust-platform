@@ -3,8 +3,7 @@ from __future__ import annotations
 import re
 from typing import Annotated
 
-from pydantic import BaseModel, EmailStr, field_validator, BeforeValidator
-
+from pydantic import BaseModel, BeforeValidator, EmailStr, field_validator
 
 # ── Color validation ─────────────────────────────────────────────────────────
 # Hex color pattern: #RGB, #RRGGBB, or #RRGGBBAA (3, 6, or 8 hex digits)

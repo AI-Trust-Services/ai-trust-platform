@@ -12,18 +12,18 @@ from __future__ import annotations
 
 import uuid
 
+from ai_trust_logging import get_logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ai_trust_logging import get_logger
+from ai_trust_persistence.governance.cascade import (
+    refresh_assessment_score,
+    refresh_obligation,
+)
 from ai_trust_persistence.governance.obligation_templates import obligations_for
 from ai_trust_persistence.governance.requirement_templates import (
     cluster_articles,
     requirements_for,
-)
-from ai_trust_persistence.governance.cascade import (
-    refresh_assessment_score,
-    refresh_obligation,
 )
 from ai_trust_persistence.models import AISystem, Assessment, Obligation, Requirement
 

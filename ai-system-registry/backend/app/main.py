@@ -3,14 +3,9 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, Response
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from sqlalchemy import text
-
 from ai_trust_logging import correlation_id_var, get_logger
-from ai_trust_tenancy import install_tenant_middleware
 from ai_trust_persistence import SessionLocal
+from ai_trust_tenancy import install_tenant_middleware
 from app import minio_client
 from app.routers import (
     advisor,
@@ -27,6 +22,10 @@ from app.routers import (
     systems,
     workflow,
 )
+from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 logger = get_logger(__name__)
 
@@ -76,7 +75,7 @@ async def logging_middleware(request: Request, call_next) -> Response:
     start = time.perf_counter()
     try:
         response = await call_next(request)
-    except Exception as exc:
+    except Exception:
         logger.exception(
             "request.failed",
             extra={
@@ -84,7 +83,7 @@ async def logging_middleware(request: Request, call_next) -> Response:
                 "path": request.url.path,
             },
         )
-        raise exc
+        raise
 
     duration_ms = round((time.perf_counter() - start) * 1000, 2)
     status = response.status_code

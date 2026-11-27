@@ -33,6 +33,8 @@ from typing import Literal
 
 import httpx
 from ai_trust_logging import get_logger
+from app.llm import client as llm_client
+from app.llm.templates import load_template
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext, UsageLimits
 from pydantic_ai.exceptions import (
@@ -40,9 +42,6 @@ from pydantic_ai.exceptions import (
     ModelRateLimitError,
     UsageLimitExceeded,
 )
-
-from app.llm import client as llm_client
-from app.llm.templates import load_template
 
 logger = get_logger(__name__)
 
@@ -174,7 +173,7 @@ class AdvisorDeps:
 # ---------------------------------------------------------------------------
 
 
-def _build_model(cfg: "llm_client.RuntimeConfig"):
+def _build_model(cfg: llm_client.RuntimeConfig):
     """Build an OpenAIChatModel for the resolved provider, or ``None`` in stub mode.
 
     The advisor resolves its provider **per turn** (``ask_advisor``) so a runtime
@@ -465,7 +464,7 @@ async def ask_advisor(
                 agent.run(prompt, deps=deps, usage_limits=usage_limits, **run_kwargs),
                 timeout=_TIMEOUT_SECONDS,
             )
-        except (UsageLimitExceeded, asyncio.TimeoutError) as exc:
+        except (TimeoutError, UsageLimitExceeded) as exc:
             logger.warning(
                 "advisor.guardrail_tripped",
                 extra={"system_id": deps.system_id, "error": str(exc)},

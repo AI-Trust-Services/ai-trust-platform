@@ -225,7 +225,7 @@ async def test_label_with_missing_question_is_skipped_not_classified():
     to the LLM — a likely-false result would be persisted as if it were established."""
     victim = _active_labels()[0]
     missing = sorted(_get_question_ids_from_label(victim))[:1]
-    _, put_json, p1, p2, p3 = _minio(
+    _, _put_json, p1, p2, p3 = _minio(
         _full_questionnaire_result(skip=frozenset(missing))
     )
     with p1, p2, p3:

@@ -20,10 +20,9 @@ import re
 from datetime import timedelta
 from typing import Any
 
+from ai_trust_logging import get_logger
 from minio import Minio
 from minio.error import S3Error
-
-from ai_trust_logging import get_logger
 
 logger = get_logger(__name__)
 

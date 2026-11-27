@@ -22,7 +22,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from functools import partial
 from typing import Any
 from urllib.parse import urlparse
@@ -504,7 +504,7 @@ async def run_questionnaire_pipeline(
     result = {"results": merged}
 
     # 5. Persist to MinIO.
-    timestamp = datetime.now(timezone.utc)
+    timestamp = datetime.now(UTC)
     run_key = _result_key(system_id, questionnaire_id, timestamp)
     await minio_client.put_json(run_key, result)
     presigned_url = await minio_client.get_presigned_url(run_key, expires_hours=24)

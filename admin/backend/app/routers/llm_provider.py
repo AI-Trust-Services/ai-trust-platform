@@ -12,14 +12,11 @@ back to the Thalamus env default). There is no silent fallback at request time.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import asyncio
 import os
+from datetime import UTC, datetime, timezone
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
-
 from ai_trust_authorization.constants import IAM_MANAGE
 from ai_trust_authorization.permissions import require_permission
 from ai_trust_logging import get_logger
@@ -27,6 +24,8 @@ from ai_trust_persistence.audit import log_audit_event
 from ai_trust_persistence.database import SessionLocal
 from ai_trust_persistence.llm_config import validate_endpoint_url
 from ai_trust_persistence.models.llm_provider_config import LLMProviderConfig
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 
 from app.schemas import (
     LLMProviderHealthResponse,
@@ -226,7 +225,7 @@ async def update_llm_provider(
         row.updated_by = username
         # onupdate=func.now() only fires on Core UPDATEs, not ORM flushes, so set
         # updated_at explicitly on every mutation (same pattern as platform_settings).
-        row.updated_at = datetime.now(timezone.utc)
+        row.updated_at = datetime.now(UTC)
         # Any config change invalidates a prior passing test and deactivates the
         # provider — activation must re-pass Test Connection.
         row.is_active = False
@@ -302,7 +301,7 @@ async def test_llm_provider(
             if status != "rate_limited":
                 row.last_test_status = "ok" if status == "ok" else "failed"
             row.last_test_message = message
-            row.last_tested_at = datetime.now(timezone.utc)
+            row.last_tested_at = datetime.now(UTC)
             log_audit_event(
                 session,
                 actor=username,
@@ -348,7 +347,7 @@ async def activate_llm_provider(
         row.updated_by = username
         # onupdate=func.now() only fires on Core UPDATEs, not ORM flushes, so set
         # updated_at explicitly on every mutation (same pattern as platform_settings).
-        row.updated_at = datetime.now(timezone.utc)
+        row.updated_at = datetime.now(UTC)
         log_audit_event(
             session,
             actor=username,
@@ -378,7 +377,7 @@ async def deactivate_llm_provider(
         row.updated_by = username
         # onupdate=func.now() only fires on Core UPDATEs, not ORM flushes, so set
         # updated_at explicitly on every mutation (same pattern as platform_settings).
-        row.updated_at = datetime.now(timezone.utc)
+        row.updated_at = datetime.now(UTC)
         log_audit_event(
             session,
             actor=username,
