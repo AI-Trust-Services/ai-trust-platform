@@ -240,6 +240,21 @@
       },
   ].filter((node) => canSee(node.pathSegment));
 
+  // Always-present hidden fallback node. Appended AFTER the permission filter so it can never be
+  // dropped. routing.pageNotFoundHandler (below) redirects any unmapped route here — both genuinely
+  // non-existent routes (#466) and deep-links to permission-gated nodes that were filtered out of
+  // the tree above (which Luigi also sees as "not found"). Renders the static /not-found.html.
+  children.push({
+    pathSegment: "not-found",
+    label: "Not found",
+    hideFromNav: true,
+    viewUrl: "/not-found.html",
+    // not-found.html is a plain static page — it does NOT load @luigi-project/client, so it never
+    // sends the init handshake Luigi waits for. Without this, Luigi shows its loading spinner over
+    // the (already visible) iframe forever. Disabling the indicator for this node removes the spinner.
+    loadingIndicator: { enabled: false },
+  });
+
   Luigi.setConfig({
   navigation: {
     nodes: [
@@ -255,6 +270,13 @@
 
   routing: {
     useHashRouting: true,
+    // Any route that doesn't map to a visible nav node lands here instead of Luigi's raw
+    // "Could not map exact target node..." error (#466). Covers both non-existent routes and
+    // deep-links to permission-gated nodes (filtered out of the tree → "not found" to Luigi).
+    // Luigi's navigateTo sets location.hash verbatim, so the target MUST be an absolute path with
+    // a leading slash ("/home/not-found") — without it the hash becomes "#home/not-found" and the
+    // route never resolves.
+    pageNotFoundHandler: () => ({ redirectTo: "/home/not-found" }),
   },
 
   settings: {
