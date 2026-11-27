@@ -49,7 +49,7 @@
   // pathSegment → permissions that make the node visible (ANY of them suffices).
   const PAGE_PERMISSIONS = {
     "overview": ["systems:read", "systems:write", "assessments:read", "assessments:write", "assessments:approve", "evidence:read", "evidence:write", "evidence:approve", "monitoring:read", "alerts:read", "alerts:handle", "alerts:manage_rules", "audit:read"],
-    "dashboard": ["systems:read", "systems:write", "assessments:read", "assessments:write", "assessments:approve", "evidence:read", "evidence:write", "evidence:approve", "monitoring:read", "alerts:read", "alerts:handle", "alerts:manage_rules", "audit:read"],
+    "dashboard": ["assessments:approve"],
     "task-view": ["systems:read", "systems:write", "assessments:read", "assessments:write", "assessments:approve"],
     "ai-system-registry": ["systems:read", "systems:write"],
     "model-catalog": ["systems:read", "systems:write"],
