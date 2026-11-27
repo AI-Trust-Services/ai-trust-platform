@@ -13,10 +13,12 @@ import pytest
 
 # ai_trust_persistence.__init__ imports database.py which reads DATABASE_URL.
 # Set a dummy value before the import so the module loads without a real DB.
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://u:p@localhost/ai_trust_test")
+os.environ.setdefault(
+    "DATABASE_URL", "postgresql+asyncpg://u:p@localhost/ai_trust_test"
+)
 
-from ai_trust_persistence.governance.obligation_templates import obligations_for  # noqa: E402
-from ai_trust_persistence.governance.requirement_templates import requirements_for  # noqa: E402
+from ai_trust_persistence.governance.obligation_templates import obligations_for
+from ai_trust_persistence.governance.requirement_templates import requirements_for
 
 FW = "FRM-EU-AI-ACT"
 LIM_CLUSTERS = {"P-LIM", "D-LIM"}
@@ -58,7 +60,9 @@ def test_minimal_both_with_transparency_yields_both_lim_clusters():
 def test_prohibited_with_transparency_yields_no_lim():
     result = obligations_for(FW, "prohibited", "provider", transparency=True)
     ids = _cluster_ids(result)
-    assert LIM_CLUSTERS.isdisjoint(ids), f"prohibited must never get LIM clusters, got {ids}"
+    assert LIM_CLUSTERS.isdisjoint(ids), (
+        f"prohibited must never get LIM clusters, got {ids}"
+    )
 
 
 def test_high_provider_no_transparency_does_not_yield_lim():

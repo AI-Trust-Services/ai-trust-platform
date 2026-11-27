@@ -60,11 +60,14 @@ async def generate_obligations_in_session(
     # Art. 50 transparency obligations apply orthogonally to tier: the CO explicitly
     # issued them (co_issued_transparency) or the system's raw flags imply it.
     # Prohibited tier is excluded — the router gate enforces this at issue time too.
-    transparency = bool(
-        getattr(system, "co_issued_transparency", False)
-        or getattr(system, "is_chatbot", False)
-        or getattr(system, "generates_synthetic_content", False)
-    ) and system.tier != "prohibited"
+    transparency = (
+        bool(
+            getattr(system, "co_issued_transparency", False)
+            or getattr(system, "is_chatbot", False)
+            or getattr(system, "generates_synthetic_content", False)
+        )
+        and system.tier != "prohibited"
+    )
     templates = obligations_for(
         assessment.framework_id, system.tier, org_role, transparency=transparency
     )
@@ -192,9 +195,7 @@ async def generate_requirements_in_session(
         # so their requirements survive the tier filter even when the assessed tier
         # is e.g. "minimal" or "high" (transparency is orthogonal to tier).
         effective_tier = (
-            "limited"
-            if (obl.cluster_id or "") in _TRANSPARENCY_CLUSTERS
-            else tier
+            "limited" if (obl.cluster_id or "") in _TRANSPARENCY_CLUSTERS else tier
         )
         templates = requirements_for(
             obl.cluster_id or obl.article_ref, effective_tier, org_role
