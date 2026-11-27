@@ -445,7 +445,9 @@ async def test_high_confidence_answers_are_not_auto_confirmed(
     assert not transparency_1["confirmed"], (
         "Transparency_1 must NOT be auto-confirmed despite medium confidence"
     )
-    assert not transparency_1["owner_confirmed"], "owner_confirmed must be False for Transparency_1"
+    assert not transparency_1["owner_confirmed"], (
+        "owner_confirmed must be False for Transparency_1"
+    )
     assert all(not q["confirmed"] for q in state["questions"]), (
         "no AI-prefilled answer should be auto-confirmed"
     )
