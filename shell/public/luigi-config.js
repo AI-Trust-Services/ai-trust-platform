@@ -262,7 +262,11 @@
         pathSegment: "home",
         label: "Home",
         hideFromNav: true,
-        defaultChildNode: "overview",
+        // First node the current user can actually see (children is already permission-filtered;
+        // the not-found node was pushed last). A static "overview" would dead-end a user who lacks
+        // overview's permissions — bare /home would land on the filtered-out node → not-found.
+        // The "not-found" guard covers a user who can see nothing at all.
+        defaultChildNode: (children[0] && children[0].pathSegment) || "not-found",
         children: children,
       },
     ],

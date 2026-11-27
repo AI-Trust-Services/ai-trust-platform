@@ -67,9 +67,12 @@
   </div>
   <script>
     // This page renders inside the Luigi iframe; navigate the top (shell) window's hash route.
+    // Target /home (not /home/overview): Luigi resolves it to the home node's defaultChildNode,
+    // which is the first node the current user can see — so the button never dead-ends a user who
+    // lacks overview's permissions (which would bounce back here via pageNotFoundHandler).
     document.getElementById('home-btn').addEventListener('click', function () {
-      try { window.top.location.hash = '/home/overview'; }
-      catch (e) { window.location.hash = '/home/overview'; }
+      try { window.top.location.hash = '/home'; }
+      catch (e) { window.location.hash = '/home'; }
     });
   </script>
 </body>
