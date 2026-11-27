@@ -1570,7 +1570,8 @@ async def issue_classification(
             # created iff the commit succeeds, and never persisted on failure.
             # Idempotent — skip if obligations already exist (a reject→resubmit→
             # re-issue cycle must not duplicate). minimal/GPAI/prohibited tiers
-            # yield no obligations (obligations_for returns []), so this is a no-op.
+            # with no transparency flag yield no obligations (no-op); minimal/GPAI
+            # with transparency=True yield the Art. 50 chain (P-LIM/D-LIM).
             existing_obligations = (
                 await session.execute(
                     select(func.count())
