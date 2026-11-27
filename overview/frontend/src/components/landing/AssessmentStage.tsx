@@ -8,16 +8,14 @@ export interface StageInfo {
   tone: StageTone;
 }
 
-// Three-step journey. "Register AI system" is a precondition — a system must
-// exist for any assessment task to show up — so it is not a stage of its own.
-// Stage N maps to N filled progress segments:
-//   1. Draft assessment started    — assessment either not yet created
-//                                    ("Start assessment" task) or in draft
-//   2. Assessment under review     — submitted to the CO (progress tone), or
-//                                    returned by the CO for rework (warn tone)
+// Three-step journey on the Landing Page — aligned to Overview stages 2–4
+// (issue #349). "Register AI system" is stage 1 on the Detail Page but is
+// omitted here: a system must already exist for any task to show up at all.
+//   1. Draft assessment started     — no assessment yet, or assessment in draft
+//   2. Assessment under review      — submitted to the CO (progress tone), or
+//                                     returned by the CO for rework (warn tone)
 //   3. Risk classification approved — CO approved
-// Legacy registry workflow status `rejected` still gets a danger-toned
-// fallback so terminal failures remain visible.
+// Legacy workflow status `rejected` still gets a danger-toned fallback.
 export function stageInfo(
   a: AssessmentSummary | null,
   workflowStatus: string | null,

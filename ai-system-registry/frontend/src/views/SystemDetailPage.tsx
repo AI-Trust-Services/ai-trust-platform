@@ -49,9 +49,10 @@ function deriveProgress(assessments: ComplianceAssessment[]) {
   const underReview = assessments.some((a) => ["submitted", "pending_review", "under_review"].includes(a.status));
   const approved = assessments.some((a) => a.status === "approved");
   return [
-    { label: "1. Draft assessment started", done: hasAny, actionable: !hasAny },
-    { label: "2. Assessment under review", done: underReview || approved, actionable: hasAny && !underReview && !approved },
-    { label: "3. Risk classification approved", done: approved },
+    { label: "1. Register AI system", done: true },
+    { label: "2. Draft assessment started", done: hasAny, actionable: !hasAny },
+    { label: "3. Assessment under review", done: underReview || approved, actionable: hasAny && !underReview && !approved },
+    { label: "4. Risk classification approved", done: approved },
   ];
 }
 
@@ -397,18 +398,18 @@ function RolesDialog({
 
 function assessmentStepLabel(status: string): string {
   switch (status) {
-    case "draft": case "questionnaire_pending": return "1. Draft assessment started";
-    case "submitted": case "pending_review": case "under_review": case "returned": return "2. Assessment under review";
-    case "approved": return "3. Risk classification approved";
+    case "draft": case "questionnaire_pending": return "2. Draft assessment started";
+    case "submitted": case "pending_review": case "under_review": case "returned": return "3. Assessment under review";
+    case "approved": return "4. Risk classification approved";
     case "inactive": return "Superseded";
     default: return status;
   }
 }
 
 function assessmentStepProgress(status: string): number {
-  if (["draft", "questionnaire_pending"].includes(status)) return 1;
-  if (["submitted", "pending_review", "under_review", "returned"].includes(status)) return 2;
-  if (status === "approved") return 3;
+  if (["draft", "questionnaire_pending"].includes(status)) return 2;
+  if (["submitted", "pending_review", "under_review", "returned"].includes(status)) return 3;
+  if (status === "approved") return 4;
   return 0;
 }
 
@@ -885,13 +886,13 @@ function AssessmentsTab({
                         <div className="mt-1.5 h-1 w-24 overflow-hidden rounded-full bg-muted">
                           <div
                             className="h-full rounded-full bg-[var(--brand,#1147E9)]"
-                            style={{ width: `${(progress / 3) * 100}%` }}
+                            style={{ width: `${(progress / 4) * 100}%` }}
                           />
                         </div>
                       )}
                     </TableCell>
                     <TableCell>
-                      {(a.tier ?? (isApproved ? system.tier : null)) ? (
+                      {(isUnderReview || isApproved) && (a.tier ?? (isApproved ? system.tier : null)) ? (
                         <TierBadge
                           tier={(a.tier ?? system.tier) as typeof system.tier}
                           workflowStatus={system.workflow_status}
