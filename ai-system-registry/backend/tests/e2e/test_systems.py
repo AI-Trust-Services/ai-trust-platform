@@ -213,6 +213,10 @@ import ai_trust_authorization.openfga_client as _fga_module  # noqa: E402
 
 # openfga_client.check is called with the OpenFGA *relation* string, not the
 # permission string — e.g. "can_write_systems" / "can_approve_systems".
+# GET /systems is gated by require_permission(SYSTEMS_READ) before the handler
+# runs, so every caller mock must also grant can_read_systems or the request
+# 403s before the contributor filter is ever reached.
+_CAN_READ = "can_read_systems"
 _CAN_WRITE = "can_write_systems"
 _CAN_APPROVE = "can_approve_systems"
 
@@ -227,12 +231,12 @@ async def test_list_systems_non_co_sees_only_own_systems(client: httpx.AsyncClie
     )
     assert r.status_code == 201
 
-    # Simulate engineer1 as AI Engineer: write=True, approve=False.
+    # Simulate engineer1 as AI Engineer: read=True, write=True, approve=False.
     # All other callers (e.g. the _assert_valid_contributors users-backend check)
     # pass through as allowed so setup calls are unaffected.
     async def _engineer_check(user, relation, *_a, **_kw):
         if user == f"user:{_ASSIGNEE}":
-            return relation == _CAN_WRITE  # write yes, approve no
+            return relation in (_CAN_READ, _CAN_WRITE)  # read+write yes, approve no
         return True
 
     original = _fga_module.check
@@ -265,7 +269,7 @@ async def test_list_systems_non_co_sees_systems_where_contributor(
 
     async def _engineer_check(user, relation, *_a, **_kw):
         if user == f"user:{_ASSIGNEE}":
-            return relation == _CAN_WRITE  # write yes, approve no
+            return relation in (_CAN_READ, _CAN_WRITE)  # read+write yes, approve no
         return True
 
     original = _fga_module.check
@@ -292,7 +296,7 @@ async def test_list_systems_co_sees_all_systems(client: httpx.AsyncClient):
 
     async def _co_check(user, relation, *_a, **_kw):
         if user == "user:co-user":
-            return relation == _CAN_APPROVE
+            return relation in (_CAN_READ, _CAN_APPROVE)  # read+approve yes, write no
         return True
 
     original = _fga_module.check
