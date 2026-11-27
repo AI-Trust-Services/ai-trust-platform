@@ -13,6 +13,7 @@ const CLASSIFICATION_TABS = [
   { key: "prohibited", label: "Prohibited practice" },
 ];
 
+
 function labelDisplay(labelId: string): string {
   return labelId.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -47,8 +48,31 @@ export function SolverPanel({ solverResult, pending }: SolverPanelProps) {
         </div>
       ) : (
         <>
-          <div className="mt-4 grid grid-cols-4 gap-2">
-            {CLASSIFICATION_TABS.map((t) => (
+          <div className="mt-4 grid grid-cols-5 gap-2">
+            {CLASSIFICATION_TABS.slice(0, 1).map((t) => (
+              <div
+                key={t.key}
+                className={
+                  "rounded-md border px-3 py-2 text-center text-sm " +
+                  (t.key === activeTab(solverResult.risk.labelId)
+                    ? "border-[#1147E9] font-semibold text-[#1147E9]"
+                    : "border-border text-muted-foreground")
+                }
+              >
+                {t.label}
+              </div>
+            ))}
+            <div
+              className={
+                "rounded-md border px-3 py-2 text-center text-sm " +
+                (solverResult.transparency?.result
+                  ? "border-[#d97706] font-semibold text-[#d97706]"
+                  : "border-border text-muted-foreground")
+              }
+            >
+              Transparency obligations
+            </div>
+            {CLASSIFICATION_TABS.slice(1).map((t) => (
               <div
                 key={t.key}
                 className={
@@ -89,14 +113,6 @@ export function SolverPanel({ solverResult, pending }: SolverPanelProps) {
                   {labelDisplay(r.labelId)}
                 </span>
               ))}
-            </div>
-          )}
-          {solverResult.transparency !== null && (
-            <div className="mt-3 flex items-center gap-2 text-sm">
-              <span className="font-medium text-muted-foreground">Transparency:</span>
-              <span className="font-semibold">
-                {solverResult.transparency.result ? "True" : "False"}
-              </span>
             </div>
           )}
         </>
