@@ -202,6 +202,103 @@ async def test_list_systems_pagination(client: httpx.AsyncClient):
 
 
 # ---------------------------------------------------------------------------
+# GET /systems — contributor filter
+# ---------------------------------------------------------------------------
+
+# The conftest patches _fga.check to _always_allowed globally, which makes every
+# caller look like a CO (approve=True → no filter). The tests below override that
+# patch locally to simulate non-CO and CO callers.
+
+import ai_trust_authorization.openfga_client as _fga_module  # noqa: E402
+from ai_trust_authorization.constants import SYSTEMS_APPROVE, SYSTEMS_WRITE  # noqa: E402
+
+
+async def test_list_systems_non_co_sees_only_own_systems(client: httpx.AsyncClient):
+    # engineer1 owns system A; "other-user" owns system B — engineer1 must not see B.
+    await _create_system(client, {"name": "My System", "assignee_username": _ASSIGNEE})
+    r = await client.post(
+        "/v1/intake",
+        json={"name": "Other System", "assignee_username": "other-user"},
+        headers={"x-forwarded-preferred-username": "other-user"},
+    )
+    assert r.status_code == 201
+
+    async def _engineer_check(user, permission, *_a, **_kw):
+        if user == _ASSIGNEE:
+            return permission == SYSTEMS_WRITE  # write yes, approve no
+        return True  # other-user creation calls pass through
+
+    original = _fga_module.check
+    _fga_module.check = _engineer_check
+    try:
+        r = await client.get("/v1/systems", headers=_HEADERS)
+        assert r.status_code == 200
+        names = [s["name"] for s in r.json()]
+        assert "My System" in names
+        assert "Other System" not in names
+    finally:
+        _fga_module.check = original
+
+
+async def test_list_systems_non_co_sees_systems_where_contributor(
+    client: httpx.AsyncClient,
+):
+    # other-user creates a system and lists engineer1 as a contributor.
+    other_headers = {"x-forwarded-preferred-username": "other-user"}
+    r = await client.post(
+        "/v1/intake",
+        json={
+            "name": "Contrib System",
+            "assignee_username": "other-user",
+            "contributors": [_ASSIGNEE],
+        },
+        headers=other_headers,
+    )
+    assert r.status_code == 201
+
+    async def _engineer_check(user, permission, *_a, **_kw):
+        return permission == SYSTEMS_WRITE  # write yes, approve no
+
+    original = _fga_module.check
+    _fga_module.check = _engineer_check
+    try:
+        r = await client.get("/v1/systems", headers=_HEADERS)
+        assert r.status_code == 200
+        names = [s["name"] for s in r.json()]
+        assert "Contrib System" in names
+    finally:
+        _fga_module.check = original
+
+
+async def test_list_systems_co_sees_all_systems(client: httpx.AsyncClient):
+    await _create_system(client, {"name": "System A", "assignee_username": _ASSIGNEE})
+    r = await client.post(
+        "/v1/intake",
+        json={"name": "System B", "assignee_username": "other-user"},
+        headers={"x-forwarded-preferred-username": "other-user"},
+    )
+    assert r.status_code == 201
+
+    co_headers = {"x-forwarded-preferred-username": "co-user"}
+
+    async def _co_check(user, permission, *_a, **_kw):
+        if user == "co-user":
+            return permission == SYSTEMS_APPROVE
+        return True  # creation calls pass through
+
+    original = _fga_module.check
+    _fga_module.check = _co_check
+    try:
+        r = await client.get("/v1/systems", headers=co_headers)
+        assert r.status_code == 200
+        names = [s["name"] for s in r.json()]
+        assert "System A" in names
+        assert "System B" in names
+    finally:
+        _fga_module.check = original
+
+
+# ---------------------------------------------------------------------------
 # GET /systems/{id}
 # ---------------------------------------------------------------------------
 

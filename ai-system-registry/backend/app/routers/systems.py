@@ -33,7 +33,8 @@ from app.schemas import (
 )
 from app.workflow_utils import section_owner
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
-from sqlalchemy import delete, select
+from sqlalchemy import cast, delete, or_, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 router = APIRouter(tags=["systems"])
@@ -140,16 +141,35 @@ async def _assert_can_edit_section(
     dependencies=[Depends(require_permission(SYSTEMS_READ))],
 )
 async def list_systems(
+    request: Request,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> list[AISystemResponse]:
+    current_user = request.headers.get("x-forwarded-preferred-username", "")
+    # CO (systems:approve) and read-only roles (no systems:write) see everything.
+    # Business Owners and AI Engineers (write but not approve) see only systems
+    # where they are the owner or an explicit contributor.
+    is_co = await check_permission(current_user, SYSTEMS_APPROVE)
+    scope_to_contributor = False
+    if not is_co:
+        has_write = await check_permission(current_user, SYSTEMS_WRITE)
+        scope_to_contributor = has_write
+
     async with SessionLocal() as session:
-        result = await session.execute(
+        q = (
             select(AISystem)
             .order_by(AISystem.created_at.desc())
             .limit(limit)
             .offset(offset)
         )
+        if scope_to_contributor and current_user:
+            q = q.where(
+                or_(
+                    AISystem.business_owners == current_user,
+                    AISystem.contributors.contains(cast([current_user], JSONB)),
+                )
+            )
+        result = await session.execute(q)
         return [AISystemResponse.model_validate(r) for r in result.scalars().all()]
 
 
