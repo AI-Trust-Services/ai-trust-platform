@@ -110,28 +110,54 @@ def test_eu_limited_both_is_union_of_provider_and_deployer():
     both = obligations_for("FRM-EU-AI-ACT", "limited", "both")
     provider = obligations_for("FRM-EU-AI-ACT", "limited", "provider")
     deployer = obligations_for("FRM-EU-AI-ACT", "limited", "deployer")
-    assert len(both) == len(provider) + len(deployer) == 3
+    assert len(both) == len(provider) + len(deployer) == 1
 
 
 def test_eu_limited_provider_count():
+    # Art. 50 (P-LIM) only emitted when transparency=True; without it only P-REG applies.
     obs = obligations_for("FRM-EU-AI-ACT", "limited")
-    assert len(obs) == 2
+    assert len(obs) == 1
 
 
 def test_eu_limited_deployer_count():
+    # No deployer obligations at limited tier without transparency flag.
     obs = obligations_for("FRM-EU-AI-ACT", "limited", "deployer")
-    assert len(obs) == 1
+    assert len(obs) == 0
 
 
 def test_eu_limited_provider_article_refs():
     refs = {ob["article_ref"] for ob in obligations_for("FRM-EU-AI-ACT", "limited")}
-    assert "Art. 50 EU AI Act" in refs
+    assert "Art. 49 EU AI Act" in refs
+    assert "Art. 50 EU AI Act" not in refs
 
 
 def test_eu_limited_provider_includes_all_risk_cluster():
     # P-REG carries a "Risk = All" requirement, so it applies at limited risk too.
     ids = {ob["cluster_id"] for ob in obligations_for("FRM-EU-AI-ACT", "limited")}
     assert "P-REG" in ids
+
+
+def test_eu_limited_transparency_adds_art50_provider():
+    obs = obligations_for("FRM-EU-AI-ACT", "limited", transparency=True)
+    ids = {o["cluster_id"] for o in obs}
+    assert "P-LIM" in ids
+    assert len(obs) == 2
+
+
+def test_eu_limited_transparency_adds_art50_deployer():
+    obs = obligations_for("FRM-EU-AI-ACT", "limited", "deployer", transparency=True)
+    assert any(o["cluster_id"] == "D-LIM" for o in obs)
+
+
+def test_eu_limited_transparency_both_union():
+    both = obligations_for("FRM-EU-AI-ACT", "limited", "both", transparency=True)
+    provider = obligations_for(
+        "FRM-EU-AI-ACT", "limited", "provider", transparency=True
+    )
+    deployer = obligations_for(
+        "FRM-EU-AI-ACT", "limited", "deployer", transparency=True
+    )
+    assert len(both) == len(provider) + len(deployer)
 
 
 def test_eu_limited_importer_is_empty():
