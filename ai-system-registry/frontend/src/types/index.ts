@@ -177,6 +177,15 @@ export interface AssessmentState {
   // True if the completed prefill ran on the offline stub (no live LLM) — answers
   // are placeholder and the classification is not meaningful; show a contact-admin banner.
   prefill_stub: boolean;
+  // #482: the CO's most recent rejection note while the cycle is `returned`.
+  // null unless the live cycle was sent back with comments.
+  review_note: ReviewNote | null;
+}
+
+export interface ReviewNote {
+  note: string;
+  author: string;
+  created_at: string;
 }
 
 export interface QuestionComment {

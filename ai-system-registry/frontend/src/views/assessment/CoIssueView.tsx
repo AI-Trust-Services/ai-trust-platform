@@ -165,8 +165,9 @@ export default function CoIssueView() {
 
       {error && <p className="mt-3 text-sm text-[var(--danger-fg)]">{error}</p>}
 
+      <p className="mt-6 text-sm font-medium">Assessment finalization actions:</p>
       {/* Bottom bar */}
-      <div className="mt-6 flex items-center justify-between">
+      <div className="mt-3 flex items-center justify-between">
         <button
           onClick={() => navigate(`/systems/${id}/assessment/q/${lastQuestionKey}`)}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"

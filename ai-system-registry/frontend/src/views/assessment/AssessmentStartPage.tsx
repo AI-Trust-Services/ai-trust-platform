@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from "react-router";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { ArrowRight, Loader2, Undo2 } from "lucide-react";
 import { useAssessment } from "./AssessmentApp";
 import { ORDERED_QUESTION_KEYS } from "./AssessmentSidebar";
 import { usePermissions } from "../../hooks/usePermissions";
@@ -37,6 +37,21 @@ export default function AssessmentStartPage() {
         {state.questions.filter((q) => q.answer_source === "ai_prefilled" && q.answer).length} answers. Check the
         preliminary risk classification, then review and confirm each AI-proposed answer before submitting.
       </p>
+
+      {state.review_note && (
+        <div className="mt-4 rounded-xl border border-[#d14343]/40 bg-[#fef2f2] px-5 py-4">
+          <div className="flex items-start gap-3">
+            <Undo2 className="mt-0.5 size-5 shrink-0 text-[#d14343]" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[#991b1b]">Returned by Compliance Officer</p>
+              <p className="mt-0.5 text-xs text-[#991b1b]/80">
+                {state.review_note.author} · {new Date(state.review_note.created_at).toLocaleString()}
+              </p>
+              <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">{state.review_note.note}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {state.prefill_pending && (
         <div className="mt-4 flex items-center gap-2 rounded-xl border border-[#e0a008]/40 bg-[#fffbeb] px-5 py-3 text-sm text-[#854d0e]">

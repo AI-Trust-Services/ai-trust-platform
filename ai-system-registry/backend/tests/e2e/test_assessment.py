@@ -1152,9 +1152,10 @@ async def test_co_reject_returns_to_owner_editable_again(client: httpx.AsyncClie
         headers=_hdr(_CO),
     )
     assert r.status_code == 422, r.text
+    note = "Please add evidence for question 3."
     r = await client.post(
         f"/v1/systems/{system_id}/assessment/reject",
-        json={"note": "Please add evidence for question 3."},
+        json={"note": note},
         headers=_hdr(_CO),
     )
     assert r.status_code == 200, r.text
@@ -1166,7 +1167,28 @@ async def test_co_reject_returns_to_owner_editable_again(client: httpx.AsyncClie
     st = await client.get(
         f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
     )
-    assert st.json()["editable"] is True
+    owner_state = st.json()
+    assert owner_state["editable"] is True
+    # #482: the CO's rejection note is surfaced to the owner in GET /state so the
+    # ping-pong is visible in the UI, not only in the email.
+    assert owner_state["review_note"] is not None
+    assert owner_state["review_note"]["note"] == note
+    assert owner_state["review_note"]["author"] == _CO
+    assert owner_state["review_note"]["created_at"]
+
+    # After the owner resubmits (confirmations persist across the bounce), the cycle
+    # is no longer `returned`, so the review_note clears.
+    r = await client.post(
+        f"/v1/systems/{system_id}/assessment/submit",
+        json={"note": "fixed"},
+        headers=_hdr(_OWNER),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["workflow_status"] == "pending_review"
+    st = await client.get(
+        f"/v1/systems/{system_id}/assessment/state", headers=_hdr(_OWNER)
+    )
+    assert st.json()["review_note"] is None
 
 
 @pytest.mark.asyncio

@@ -154,6 +154,16 @@ class ContributorRef(BaseModel):
     display_name: str | None = None
 
 
+class ReviewNote(BaseModel):
+    """The compliance officer's most recent 'returned with comments' note for the
+    current cycle (#482). Surfaced to the owner so they know why the assessment was
+    sent back and what to fix — closing the CO↔owner ping-pong in the UI."""
+
+    note: str
+    author: str
+    created_at: datetime
+
+
 class AssessmentStateResponse(BaseModel):
     """Full view model for the start page + left sidebar (#346) in one read."""
 
@@ -205,6 +215,11 @@ class AssessmentStateResponse(BaseModel):
     # so answers are placeholder "not enough information" and not real analysis — the
     # client shows a "contact your administrator" banner.
     prefill_stub: bool = False
+
+    # The CO's most recent rejection note while the current cycle is `returned`
+    # (#482). None unless the live cycle was sent back with comments — the owner
+    # banner keys off its presence.
+    review_note: ReviewNote | None = None
 
 
 class SubmitRequest(BaseModel):

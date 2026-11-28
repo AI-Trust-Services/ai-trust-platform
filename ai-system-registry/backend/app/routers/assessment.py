@@ -68,6 +68,7 @@ from app.schemas.assessment import (
     IssueRequest,
     QuestionStateResponse,
     RejectRequest,
+    ReviewNote,
     SourceDocumentRef,
     SubmitRequest,
     _validate_question_key,
@@ -852,6 +853,31 @@ async def _build_state(
             seen.add(uname)
             contributor_refs.append(ContributorRef(username=uname))
 
+    # #482: while the live cycle is `returned`, surface the CO's most recent
+    # rejection note to the owner. Bounded to this cycle (created_at >= the
+    # assessment's start) so a stale note from a prior cycle never leaks through —
+    # SystemWorkflowStep is per-system, not per-cycle.
+    review_note = None
+    if not frozen and row.workflow_status == "returned":
+        step = (
+            await session.execute(
+                select(SystemWorkflowStep)
+                .where(
+                    SystemWorkflowStep.system_id == row.id,
+                    SystemWorkflowStep.step == "assessment_returned",
+                    SystemWorkflowStep.created_at >= assessment.created_at,
+                )
+                .order_by(SystemWorkflowStep.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if step and step.note:
+            review_note = ReviewNote(
+                note=step.note,
+                author=step.actor_username,
+                created_at=step.created_at,
+            )
+
     return AssessmentStateResponse(
         system_id=row.id,
         assessment_id=assessment.id,
@@ -879,6 +905,7 @@ async def _build_state(
         prefill_pending=assessment.llm_status == "pending",
         prefill_failed=assessment.llm_status == "failed",
         prefill_stub=assessment.llm_status == "stub",
+        review_note=review_note,
     )
 
 
