@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import ai_trust_authorization.openfga_client as _fga_module
 import httpx
 import pytest
-import ai_trust_authorization.openfga_client as _fga_module
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
