@@ -1108,7 +1108,7 @@ async def confirm_question(
                 manual_answers[key] = (
                     parsed if isinstance(parsed, list) else [st.answer]
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001
                 manual_answers[key] = [st.answer]
     if manual_answers:
         try:
