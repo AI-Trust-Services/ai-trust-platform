@@ -64,7 +64,7 @@ const router = createHashRouter([
       },
       {
         path: "systems/:id/hierarchy-test",
-        element: <HierarchySolverTester />,
+        element: <RequirePermission anyOf={SYSTEM_PERMS}><HierarchySolverTester /></RequirePermission>,
       },
       {
         path: "models",
