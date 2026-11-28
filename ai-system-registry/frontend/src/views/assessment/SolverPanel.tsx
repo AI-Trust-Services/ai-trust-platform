@@ -33,13 +33,13 @@ export function SolverPanel({ solverResult, pending }: SolverPanelProps) {
   return (
     <div className="rounded-xl border border-border bg-card p-6">
       <div className="flex items-center gap-2">
-          <span className="rounded-full bg-[#eaecee] px-3 py-1 text-xs font-medium text-[#556b82]">
-            AI-generated · not final
-          </span>
-          <span className="rounded-full bg-[#eef3ff] px-3 py-1 text-xs font-medium text-[#1147E9]">
-            Rule-based · updates on each confirm
-          </span>
-        </div>
+        <span className="rounded-full bg-[#eaecee] px-3 py-1 text-xs font-medium text-[#556b82]">
+          AI-generated · not final
+        </span>
+        <span className="rounded-full bg-[#eef3ff] px-3 py-1 text-xs font-medium text-[#1147E9]">
+          Rule-based · updates on each confirm
+        </span>
+      </div>
 
       {pending || !solverResult ? (
         <div className="mt-4 flex items-center gap-1.5 text-sm text-muted-foreground">
